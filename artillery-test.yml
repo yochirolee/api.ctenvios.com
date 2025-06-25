@@ -1,0 +1,29 @@
+config:
+  target: "http://localhost:3000" # Adjust to your server URL
+  phases:
+    - duration: 30
+      arrivalRate: 10 # 10 users per second
+      name: "Warm up"
+    - duration: 60
+      arrivalRate: 20 # 20 users per second
+      name: "Sustained load"
+    - duration: 30
+      arrivalRate: 50 # 50 users per second
+      name: "Peak load"
+
+scenarios:
+  - name: "Generate tracking codes concurrently"
+    weight: 100
+    flow:
+      - post:
+          url: "/api/test/concurrent-tracking"
+          headers:
+            Content-Type: "application/json"
+          json:
+            agency_id: 1
+            concurrent_users: 3
+            codes_per_user: 2
+          expect:
+            - statusCode: 200
+            - hasProperty: "test_summary"
+            - hasProperty: "code_analysis"

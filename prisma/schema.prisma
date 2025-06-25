@@ -1,0 +1,412 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id            String     @id @default(uuid())
+  name          String
+  email         String     @unique
+  emailVerified Boolean    @default(false)
+  image         String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  // Your custom fields
+  created_by    String?
+  forwarder_id  Int?
+  forwarder     Forwarder? @relation(fields: [forwarder_id], references: [id])
+  agency_id     Int?
+  agency        Agency?    @relation(fields: [agency_id], references: [id])
+  is_active     Boolean    @default(true)
+  is_root       Boolean    @default(false)
+  role          Roles      @default(AGENCY_SALES)
+  invoices Invoice[]
+  
+
+  // Better Auth relations
+  sessions Session[]
+  accounts Account[]
+
+  @@map("user")
+}
+
+model Agency {
+  id               Int           @id @default(autoincrement())
+  name             String
+  address          String
+  contact          String
+  phone            String
+  email            String
+  created_at       DateTime      @default(now())
+  updated_at       DateTime      @updatedAt
+  forwarder_id     Int
+  forwarder        Forwarder     @relation(fields: [forwarder_id], references: [id])
+  parent_agency_id Int? // Clave foránea opcional
+  parent_agency    Agency?       @relation("AgencyHierarchy", fields: [parent_agency_id], references: [id])
+  child_agencies   Agency[]      @relation("AgencyHierarchy") // Hijas
+  services         Service[] // Servicios que ofrece
+  users            User[] // Usuarios que pertenecen a esta agencia
+  rates            Rates[] // Tarifas personalizadas
+  customers        Customer[]
+  receipts         Receipt[]
+  invoices         Invoice[]
+  offers           Offer[]
+  items            Item[]
+  counters         Counter[]
+}
+
+model Customer {
+  id                Int       @id @default(autoincrement())
+  first_name        String
+  second_name       String?
+  last_name         String
+  second_last_name  String
+  identity_document String?   @unique
+  email             String?   @unique
+  phone             String    @unique
+  address           String?
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
+  receipts          Receipt[]
+  agency_id         Int?
+  agency            Agency?   @relation(fields: [agency_id], references: [id])
+  invoices          Invoice[]
+}
+
+model Receipt {
+  id               Int        @id @default(autoincrement())
+  first_name       String
+  second_name      String?
+  last_name        String
+  second_last_name String
+  passport         String?    @unique 
+  ci               String     @unique @db.VarChar(11)
+  email            String?    @unique
+  phone            String     @unique
+  address          String
+  created_at       DateTime   @default(now())
+  updated_at       DateTime   @updatedAt
+  customers        Customer[]
+  agency_id        Int?
+  agency           Agency?    @relation(fields: [agency_id], references: [id])
+  province_id      Int
+  province         Province   @relation(fields: [province_id], references: [id])
+  city_id          Int
+  city             City       @relation(fields: [city_id], references: [id])
+  invoices         Invoice[]
+}
+
+model Province {
+  id         Int       @id @default(autoincrement())
+  name       String
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  cities     City[]
+  receipts   Receipt[]
+}
+
+model City {
+  id          Int       @id @default(autoincrement())
+  name        String
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
+  province_id Int
+  province    Province  @relation(fields: [province_id], references: [id])
+  receipts    Receipt[]
+}
+
+enum Roles {
+  ROOT
+  ADMINISTRATOR
+  FORWARDER_RESELLER
+  AGENCY_SALES
+  AGENCY_ADMIN
+  AGENCY_SUPERVISOR
+  FORWARDER_ADMIN
+  CARRIER_ADMIN
+}
+
+model Provider {
+  id         Int         @id @default(autoincrement())
+  name       String      @unique
+  address    String
+  contact    String
+  phone      String
+  email      String
+  logo       String?
+  created_at DateTime    @default(now())
+  updated_at DateTime    @updatedAt
+  services   Service[]
+  forwarders Forwarder[]
+}
+
+model Forwarder {
+  id         Int        @id @default(autoincrement())
+  name       String     @unique
+  logo       String?
+  address    String
+  contact    String
+  phone      String
+  email      String
+  created_at DateTime   @default(now())
+  updated_at DateTime   @updatedAt
+  services   Service[]
+  agencies   Agency[]
+  users      User[]
+  providers  Provider[]
+}
+
+model Service {
+  id            Int           @id @default(autoincrement())
+  name          String        @unique
+  description   String?
+  created_at    DateTime      @default(now())
+  updated_at    DateTime      @updatedAt
+  service_type  ServiceType
+  forwarder_id  Int
+  forwarder     Forwarder     @relation(fields: [forwarder_id], references: [id])
+  rates Rates[]
+  provider_id   Int
+  provider      Provider      @relation(fields: [provider_id], references: [id])
+  agencies      Agency[]
+  is_active     Boolean       @default(true)
+  invoices      Invoice[]
+  items         Item[]
+  @@unique([provider_id, service_type, forwarder_id])
+}
+
+model Rates {
+  id              Int     @id @default(autoincrement())
+  service_id      Int
+  service         Service @relation(fields: [service_id], references: [id])
+  agency_id       Int
+  agency          Agency  @relation(fields: [agency_id], references: [id])
+  agency_rate     Float @default(0)
+  public_rate     Float @default(0)
+  forwarders_rate Float @default(1.25)
+ 
+  @@unique([service_id, agency_id])
+}
+
+model Offer {
+  id             Int          @id @default(autoincrement())
+  name           String
+  description    String?
+  discount_type  DiscountType
+  discount_value Decimal
+  min_amount     Decimal? // Minimum purchase amount to apply offer
+  max_discount   Decimal? // Maximum discount amount (for percentage discounts)
+  start_date     DateTime
+  end_date       DateTime
+  is_active      Boolean      @default(true)
+  usage_limit    Int? // Maximum number of times this offer can be used
+  usage_count    Int          @default(0)
+  agency_id      Int? // If null, available for all agencies
+  agency         Agency?      @relation(fields: [agency_id], references: [id])
+  created_at     DateTime     @default(now())
+  updated_at     DateTime     @updatedAt
+  invoices       Invoice[]
+}
+
+model Invoice {
+  id               Int           @id @default(autoincrement())
+  user_id          String
+  user             User          @relation(fields: [user_id], references: [id])
+  agency_id        Int
+  agency           Agency        @relation(fields: [agency_id], references: [id])
+  customer_id      Int
+  customer         Customer      @relation(fields: [customer_id], references: [id])
+  receipt_id       Int
+  receipt          Receipt       @relation(fields: [receipt_id], references: [id])
+  service_id       Int
+  service          Service       @relation(fields: [service_id], references: [id])
+  items            Item[] 
+  subtotal         Decimal       @default(0)
+  discount_type    DiscountType?
+  discount_value   Decimal       @default(0)
+  discount_reason  String?
+  offer_id         Int?
+  offer            Offer?        @relation(fields: [offer_id], references: [id])
+  total_amount     Decimal       @default(0)
+  paid_amount      Decimal       @default(0)
+  remaining_amount Decimal       @default(0)
+  payment_status   PaymentStatus @default(PENDING)
+  payments         Payment[]
+  status           String
+  created_at       DateTime      @default(now())
+  updated_at       DateTime      @updatedAt
+}
+model Item {
+  hbl               String        @id
+  description       String
+  created_at        DateTime      @default(now())
+  updated_at        DateTime      @updatedAt
+  weight            Float
+  volume            Float         @default(0)
+  customs_fee       Float         @default(0)
+  service_id        Int
+  service           Service       @relation(fields: [service_id], references: [id])
+  quantity          Int           @default(1)
+  rate              Float        
+  insurance_fee     Decimal?      @default(0)
+  delivery_fee      Decimal?      @default(0)
+  customs_rates_id Int?
+  customs_rates    CustomsRates? @relation(fields: [customs_rates_id], references: [id])
+  invoice_id        Int
+  invoice           Invoice       @relation(fields: [invoice_id], references: [id], onDelete: Cascade, onUpdate: Cascade) 
+  agency_id         Int
+  agency            Agency        @relation(fields: [agency_id], references: [id])
+} 
+
+model Payment {
+  id                Int           @id @default(autoincrement())
+  invoice_id        Int
+  invoice           Invoice       @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
+  amount            Decimal
+  payment_method    PaymentMethod
+  payment_reference String?
+  payment_date      DateTime      @default(now())
+  status            PaymentStatus @default(PENDING)
+  notes             String?
+  created_at        DateTime      @default(now())
+  updated_at        DateTime      @updatedAt
+}
+
+
+
+model CustomsRates {
+  id           Int      @id @default(autoincrement())
+  name         String
+  description  String?
+  country_id   Int
+  country      Country  @relation(fields: [country_id], references: [id])
+  chapter      String?
+  fee_type     FeeType @default(UNIT)
+  fee          Float
+  max_quantity Int? // opcional, para limitar cantidad
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+  items        Item[]
+}
+
+model Country {
+  id              Int             @id @default(autoincrement())
+  name            String
+  code            String          @unique
+  customs_rates CustomsRates[]
+}
+
+enum FeeType {
+  UNIT // Por unidad
+  WEIGHT // Por peso (libra, kg, etc.)
+  VALUE // Porcentaje o valor declarado (si aplica)
+}
+
+enum ServiceType {
+  SHIPPING_MARITIME
+  SHIPPING_AIR
+  PASSPORT
+  CAR_RENTAL
+  HOTEL_BOOKING
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+enum PaymentMethod {
+  CASH
+  CREDIT_CARD
+  DEBIT_CARD
+  BANK_TRANSFER
+  PAYPAL
+  ZELLE
+  MOBILE_PAYMENT
+  CHECK
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  PARTIALLY_PAID
+  REFUNDED
+  CANCELLED
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id @default(uuid())
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@unique([providerId, accountId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id @default(uuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([identifier, value])
+  @@map("verification")
+}
+
+model Jwks {
+  id         String   @id
+  publicKey  String
+  privateKey String
+  createdAt  DateTime
+
+  @@map("jwks")
+}
+
+model Counter {
+  id         Int      @id @default(autoincrement())
+  date       DateTime
+  agency_id   Int
+  agency     Agency   @relation(fields: [agency_id], references: [id])
+  counter    Int
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+  @@unique([date, agency_id])
+}
