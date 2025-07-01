@@ -26,10 +26,19 @@ export const errorHandler = (err: any, req: Request, res: Response, next: NextFu
 
 		type = "zod";
 	} else if (err instanceof Prisma.PrismaClientKnownRequestError) {
-		statusCode = 500;
-		message = err.message || "Internal Server Error";
-		details = null;
-		type = "prisma";
+		switch (err.code) {
+			case "P2002":
+				statusCode = 400;
+				message = "Duplicate entry";
+				details = err.meta || null;
+				type = "prisma";
+				break;
+			default:
+				statusCode = 500;
+				message = "Internal Server Error";
+				details = null;
+				type = "prisma";
+		}
 	}
 
 	res.status(statusCode).json({

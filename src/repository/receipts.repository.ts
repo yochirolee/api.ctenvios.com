@@ -30,12 +30,11 @@ const receipts = {
 				OR: [
 					// Individual field searches
 					{ first_name: { contains: query, mode: "insensitive" } },
-					{ second_name: { contains: query, mode: "insensitive" } },
+					{ middle_name: { contains: query, mode: "insensitive" } },
 					{ last_name: { contains: query, mode: "insensitive" } },
 					{ second_last_name: { contains: query, mode: "insensitive" } },
-					{ ci: { contains: query, mode: "insensitive" } },
 					{ email: { contains: query, mode: "insensitive" } },
-					{ phone: { contains: query, mode: "insensitive" } },
+					{ mobile: { contains: query, mode: "insensitive" } },
 
 					// Combined name searches
 					{
@@ -46,13 +45,13 @@ const receipts = {
 										return {
 											OR: [
 												{ first_name: { contains: term, mode: "insensitive" } },
-												{ second_name: { contains: term, mode: "insensitive" } },
+												{ middle_name: { contains: term, mode: "insensitive" } },
 											],
 										};
 									} else {
 										return {
 											OR: [
-												{ second_name: { contains: term, mode: "insensitive" } },
+												{ middle_name: { contains: term, mode: "insensitive" } },
 												{ last_name: { contains: term, mode: "insensitive" } },
 												{ second_last_name: { contains: term, mode: "insensitive" } },
 											],

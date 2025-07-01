@@ -6,6 +6,7 @@
 
 generator client {
   provider = "prisma-client-js"
+  previewFeatures = ["fullTextSearchPostgres"]
 }
 
 datasource db {
@@ -48,6 +49,7 @@ model Agency {
   contact          String
   phone            String
   email            String
+  logo             String?
   created_at       DateTime      @default(now())
   updated_at       DateTime      @updatedAt
   forwarder_id     Int
@@ -69,12 +71,12 @@ model Agency {
 model Customer {
   id                Int       @id @default(autoincrement())
   first_name        String
-  second_name       String?
+  middle_name       String?
   last_name         String
-  second_last_name  String
+  second_last_name  String?
   identity_document String?   @unique
   email             String?   @unique
-  phone             String    @unique
+  mobile            String   
   address           String?
   created_at        DateTime  @default(now())
   updated_at        DateTime  @updatedAt
@@ -82,18 +84,20 @@ model Customer {
   agency_id         Int?
   agency            Agency?   @relation(fields: [agency_id], references: [id])
   invoices          Invoice[]
+  @@unique([mobile,first_name,last_name])
 }
 
 model Receipt {
   id               Int        @id @default(autoincrement())
   first_name       String
-  second_name      String?
+  middle_name      String?
   last_name        String
   second_last_name String
   passport         String?    @unique 
   ci               String     @unique @db.VarChar(11)
   email            String?    @unique
-  phone            String     @unique
+  mobile            String?
+  phone            String?
   address          String
   created_at       DateTime   @default(now())
   updated_at       DateTime   @updatedAt
@@ -105,6 +109,8 @@ model Receipt {
   city_id          Int
   city             City       @relation(fields: [city_id], references: [id])
   invoices         Invoice[]
+  @@unique([mobile, ci,first_name,last_name])
+  
 }
 
 model Province {
@@ -135,6 +141,7 @@ enum Roles {
   AGENCY_SUPERVISOR
   FORWARDER_ADMIN
   CARRIER_ADMIN
+  MESSENGER
 }
 
 model Provider {
@@ -183,13 +190,12 @@ model Service {
   is_active     Boolean       @default(true)
   invoices      Invoice[]
   items         Item[]
-  @@unique([provider_id, service_type, forwarder_id])
 }
 
 model Rates {
   id              Int     @id @default(autoincrement())
   service_id      Int
-  service         Service @relation(fields: [service_id], references: [id])
+  service         Service @relation(fields: [service_id], references: [id], onDelete: Cascade, onUpdate: Cascade)
   agency_id       Int
   agency          Agency  @relation(fields: [agency_id], references: [id])
   agency_rate     Float @default(0)
@@ -314,11 +320,8 @@ enum FeeType {
 }
 
 enum ServiceType {
-  SHIPPING_MARITIME
-  SHIPPING_AIR
-  PASSPORT
-  CAR_RENTAL
-  HOTEL_BOOKING
+  MARITIME
+  AIR
 }
 
 enum DiscountType {

@@ -1,141 +1,351 @@
 import { PrismaClient } from "@prisma/client";
-import { faker } from "@faker-js/faker";
+import { Roles } from "@prisma/client";
+import { auth } from "../src/lib/auth";
 
 const prisma = new PrismaClient();
 
-interface CustomerSeedData {
-	first_name: string;
-	second_name: string;
-	last_name: string;
-	second_last_name: string;
-	identity_document: string;
-	email: string;
-	phone: string;
-	address: string;
-}
-
-const generateUniqueIdentityDocument = (): string => {
-	// Generate a random 8-11 digit identity document
-	return faker.string.numeric({ length: { min: 8, max: 11 } });
-};
-
-const generateCustomer = (): CustomerSeedData => {
-	const firstName = faker.person.firstName();
-	const secondName = faker.person.firstName();
-	const lastName = faker.person.lastName();
-	const secondLastName = faker.person.lastName();
-
-	return {
-		first_name: firstName,
-		second_name: secondName,
-		last_name: lastName,
-		second_last_name: secondLastName,
-		identity_document: generateUniqueIdentityDocument(),
-		email: faker.internet.email({
-			firstName: firstName.toLowerCase(),
-			lastName: lastName.toLowerCase(),
-		}),
-		phone: faker.phone.number(),
-		address: faker.location.streetAddress({ useFullAddress: true }),
-	};
-};
-
-const seedCustomers = async (count: number): Promise<void> => {
-	console.log(`🌱 Seeding ${count} customers...`);
-
-	const customers: CustomerSeedData[] = [];
-	const usedEmails = new Set<string>();
-	const usedIdentityDocs = new Set<string>();
-	const usedPhones = new Set<string>();
-
-	// Generate unique customers
-	while (customers.length < count) {
-		const customer = generateCustomer();
-
-		// Ensure uniqueness
-		if (
-			!usedEmails.has(customer.email) &&
-			!usedIdentityDocs.has(customer.identity_document) &&
-			!usedPhones.has(customer.phone)
-		) {
-			customers.push(customer);
-			usedEmails.add(customer.email);
-			usedIdentityDocs.add(customer.identity_document);
-			usedPhones.add(customer.phone);
-		}
-	}
-
-	// Insert customers in batches for better performance
-	const batchSize = 100;
-	let inserted = 0;
-
-	for (let i = 0; i < customers.length; i += batchSize) {
-		const batch = customers.slice(i, i + batchSize);
-
-		try {
-			await prisma.customer.createMany({
-				data: batch,
-				skipDuplicates: true,
-			});
-
-			inserted += batch.length;
-			console.log(
-				`✅ Inserted batch ${Math.ceil((i + 1) / batchSize)} - Total: ${inserted}/${count}`,
-			);
-		} catch (error) {
-			console.error(`❌ Error inserting batch ${Math.ceil((i + 1) / batchSize)}:`, error);
-		}
-	}
-
-	console.log(`🎉 Successfully seeded ${inserted} customers`);
-};
+const provinciasConCiudades = [
+	{
+		name: "Pinar del Río",
+		cities: [
+			"Pinar del Rio",
+			"Consolacion del Sur",
+			"Guane",
+			"La Palma",
+			"Los Palacios",
+			"Mantua",
+			"Minas de Matahambre",
+			"San Juan y Martinez",
+			"San Luis",
+			"Sandino",
+			"Vinales",
+		],
+	},
+	{
+		name: "Artemisa",
+		cities: [
+			"Alquizar",
+			"Artemisa",
+			"Bauta",
+			"Caimito",
+			"Candelaria",
+			"Guanajay",
+			"Guira de Melena",
+			"Mariel",
+			"San Antonio de los Baños",
+			"San Cristobal",
+		],
+	},
+	{
+		name: "La Habana",
+		cities: [
+			"Arroyo Naranjo",
+			"Boyeros",
+			"Centro Habana",
+			"Cerro",
+			"Cotorro",
+			"Diez de Octubre",
+			"Guanabacoa",
+			"Habana del Este",
+			"Habana Vieja",
+			"La Lisa",
+			"Marianao",
+			"Playa",
+			"Plaza de la Revolucion",
+			"Regla",
+			"San Miguel del Padron",
+		],
+	},
+	{
+		name: "Mayabeque",
+		cities: [
+			"Batabano",
+			"Bejucal",
+			"Guines",
+			"Jaruco",
+			"Madruga",
+			"Melena del Sur",
+			"Nueva Paz",
+			"Quivican",
+			"San Jose de las Lajas",
+			"San Nicolas",
+		],
+	},
+	{
+		name: "Matanzas",
+		cities: [
+			"Cardenas",
+			"Cienaga de Zapata",
+			"Colon",
+			"Jaguey Grande",
+			"Jovellanos",
+			"Limonar",
+			"Los Arabos",
+			"Marti",
+			"Matanzas",
+			"Pedro Betancourt",
+			"Perico",
+			"Union de Reyes",
+		],
+	},
+	{
+		name: "Cienfuegos",
+		cities: [
+			"Abreus",
+			"Aguada de Pasajeros",
+			"Cienfuegos",
+			"Cruces",
+			"Cumanayagua",
+			"Lajas",
+			"Palmira",
+			"Rodas",
+		],
+	},
+	{
+		name: "Villa Clara",
+		cities: [
+			"Caibarien",
+			"Camajuani",
+			"Cifuentes",
+			"Corralillo",
+			"Encrucijada",
+			"Manicaragua",
+			"Placetas",
+			"Quemado de Guines",
+			"Ranchuelo",
+			"Remedios",
+			"Sagua la Grande",
+			"Santa Clara",
+			"Santo Domingo",
+		],
+	},
+	{
+		name: "Sancti Spiritus",
+		cities: [
+			"Cabaiguan",
+			"Fomento",
+			"Jatibonico",
+			"La Sierpe",
+			"Sancti Spiritus",
+			"Taguasco",
+			"Trinidad",
+			"Yaguajay",
+		],
+	},
+	{
+		name: "Ciego de Avila",
+		cities: [
+			"Baragua",
+			"Bolivia",
+			"Chambas",
+			"Ciego de Avila",
+			"Ciro Redondo",
+			"Florencia",
+			"Majagua",
+			"Moron",
+			"Primero de Enero",
+			"Venezuela",
+		],
+	},
+	{
+		name: "Camaguey",
+		cities: [
+			"Camaguey",
+			"Carlos Manuel de Cespedes",
+			"Esmeralda",
+			"Florida",
+			"Guaímaro",
+			"Jimaguayú",
+			"Minas",
+			"Najasa",
+			"Nuevitas",
+			"Santa Cruz del Sur",
+			"Sibanicu",
+			"Sierra de Cubitas",
+			"Vertientes",
+		],
+	},
+	{
+		name: "Las Tunas",
+		cities: [
+			"Amancio",
+			"Colombia",
+			"Jesus Menendez",
+			"Jobabo",
+			"Las Tunas",
+			"Majibacoa",
+			"Manati",
+			"Puerto Padre",
+		],
+	},
+	{
+		name: "Holguin",
+		cities: [
+			"Antilla",
+			"Baguanos",
+			"Banes",
+			"Cacocum",
+			"Calixto Garcia",
+			"Cueto",
+			"Frank Pais",
+			"Gibara",
+			"Holguin",
+			"Mayari",
+			"Moa",
+			"Rafael Freyre",
+			"Sagua de Tanamo",
+			"Urbano Noris",
+		],
+	},
+	{
+		name: "Granma",
+		cities: [
+			"Bartolome Maso",
+			"Bayamo",
+			"Buey Arriba",
+			"Campechuela",
+			"Cauto Cristo",
+			"Guisa",
+			"Jiguani",
+			"Manzanillo",
+			"Media Luna",
+			"Niquero",
+			"Pilon",
+			"Rio Cauto",
+			"Yara",
+		],
+	},
+	{
+		name: "Santiago de Cuba",
+		cities: [
+			"Contramaestre",
+			"Guama",
+			"Mella",
+			"Palma Soriano",
+			"San Luis",
+			"Santiago de Cuba",
+			"Segundo Frente",
+			"Songo-La Maya",
+			"Tercer Frente",
+		],
+	},
+	{
+		name: "Guantanamo",
+		cities: [
+			"Baracoa",
+			"Caimanera",
+			"El Salvador",
+			"Guantanamo",
+			"Imías",
+			"Maisí",
+			"Manuel Tames",
+			"Niceto Perez",
+			"San Antonio del Sur",
+			"Yateras",
+		],
+	},
+	{
+		name: "Isla de la Juventud",
+		cities: ["Isla de la Juventud"],
+	},
+];
 
 async function main() {
-	/* 	const cuba = await prisma.country.upsert({
-		where: { code: "CU" },
+	// Create forwarder
+	const forwarder = await prisma.forwarder.upsert({
+		where: { id: 1 },
 		update: {},
-		create: { name: "Cuba", code: "CU" },
-	}); */
+		create: {
+			name: "Caribe Travel Express and Services Inc",
+			address: "10230 NW 80th Ave, Miami, FL 33016",
+			contact: "F Infanzon",
+			phone: "3058513004",
+			email: "gerente@ctenvios.com",
+		},
+	});
 
-	/* for (const chapterData of chapters) {
-		for (const category of chapterData.categories) {
-			const itemCategory = await prisma.itemCategory.upsert({
-				where: { name: category.name },
-				update: {},
-				create: { name: category.name },
-			});
+	console.log(`Forwarder created: ${forwarder.name}`);
 
-			await prisma.customsTariff.upsert({
-				where: {
-					country_id: {
-						country_id: cuba.id,
-						category_id: itemCategory.id,
-					},
+	const cuba = await prisma.country.upsert({
+		where: { id: 1 },
+		update: {},
+		create: {
+			name: "Cuba",
+			code: "CU",
+		},
+	});
+	console.log(`Country created: ${cuba.name}`);
+
+	const provider = await prisma.provider.upsert({
+		where: { id: 1 },
+
+		update: {},
+		create: {
+			name: "Transcargo",
+			address: "Avenida del Puerto y Línea del Ferrocarril, Regla, La Habana.",
+			contact: "Transcargo",
+			phone: "5376980069",
+			email: "atcliente2@transcargo.transnet.cu",
+		},
+	});
+
+	console.log(`Provider created: ${provider.name}`);
+
+	// Create services
+	const maritimeService = await prisma.service.upsert({
+		where: { id: 1 },
+
+		update: {},
+		create: {
+			name: "Maritimo",
+			service_type: "MARITIME",
+			description: "Envios Marítimos",
+			forwarder: { connect: { id: forwarder.id } },
+			provider: { connect: { id: provider.id } },
+		},
+	});
+
+	console.log(`Maritime service created: ${maritimeService.name}`);
+
+	// Create Agencia Habana (padre)
+	const CTEnvios = await prisma.agency.upsert({
+		where: { id: 1 },
+		create: {
+			name: "CTEnvios",
+			address: "10230 NW 80th Ave, Miami, FL 33016",
+			contact: "F Infanzon",
+			phone: "3058513004",
+			email: "gerente@ctenvios.com",
+			forwarder_id: forwarder.id,
+		},
+		update: {},
+	});
+	console.log(`Agency created: ${CTEnvios.name}`);
+
+	for (const provincia of provinciasConCiudades) {
+		const createdProvince = await prisma.province.create({
+			data: {
+				name: provincia.name,
+				cities: {
+					create: provincia.cities.map((name) => ({ name })),
 				},
-				update: {},
-				create: {
-					country_id: cuba.id,
-					chapter: chapterData.chapter,
-					fee_type: category.fee_type as FeeType,
-					fixed_fee: category.fee,
-					max_quantity: category.max_quantity ?? null,
-				},
-			});
-		}
-	} */
-
-	console.log("Seed completo con capítulos 1 a 11 cargado.");
-
-	try {
-		// Clean existing customers (optional)
-		console.log("🧹 Cleaning existing customers...");
-			await seedCustomers(1000);
-	} catch (error) {
-		console.error("❌ Error during seeding:", error);
-		process.exit(1);
-	} finally {
-		await prisma.$disconnect();
+			},
+		});
+		console.log(`Province created: ${createdProvince.name}`);
 	}
+	const user = await auth.api.signUpEmail({
+		body: {
+			email: "yleecruz@gmail.com",
+			password: "Audioslave*84",
+			name: "Yochiro Lee Cruz",
+			role: Roles.ROOT,
+			agency_id: 1,
+		},
+	});
+
+	console.log(`User created: ${user.user.name}`);
 }
 
-main();
+main()
+	.catch((e) => console.error(e))
+	.finally(() => prisma.$disconnect());

@@ -5,6 +5,7 @@ import { z } from "zod";
 
 const serviceSchema = z.object({
 	name: z.string().min(1, { message: "Name is required" }),
+	description: z.string().optional(),
 	service_type: z.nativeEnum(ServiceType, { message: "Service type is required" }),
 	forwarder_id: z.number().min(0, { message: "Forwarder ID is required" }),
 	provider_id: z.number().min(0, { message: "Provider ID is required" }),
@@ -23,9 +24,22 @@ export const services_controller = {
 				throw new Error(service.error.message);
 			}
 
-			const newService = await repository.services.create(service.data);
+			// Transform data for Prisma ServiceCreateInput
+			const { forwarder_id, provider_id, ...serviceData } = service.data;
+			const prismaServiceData = {
+				...serviceData,
+				forwarder: {
+					connect: { id: forwarder_id },
+				},
+				provider: {
+					connect: { id: provider_id },
+				},
+			};
+
+			const newService = await repository.services.create(prismaServiceData);
 			res.status(201).json(newService);
 		} catch (error) {
+			console.error("Error creating service:", error);
 			res.status(500).json({ error: (error as Error).message });
 		}
 	},

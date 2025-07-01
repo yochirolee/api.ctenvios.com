@@ -1,14 +1,38 @@
-import { Service } from "@prisma/client";
+import { Service, Prisma } from "@prisma/client";
 import prisma from "../config/prisma_db";
 
 const services = {
-	create: async (service: Service) => {
-		try {
-			return await prisma.service.create({ data: service });
-		} catch (error) {
-			console.error("Error creating service:", error);
-			throw error;
-		}
+	create: async (service: Prisma.ServiceCreateInput) => {
+		// Using Prisma transaction to ensure atomicity
+		const newService = await prisma.$transaction(async (tx) => {
+			// Step 1: Create the service
+			const createdService = await tx.service.create({
+				data: service,
+			});
+
+			// Step 2: Get all existing agencies
+			const agencies = await tx.agency.findMany({
+				select: { id: true },
+			});
+
+			// Step 3: Create base rates for each agency
+			await Promise.all(
+				agencies.map((agency) =>
+					tx.rates.create({
+						data: {
+							service_id: createdService.id,
+							agency_id: agency.id,
+							agency_rate: 1.99, // Default base rate
+							forwarders_rate: 1.25, // Default forwarder rate
+						},
+					}),
+				),
+			);
+
+			return createdService;
+		});
+
+		return newService;
 	},
 	getAll: async () => {
 		try {

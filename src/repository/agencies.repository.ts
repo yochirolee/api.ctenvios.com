@@ -1,56 +1,38 @@
 import prisma from "../config/prisma_db";
-import { Agency } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import repository from "./index";
 
 export const agencies = {
 	getAll: async () => {
-		const agencies = await prisma.agency.findMany({
-			select: {
-				id: true,
-				name: true,
-			},
-		});
+		const agencies = await prisma.agency.findMany({});
 		return agencies;
 	},
 	getById: async (id: number) => {
 		const agency = await prisma.agency.findUnique({
 			where: { id },
-			include: {
-				services: {
-					include: {
-						provider: {
-							include: {
-								services: {
-									include: {
-										service_rates: {
-											where: {
-												agency_id: id,
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
 		});
 		return agency;
+	},
+	getUsers: async (id: number) => {
+		const users = await prisma.user.findMany({
+			where: { agency_id: id },
+		});
+		return users;
 	},
 	getServicesAndRates: async (id: number) => {
 		const servicesRates = await prisma.service.findMany({
 			include: {
+				provider: true,
 				rates: {
 					where: {
 						agency_id: id,
 					},
-					
 				},
 			},
 		});
 		return servicesRates;
 	},
-	create: async (agency: Omit<Agency, "id">): Promise<Agency> => {
+	create: async (agency: Partial<Prisma.AgencyCreateInput>) => {
 		const services = await repository.services.getAll();
 
 		// Using Prisma transaction to ensure atomicity
@@ -75,7 +57,7 @@ export const agencies = {
 							service_id: service.id,
 							agency_id: createdAgency.id,
 							agency_rate: 1.99,
-							forwarders_rate: 1.75,
+							forwarders_rate: 1.25,
 						},
 					}),
 				),
@@ -87,7 +69,7 @@ export const agencies = {
 		return newAgency;
 	},
 
-	update: async (id: number, agency: Omit<Agency, "id">) => {
+	update: async (id: number, agency: Prisma.AgencyUpdateInput) => {
 		const updatedAgency = await prisma.agency.update({
 			where: { id },
 			data: agency,

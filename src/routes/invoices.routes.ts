@@ -87,20 +87,20 @@ router.get("/search", async (req, res) => {
 					select: {
 						id: true,
 						first_name: true,
-						second_name: true,
+						middle_name: true,
 						last_name: true,
 						second_last_name: true,
-						phone: true,
+						mobile: true,
 					},
 				},
 				receipt: {
 					select: {
 						id: true,
 						first_name: true,
-						second_name: true,
+						middle_name: true,
 						last_name: true,
 						second_last_name: true,
-						phone: true,
+						mobile: true,
 					},
 				},
 			},
@@ -111,9 +111,9 @@ router.get("/search", async (req, res) => {
 							OR: [
 								{ first_name: { contains: searchTerm, mode: "insensitive" } },
 								{ second_last_name: { contains: searchTerm, mode: "insensitive" } },
-								{ second_name: { contains: searchTerm, mode: "insensitive" } },
+								{ middle_name: { contains: searchTerm, mode: "insensitive" } },
 								{ last_name: { contains: searchTerm, mode: "insensitive" } },
-								{ phone: { contains: searchTerm, mode: "insensitive" } },
+								{ mobile: { contains: searchTerm, mode: "insensitive" } },
 								{
 									AND: [
 										{
@@ -122,13 +122,13 @@ router.get("/search", async (req, res) => {
 													return {
 														OR: [
 															{ first_name: { contains: term, mode: "insensitive" } },
-															{ second_name: { contains: term, mode: "insensitive" } },
+															{ middle_name: { contains: term, mode: "insensitive" } },
 														],
 													};
 												} else {
 													return {
 														OR: [
-															{ second_name: { contains: term, mode: "insensitive" } },
+															{ middle_name: { contains: term, mode: "insensitive" } },
 															{ last_name: { contains: term, mode: "insensitive" } },
 															{ second_last_name: { contains: term, mode: "insensitive" } },
 														],
@@ -146,9 +146,9 @@ router.get("/search", async (req, res) => {
 							OR: [
 								{ first_name: { contains: searchTerm, mode: "insensitive" } },
 								{ second_last_name: { contains: searchTerm, mode: "insensitive" } },
-								{ second_name: { contains: searchTerm, mode: "insensitive" } },
+								{ middle_name: { contains: searchTerm, mode: "insensitive" } },
 								{ last_name: { contains: searchTerm, mode: "insensitive" } },
-								{ phone: { contains: searchTerm, mode: "insensitive" } },
+								{ mobile: { contains: searchTerm, mode: "insensitive" } },
 							],
 						},
 					},
@@ -161,7 +161,6 @@ router.get("/search", async (req, res) => {
 			skip: 0,
 		});
 
-		console.log(invoices.length, "invoices");
 		res.status(200).json(invoices);
 	} catch (error) {
 		console.error("Search error:", error);

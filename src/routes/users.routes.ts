@@ -63,9 +63,7 @@ router.post("/sign-up/email", authMiddleware, async (req, res) => {
 });
 
 router.post("/sign-in/email", async (req, res) => {
-	console.log("sign-in/email");
 	const { email, password } = req.body;
-	console.log(email, "email", password, "password");
 
 	try {
 		const result = await auth.api.signInEmail({

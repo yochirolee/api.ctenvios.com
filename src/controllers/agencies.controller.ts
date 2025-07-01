@@ -1,11 +1,12 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
-import { Agency } from "@prisma/client";
+import { Agency, Prisma } from "@prisma/client";
 import AppError from "../utils/app.error";
 
 import { agencySchema } from "../types/types";
 import repository from "../repository";
 
+// Create update schema by making all fields optional
 const agencyUpdateSchema = agencySchema.partial();
 
 const agencies = {
@@ -16,20 +17,24 @@ const agencies = {
 	getById: async (req: Request, res: Response) => {
 		const { id } = req.params;
 		const agency = await repository.agencies.getById(Number(id));
-		res.status(200).json({
-			agency,
-		});
+		res.status(200).json(agency);
+	},
+
+	getUsers: async (req: Request, res: Response) => {
+		const { id } = req.params;
+		if (!id) {
+			throw new AppError("Agency ID is required", 400, [], "zod");
+		}
+		const users = await repository.agencies.getUsers(Number(id));
+		res.status(200).json(users);
 	},
 
 	create: async (req: Request, res: Response) => {
-		const result = agencySchema.safeParse(req.body) as z.SafeParseReturnType<
-			typeof agencySchema,
-			Agency
-		>;
+		const result = agencySchema.safeParse(req.body);
 		if (!result.success) {
 			throw new AppError("Invalid agency data", 400, result.error.flatten().fieldErrors, "zod");
 		}
-		const agency = await repository.agencies.create(result.data);
+		const agency = await repository.agencies.create(result.data as Partial<Prisma.AgencyCreateInput>);
 		res.status(201).json({
 			agency,
 		});
