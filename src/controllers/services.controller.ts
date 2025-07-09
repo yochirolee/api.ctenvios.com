@@ -60,7 +60,7 @@ export const services_controller = {
 	delete: async (req: Request, res: Response) => {
 		const { id } = req.params;
 		const service = await repository.services.delete(Number(id));
-		res.status(200).json(service);
+		res.status(200).json(service); 
 	},
 };
 

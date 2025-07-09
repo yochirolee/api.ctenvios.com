@@ -4,12 +4,13 @@ import * as fs from "fs";
 import * as path from "path";
 import { Invoice, Customer, Receipt, Agency, Service, Item } from "@prisma/client";
 
-interface InvoiceWithRelations extends Invoice {
+interface InvoiceWithRelations extends Omit<Invoice, "total"> {
 	customer: Customer;
 	receipt: Receipt & {
 		province?: { name: string };
 		city?: { name: string };
 	};
+	total: number;
 	agency: Agency;
 	service: Service;
 	items: Item[];
@@ -18,7 +19,7 @@ interface InvoiceWithRelations extends Invoice {
 export const generateInvoicePDF = (invoice: InvoiceWithRelations): Promise<PDFKit.PDFDocument> => {
 	return new Promise(async (resolve, reject) => {
 		try {
-			const doc = new PDFKit({ margin: 20, size: "letter" });
+			const doc = new PDFKit({ margin: 10, size: "letter" });
 
 			// Generate the clean modern invoice with proper pagination
 			await generateCleanModernInvoiceWithPagination(doc, invoice);
@@ -39,6 +40,9 @@ async function generateCleanModernInvoiceWithPagination(
 	// Generate first page header
 	await generatePageHeader(doc, invoice, true);
 
+	// Add footer to first page
+	addFooterToPage(doc, invoice, currentPage);
+
 	// Generate sender/recipient info (only on first page)
 	generateSenderRecipientInfo(doc, invoice);
 
@@ -46,8 +50,8 @@ async function generateCleanModernInvoiceWithPagination(
 	const result = await generateItemsTableWithPagination(doc, invoice);
 	const totalPages = result.totalPages;
 
-	// Add footer to all pages
-	addFooterToAllPages(doc, invoice, totalPages);
+	// Update page numbers on all pages now that we know the total
+	updatePageNumbers(doc, totalPages);
 }
 
 async function generatePageHeader(
@@ -124,7 +128,7 @@ async function generatePageHeader(
 			includetext: false,
 			textxalign: "center",
 		});
-		
+
 		// Add barcode to the right side
 		doc.image(barcodeBuffer, 320, 25, { width: 80, height: 20 });
 
@@ -147,19 +151,21 @@ function generateSenderRecipientInfo(doc: PDFKit.PDFDocument, invoice: InvoiceWi
 	let currentY = 110;
 
 	// Sender name
-	const senderName = `${invoice.customer.first_name} ${invoice.customer.last_name} ${invoice.customer.second_last_name}`;
+	const senderName = `${invoice.customer.first_name}  ${invoice.customer.last_name} ${
+		invoice.customer.second_last_name || ""
+	}`;
 	doc.fillColor("#2D3748").fontSize(10).font("Helvetica-Bold").text(senderName, 40, currentY);
 	currentY += 14;
 
 	// Phone with label
-	if (invoice.customer.phone) {
+	if (invoice.customer.mobile) {
 		doc
 			.fillColor("#718096")
 			.fontSize(9)
 			.font("Helvetica")
 			.text("Tel: ", 40, currentY)
 			.fillColor("#2D3748")
-			.text(`${invoice.customer.phone}`, 60, currentY);
+			.text(`${invoice.customer.mobile}`, 60, currentY);
 		currentY += 14;
 	}
 
@@ -189,7 +195,9 @@ function generateSenderRecipientInfo(doc: PDFKit.PDFDocument, invoice: InvoiceWi
 	let recipientY = 113;
 
 	// Recipient name
-	const recipientName = `${invoice.receipt.first_name} ${invoice.receipt.last_name} ${invoice.receipt.second_last_name}`;
+	const recipientName = `${invoice.receipt.first_name} ${invoice.receipt.last_name} ${
+		invoice.receipt.second_last_name || ""
+	}`;
 	doc.fillColor("#2D3748").fontSize(10).font("Helvetica-Bold").text(recipientName, 320, recipientY);
 	recipientY += 14;
 	if (invoice.receipt.ci) {
@@ -200,14 +208,14 @@ function generateSenderRecipientInfo(doc: PDFKit.PDFDocument, invoice: InvoiceWi
 		recipientY += 14;
 	}
 	// Phone with label
-	if (invoice.receipt.phone) {
+	if (invoice.receipt.mobile) {
 		doc
 			.fillColor("#718096")
 			.fontSize(9)
 			.font("Helvetica")
 			.text("Tel: ", 320, recipientY)
 			.fillColor("#2D3748")
-			.text(`${invoice.receipt.phone}`, 340, recipientY);
+			.text(`${invoice.receipt.mobile}`, 340, recipientY);
 		recipientY += 14;
 	}
 
@@ -232,40 +240,31 @@ async function generateItemsTableWithPagination(
 	invoice: InvoiceWithRelations,
 ) {
 	const pageHeight = 792; // Letter size height
-	const bottomMargin = 30; // Space for footer
-	let currentY = 200; // Starting Y position for table (reduced from 220)
+	const bottomMargin = 120; // Increased space for footer (was 30)
+	let currentY = 200;
 	let currentPage = 1;
-	let subtotal = 0;
 
-	// Function to add table headers
 	const addTableHeaders = (y: number) => {
-		doc.rect(40, y, 532, 30).fillColor("#F7FAFC").fill();
-		// Remove outer border, only add bottom border
 		doc
-			.strokeColor("#E2E8F0")
-			.lineWidth(1)
-			.moveTo(40, y + 30)
-			.lineTo(572, y + 30)
-			.stroke();
-
-		doc
-			.fillColor("#4A5568")
+			.fillColor("#2D3748")
 			.fontSize(10)
 			.font("Helvetica-Bold")
-			.text("HBL", 50, y + 8)
-			.text("Descripción", 150, y + 8)
-			.text("Precio", 420, y + 8, { width: 40, align: "right" })
-			.text("Peso", 470, y + 8, { width: 40, align: "right" })
-			.text("Subtotal", 520, y + 8, { width: 40, align: "right" });
+			.text("HBL", 50, y)
+			.text("Descripción", 150, y)
+			.text("Precio", 420, y, { width: 40, align: "right" })
+			.text("Peso", 470, y, { width: 40, align: "right" })
+			.text("Subtotal", 520, y, { width: 40, align: "right" });
 
-		return y + 30;
+		return y + 25;
 	};
 
-	// Function to check if we need a new page
 	const checkPageBreak = async (currentY: number, spaceNeeded: number = 25) => {
 		if (currentY + spaceNeeded > pageHeight - bottomMargin) {
 			doc.addPage();
 			currentPage++;
+
+			// Add footer to new page
+			addFooterToPage(doc, invoice, currentPage);
 
 			// Add header to new page
 			await generatePageHeader(doc, invoice, false);
@@ -282,8 +281,6 @@ async function generateItemsTableWithPagination(
 	// Generate table rows
 	for (let index = 0; index < invoice.items.length; index++) {
 		const item = invoice.items[index];
-		const amount = item.rate * item.quantity;
-		subtotal += amount;
 
 		// Check if we need a new page
 		currentY = await checkPageBreak(currentY, 25);
@@ -291,7 +288,7 @@ async function generateItemsTableWithPagination(
 		// Row border - only bottom border, no outer borders
 		doc
 			.strokeColor("#E2E8F0")
-			.lineWidth(0.5)
+			.lineWidth(0.2)
 			.moveTo(40, currentY + 25)
 			.lineTo(572, currentY + 25)
 			.stroke();
@@ -301,32 +298,35 @@ async function generateItemsTableWithPagination(
 			.fillColor("#2D3748")
 			.fontSize(9)
 			.font("Helvetica")
-			.text(item.hbl || `CTE${invoice.id}${String(index + 1).padStart(6, "0")}`, 50, currentY + 6, {
+			.text(item.hbl || `CTE${invoice.id}${String(index + 1).padStart(6, "0")}`, 50, currentY + 8, {
 				width: 90,
 			})
-			.text(item.description, 150, currentY + 6, { width: 280 })
-			.text(`$${item.rate.toFixed(2)}`, 420, currentY + 6, { width: 40, align: "right" })
-			.text(`${item.weight.toFixed(2)}`, 470, currentY + 6, { width: 40, align: "right" })
-			.text(`$${amount.toFixed(2)}`, 520, currentY + 6, { width: 40, align: "right" });
+			.text(item.description, 150, currentY + 8, { width: 280 })
+			.text(`$${item.rate.toFixed(2)}`, 420, currentY + 8, { width: 40, align: "right" })
+			.text(`${item.weight.toFixed(2)}`, 470, currentY + 8, { width: 40, align: "right" })
+			.text(`${(item.rate * item.weight + item.customs_fee).toFixed(2)}`, 520, currentY + 8, {
+				width: 40,
+				align: "right",
+			});
 
 		currentY += 25;
 	}
 
-	// Check if we need space for totals (reserve about 200 points)
-	currentY = await checkPageBreak(currentY, 100);
+	// Check if we need space for totals (reserve about 250 points)
+	currentY = await checkPageBreak(currentY, 250);
 
 	// Add spacing before totals
 	currentY += 30;
 
 	// Totals section
-	const delivery = 12.0;
+	const delivery = 0.0;
 	const seguro = 0.0;
 	const cargoExtra = 0.0;
 	const cargoTarjeta = 0.0;
-	const descuento = 79.75;
+	const descuento = invoice.discount_value.toNumber();
 	const pagado = 0.0;
 
-	const total = subtotal + delivery + seguro + cargoExtra + cargoTarjeta - descuento;
+	const total = invoice.total + delivery + seguro + cargoExtra + cargoTarjeta - descuento;
 	const pendiente = total - pagado - cargoTarjeta;
 
 	// Subtotal
@@ -336,7 +336,7 @@ async function generateItemsTableWithPagination(
 		.font("Helvetica")
 		.text("Subtotal:", 420, currentY)
 		.fillColor("#2D3748")
-		.text(`$${subtotal.toFixed(2)}`, 520, currentY, { width: 50, align: "right" });
+		.text(`$${invoice.total.toFixed(2)}`, 520, currentY, { width: 50, align: "right" });
 
 	currentY += 15;
 
@@ -394,7 +394,7 @@ async function generateItemsTableWithPagination(
 		.fontSize(12)
 		.font("Helvetica-Bold")
 		.text("TOTAL:", 420, currentY)
-		.text(`$${total.toFixed(2)}`, 520, currentY, { width: 50, align: "right" });
+		.text(`$${invoice.total.toFixed(2)}`, 520, currentY, { width: 50, align: "right" });
 
 	currentY += 15;
 
@@ -416,63 +416,85 @@ async function generateItemsTableWithPagination(
 		.fillColor(pendiente > 0 ? "#FF0000" : "#2D3748")
 		.text(`$${pendiente.toFixed(2)}`, 520, currentY, { width: 50, align: "right" });
 
-	return { totalPages: currentPage, subtotal, total };
+	return { totalPages: currentPage, total };
 }
 
-function addFooterToAllPages(
+function addFooterToPage(
 	doc: PDFKit.PDFDocument,
 	invoice: InvoiceWithRelations,
-	totalPages: number,
+	currentPage: number,
+	totalPages: number = 1,
 ) {
-	// Add footer to all pages
+	// Position footer at the bottom of the page
+	const footerY = 680; // Near bottom of page (792 - 112 = 680)
+
+	// Tracking information (blue, bold, centered)
+	doc
+		.fillColor("#4682B4")
+		.fontSize(10)
+		.font("Helvetica-Bold")
+		.text(`Tracking: https://ctenvios.com/tracking?search=${invoice.id}`, 40, footerY, {
+			align: "center",
+			width: 532,
+		});
+
+	// Legal disclaimer (gray, smaller font, justified)
+	doc
+		.fillColor("#808080")
+		.fontSize(7)
+		.font("Helvetica")
+		.text(
+			"Al realizar este envío, declaro que soy responsable de toda la información proporcionada y que el contenido enviado no infringe las leyes de los Estados Unidos ni las regulaciones aduanales de la República de Cuba. También declaro estar de acuerdo con los términos y condiciones de la empresa.",
+			40,
+			footerY + 15,
+			{
+				width: 532,
+				align: "justify",
+				lineGap: 1,
+			},
+		);
+
+	// Terms link (underlined, centered)
+	doc
+		.fillColor("#000000")
+		.fontSize(8)
+		.font("Helvetica")
+		.text(
+			"Para términos y condiciones completos visite: https://ctenvios.com/terms",
+			40,
+			footerY + 35,
+			{
+				align: "center",
+				width: 532,
+				underline: true,
+			},
+		);
+
+	// Page number (gray, right-aligned) - will be updated later
+	doc
+		.fillColor("#808080")
+		.fontSize(8)
+		.font("Helvetica")
+		.text(`Página ${currentPage} de ${totalPages}`, 40, footerY + 50, {
+			align: "right",
+			width: 532,
+		});
+}
+
+function updatePageNumbers(doc: PDFKit.PDFDocument, totalPages: number) {
+	// Update page numbers on all pages
 	const range = doc.bufferedPageRange();
 	for (let i = range.start; i < range.start + range.count; i++) {
 		doc.switchToPage(i);
 		const footerY = 680;
 
-		// Tracking information (blue, bold, centered)
+		// Clear the old page number area
 		doc
-			.fillColor("#4682B4")
-			.fontSize(10)
-			.font("Helvetica-Bold")
-			.text(`Tracking: https://ctenvios.com/tracking?search=${invoice.id}`, 40, footerY, {
-				align: "center",
-				width: 532,
-			});
+			.fillColor("#FFFFFF")
+			.rect(450, footerY + 50, 122, 10)
+			.fill();
 
-		// Legal disclaimer (gray, smaller font, justified)
-		doc
-			.fillColor("#808080")
-			.fontSize(7)
-			.font("Helvetica")
-			.text(
-				"Al realizar este envío, declaro que soy responsable de toda la información proporcionada y que el contenido enviado no infringe las leyes de los Estados Unidos ni las regulaciones aduanales de la República de Cuba. También declaro estar de acuerdo con los términos y condiciones de la empresa.",
-				40,
-				footerY + 15,
-				{
-					width: 532,
-					align: "justify",
-					lineGap: 1,
-				},
-			);
-
-		// Terms link (underlined, centered)
-		doc
-			.fillColor("#000000")
-			.fontSize(8)
-			.font("Helvetica")
-			.text(
-				"Para términos y condiciones completos visite: https://ctenvios.com/terms",
-				40,
-				footerY + 35,
-				{
-					align: "center",
-					width: 532,
-					underline: true,
-				},
-			);
-
-		// Page number (gray, right-aligned)
+		// Add updated page number
 		doc
 			.fillColor("#808080")
 			.fontSize(8)

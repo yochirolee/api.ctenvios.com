@@ -48,7 +48,7 @@ router.post("/sign-up/email", authMiddleware, async (req, res) => {
 			email,
 			password,
 			name: name,
-			role,
+			role: role as Roles,
 			agency_id,
 		},
 	});
@@ -81,7 +81,7 @@ router.post("/sign-in/email", async (req, res) => {
 		}
 
 		res.set(Object.fromEntries(headers.entries()));
-		res.json({ user: result.response.user });
+		res.json(result.response.user);
 	} catch (error) {
 		console.log(error);
 		res.status(500).json({ error: "Login failed" });
@@ -92,7 +92,6 @@ router.get("/get-session", async (req, res) => {
 	const user = await auth.api.getSession({
 		headers: fromNodeHeaders(req.headers),
 	});
-	console.log(user);
 	res.status(200).json(user);
 });
 

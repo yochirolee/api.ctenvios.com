@@ -26,7 +26,7 @@ app.use(morgan("dev"));
 app.use(express.urlencoded({ extended: true }));
 app.use(errorHandler);
 
-app.use("/api/v1", router);
+app.use("/api/v1/", router);
 
 app.use(errorHandler);
 //all other router redirect to api/v1

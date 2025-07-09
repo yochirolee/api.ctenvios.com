@@ -11,21 +11,43 @@ import AppError from "../utils/app.error";
 const invoiceItemSchema = z.object({
 	description: z.string().min(1, "Description is required"),
 	rate: z.number().min(1, "Rate is required"),
-	quantity: z.number().min(1, "Quantity is required"),
-	weight: z.number().min(1, "Weight is required"),
-	service_id: z.number().min(1, "Service ID is required"),
+	weight: z.number().min(0, "Weight is required"),
+	fee: z.number().min(0, "Fees is required"),
 });
-const invoiceSchema = z.object({
+
+const newInvoiceSchema = z.object({
 	user_id: z.string().min(1, "User ID is required"),
 	agency_id: z.number().min(1, "Agency ID is required"),
 	customer_id: z.number().min(1, "Customer ID is required"),
 	receipt_id: z.number().min(1, "Receipt ID is required"),
 	service_id: z.number().min(1, "Service ID is required"),
+	items: z.array(invoiceItemSchema),
 });
 
 const router = Router();
 
+// Simple test endpoint to check database connection
+router.get("/test", async (req, res) => {
+	try {
+		const count = await prisma.invoice.count();
+		const first5 = await prisma.invoice.findMany({
+			take: 5,
+			select: { id: true, agency_id: true, created_at: true },
+		});
+		res.json({
+			totalInvoices: count,
+			sampleInvoices: first5,
+			message: "Database connection working",
+		});
+	} catch (error) {
+		res.status(500).json({ error: "Database connection failed", details: error });
+	}
+});
+
 router.get("/", async (req, res) => {
+	const { page, limit } = req.query;
+	console.log(req.query, "req.query");
+
 	const invoices = await prisma.invoice.findMany({
 		include: {
 			service: {
@@ -44,28 +66,78 @@ router.get("/", async (req, res) => {
 				select: {
 					id: true,
 					first_name: true,
-					second_name: true,
+					middle_name: true,
 					last_name: true,
 					second_last_name: true,
-					phone: true,
+					mobile: true,
 				},
 			},
 			receipt: {
 				select: {
 					id: true,
 					first_name: true,
-					second_name: true,
+					middle_name: true,
 					last_name: true,
 					second_last_name: true,
-					phone: true,
+					mobile: true,
 				},
 			},
 		},
 		orderBy: {
 			created_at: "desc",
 		},
-		take: 25,
-		skip: 0,
+
+		take: limit ? parseInt(limit as string) : 25,
+		skip: page ? (parseInt(page as string) - 1) * (limit ? parseInt(limit as string) : 25) : 0,
+	});
+
+	res.status(200).json(invoices);
+});
+
+router.get("/agency/:agency_id", async (req, res) => {
+	const { page, limit } = req.query;
+	const { agency_id } = req.params;
+	const invoices = await prisma.invoice.findMany({
+		include: {
+			service: {
+				select: {
+					id: true,
+					name: true,
+				},
+			},
+			agency: {
+				select: {
+					id: true,
+					name: true,
+				},
+			},
+			customer: {
+				select: {
+					id: true,
+					first_name: true,
+					middle_name: true,
+					last_name: true,
+					second_last_name: true,
+					mobile: true,
+				},
+			},
+			receipt: {
+				select: {
+					id: true,
+					first_name: true,
+					middle_name: true,
+					last_name: true,
+					second_last_name: true,
+					mobile: true,
+				},
+			},
+		},
+		where: { agency_id: parseInt(agency_id as string) },
+		orderBy: {
+			created_at: "desc",
+		},
+		take: limit ? parseInt(limit as string) : 25,
+		skip: page ? (parseInt(page as string) - 1) * (limit ? parseInt(limit as string) : 25) : 0,
 	});
 	res.status(200).json(invoices);
 });
@@ -170,43 +242,53 @@ router.get("/search", async (req, res) => {
 
 router.post("/", async (req, res) => {
 	try {
-		const { user_id, agency_id, customer_id, receipt_id, service_id, items } = req.body;
+		const { agency_id, user_id, customer_id, receipt_id, service_id, items } =
+			newInvoiceSchema.parse(req.body);
 
 		// Generate all HBL codes first (outside transaction for bulk efficiency)
+		console.log(req.body, "req.body");
 		const totalQuantity = items.reduce((sum: number, item: any) => sum + (item.quantity || 1), 0);
 		const allHblCodes = await generarTracking(agency_id, totalQuantity);
+
+		// Calculate total correctly
+		const total = items.reduce(
+			(sum: number, item: any) => sum + (item.weight * item.rate + item.fee),
+			0,
+		);
+		console.log("Calculated total:", total);
 
 		// Map items with their respective HBL codes
 		let hblIndex = 0;
 		const items_hbl = items
 			.map((item: any) => {
-				const quantity = item.quantity || 1;
-				const itemHbls = allHblCodes.slice(hblIndex, hblIndex + quantity);
-				hblIndex += quantity;
+				const itemHbls = allHblCodes.slice(hblIndex, hblIndex + 1);
+				hblIndex += 1;
 
 				return itemHbls.map((hbl) => ({
 					hbl,
 					description: item.description,
 					rate: item.rate,
-					quantity: 2, // Each HBL represents 1 unit
-					weight: (item.weight || 0) / quantity, // Distribute weight evenly
+					customs_fee: item.fee,
+
+					// Each HBL represents 1 unit
+					weight: item.weight || 0, // Distribute weight evenly
 					service_id,
 					agency_id,
 				}));
 			})
 			.flat();
 
-		console.log(items_hbl, "items_hbl");
-
 		const transaction = await prisma.$transaction(
 			async (tx) => {
 				const invoice = await tx.invoice.create({
 					data: {
-						user_id,
-						agency_id,
-						customer_id,
-						receipt_id,
-						service_id,
+						user_id: user_id,
+						agency_id: agency_id,
+						customer_id: customer_id,
+						receipt_id: receipt_id,
+						service_id: service_id,
+						total: total,
+						rate: 0,
 						status: "CREATED",
 						items: {
 							create: [...items_hbl],
@@ -227,6 +309,41 @@ router.post("/", async (req, res) => {
 		);
 		res.status(200).json(transaction);
 	} catch (error) {
+		console.log(error, "error");
+
+		// Handle Zod validation errors specifically
+		if (error instanceof z.ZodError) {
+			console.log("Validation errors with paths:");
+			error.issues.forEach((issue, index) => {
+				console.log(`Error ${index + 1}:`);
+				console.log(`  Path: ${issue.path.join(".")}`);
+				console.log(`  Message: ${issue.message}`);
+				console.log(`  Code: ${issue.code}`);
+
+				// Only log expected/received for invalid_type errors
+				if (issue.code === "invalid_type") {
+					console.log(`  Expected: ${issue.expected}`);
+					console.log(`  Received: ${issue.received}`);
+				}
+			});
+
+			// Return structured validation error response
+			return res.status(400).json({
+				message: "Validation failed",
+				errors: error.issues.map((issue) => ({
+					path: issue.path.join("."),
+					message: issue.message,
+					code: issue.code,
+					...(issue.code === "invalid_type"
+						? {
+								expected: issue.expected,
+								received: issue.received,
+						  }
+						: {}),
+				})),
+			});
+		}
+
 		res.status(500).json({ message: "Error creating invoice", error: error });
 	}
 });
@@ -284,8 +401,14 @@ router.get("/:id/pdf", async (req, res) => {
 			throw new AppError("Invoice not found", 404);
 		}
 
+		// Convert Decimal fields to numbers for PDF generation
+		const invoiceForPDF = {
+			...invoice,
+			total: Number(invoice.total),
+		};
+
 		// Generate PDF
-		const doc = await generateInvoicePDF(invoice);
+		const doc = await generateInvoicePDF(invoiceForPDF);
 
 		// Set response headers for PDF
 		res.setHeader("Content-Type", "application/pdf");

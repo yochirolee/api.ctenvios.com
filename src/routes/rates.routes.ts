@@ -8,39 +8,50 @@ rates_routes.get("/", async (req, res) => {
 	res.status(200).json(rates);
 });
 
-rates_routes.get("/agency/:agency_id/service/:service_id", async (req, res) => {
-	const { agency_id, service_id } = req.params;
+rates_routes.get("/agency/:agency_id", async (req, res) => {
+	const { agency_id } = req.params;
 
 	const rates = await prisma.rates.findMany({
-		where: { agency_id: parseInt(agency_id), service_id: parseInt(service_id) },
+		where: { agency_id: parseInt(agency_id) },
 		select: {
 			id: true,
+			name: true,
 			service_id: true,
+			service: {
+				select: {
+					id: true,
+					provider: {
+						select: { id: true, name: true },
+					},
+				},
+			},
 			agency_id: true,
-			agency_rate: true,
 			public_rate: true,
 		},
+		orderBy: {
+			service_id: "asc",
+		},
 	});
+
 	res.status(200).json(rates);
 });
 
 rates_routes.post("/", async (req, res) => {
-	const { agency_id, service_id, agency_rate, public_rate } = req.body;
+	const { agency_id, name, service_id, agency_rate, public_rate } = req.body;
 	const rate = await prisma.rates.create({
-		data: { agency_id, service_id, agency_rate, public_rate },
+		data: { agency_id, name, service_id, agency_rate, public_rate },
 	});
 	res.status(200).json(rate);
 });
 
 rates_routes.put("/:id", async (req, res) => {
 	const { id } = req.params;
-	
-	const { agency_rate, public_rate } = req.body;
 
-	console.log(id, "id", agency_rate, "agency_rate", public_rate, "public_rate");
+	const { name, agency_rate, public_rate } = req.body;
+
 	const rate = await prisma.rates.update({
 		where: { id: parseInt(id) },
-		data: { agency_rate, public_rate },
+		data: { name, agency_rate, public_rate },
 	});
 	res.status(200).json(rate);
 });

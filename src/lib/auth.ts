@@ -24,6 +24,11 @@ export const auth = betterAuth({
 				required: false,
 				input: false,
 			},
+			agency_id: {
+				type: "number",
+				required: false,
+				input: false,
+			},
 		},
 	},
 });

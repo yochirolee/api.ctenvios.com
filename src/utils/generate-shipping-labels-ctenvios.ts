@@ -188,8 +188,8 @@ async function generateCleanCTEnviosLabel(
 
 	currentY += 40;
 	// Sender section
-	const senderName = `${invoice.customer.first_name} ${invoice.customer.last_name} ${
-		invoice.customer.second_name || ""
+	const senderName = `${invoice.customer.first_name} ${invoice.customer.middle_name || ""} ${
+		invoice.customer.last_name || ""
 	} ${invoice.customer.second_last_name || ""}`.trim();
 	doc
 		.fontSize(9)
@@ -200,7 +200,7 @@ async function generateCleanCTEnviosLabel(
 
 	currentY += 15;
 
-	const recipientName = `${invoice.receipt.first_name} ${invoice.receipt.second_name || ""} ${
+	const recipientName = `${invoice.receipt.first_name} ${invoice.receipt.middle_name || ""} ${
 		invoice.receipt.last_name
 	} ${invoice.receipt.second_last_name || ""}`.trim();
 

@@ -6,6 +6,7 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
 	const session = await auth.api.getSession({
 		headers: fromNodeHeaders(req.headers),
 	});
+	console.log("Auth Middleware");
 	if (session) {
 		next();
 	} else {

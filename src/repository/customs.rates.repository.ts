@@ -15,6 +15,7 @@ export const customsRates = {
 		return newRate;
 	},
 	update: async (id: number, rate: Prisma.CustomsRatesUpdateInput) => {
+		console.log(rate, "rate");
 		const updatedRate = await prisma.customsRates.update({ where: { id }, data: rate });
 		return updatedRate;
 	},

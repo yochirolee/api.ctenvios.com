@@ -75,6 +75,7 @@ const agencies = {
 		const servicesAndRates = await repository.agencies.getServicesAndRates(Number(id));
 		res.status(200).json(servicesAndRates);
 	},
+	
 };
 
 export default agencies;

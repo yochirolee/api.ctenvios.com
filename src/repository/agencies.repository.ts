@@ -1,6 +1,7 @@
 import prisma from "../config/prisma_db";
 import { Prisma } from "@prisma/client";
 import repository from "./index";
+import { getCACertificates } from "tls";
 
 export const agencies = {
 	getAll: async () => {
@@ -32,6 +33,7 @@ export const agencies = {
 		});
 		return servicesRates;
 	},
+
 	create: async (agency: Partial<Prisma.AgencyCreateInput>) => {
 		const services = await repository.services.getAll();
 
