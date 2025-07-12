@@ -7,7 +7,9 @@
 		"test": "echo \"Error: no test specified\" && exit 1",
 		"seed": "tsx prisma/seed.ts",
 		"seed-provinces": "tsx prisma/province-cities.seed.ts",
-		"seed-custom-tariffs": "tsx prisma/seed-custom-tarrifs.seed.ts"
+		"seed-custom-tariffs": "tsx prisma/seed-custom-tarrifs.seed.ts",
+		"build": "prisma generate && tsc",
+		"postinstall": "prisma generate"
 	},
 	"keywords": [],
 	"author": "Yochiro Lee Cruz",
