@@ -404,6 +404,7 @@ router.get("/:id", async (req, res) => {
 					logo: true,
 				},
 			},
+
 			service: {
 				select: {
 					id: true,
