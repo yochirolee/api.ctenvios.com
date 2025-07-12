@@ -1,7 +1,8 @@
 {
 	"name": "api-ctenvios-prisma",
 	"version": "1.0.0",
-	"main": "index.js",
+	"type": "module",
+	"main": "dist/src/server.js",
 	"scripts": {
 		"dev": "nodemon --exec tsx watch src/server.ts",
 		"test": "echo \"Error: no test specified\" && exit 1",
@@ -9,6 +10,7 @@
 		"seed-provinces": "tsx prisma/province-cities.seed.ts",
 		"seed-custom-tariffs": "tsx prisma/seed-custom-tarrifs.seed.ts",
 		"build": "prisma generate && tsc",
+		"start": "node dist/src/server.js",
 		"postinstall": "prisma generate"
 	},
 	"keywords": [],
