@@ -76,16 +76,16 @@ async function main() {
       {
         service_id: maritimeService.id,
         agency_id: CTEnvios.id,
-        forwarders_rate: 10.0,
-        agency_rate: 12.0,
-        public_rate: 14.0
+        forwarders_rate: 1.50,
+        agency_rate: 1.70,
+        public_rate: 1.90
       },
       {
         service_id: airService.id,
         agency_id: CTEnvios.id,
-        forwarders_rate: 15.0,
-        agency_rate: 17.0,
-        public_rate: 19.0
+        forwarders_rate: 1.50,
+        agency_rate: 1.70,
+        public_rate: 1.90
       }
     ]
   });

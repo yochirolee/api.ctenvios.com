@@ -1,5 +1,5 @@
 import { z } from "zod";
-import services from "../services";
+import repository from "../repository";
 import { Request, Response } from "express";
 import { Forwarder } from "@prisma/client";
 
@@ -16,12 +16,12 @@ const providersIdsSchema = z.array(z.number()).optional();
 
 export const forwarders = {
 	getAll: async (req: Request, res: Response) => {
-		const forwarders = await services.forwarders.getAll();
+		const forwarders = await repository.forwarders.getAll();
 		res.status(200).json(forwarders);
 	},
 	getById: async (req: Request, res: Response) => {
 		const { id } = req.params;
-		const forwarder = await services.forwarders.getById(Number(id));
+		const forwarder = await repository.forwarders.getById(Number(id));
 
 		res.status(200).json(forwarder);
 	},
@@ -33,7 +33,7 @@ export const forwarders = {
 		if (!result.success) {
 			throw new Error(result.error.message);
 		}
-		const forwarder = await services.forwarders.create(result.data);
+		const forwarder = await repository.forwarders.create(result.data);
 		res.status(201).json(forwarder);
 	},
 	update: async (req: Request, res: Response) => {
@@ -46,7 +46,7 @@ export const forwarders = {
 		if (!parsedforwarder.success) {
 			throw new Error(parsedforwarder.error.message);
 		}
-		const forwarder = await services.forwarders.update(
+		const forwarder = await repository.forwarders.update(
 			Number(id),
 			parsedforwarder.data,
 			providersIds,
@@ -55,7 +55,7 @@ export const forwarders = {
 	},
 	delete: async (req: Request, res: Response) => {
 		const { id } = req.params;
-		const forwarder = await services.forwarders.delete(Number(id));
+		const forwarder = await repository.forwarders.delete(Number(id));
 		res.status(200).json(forwarder);
 	},
 };

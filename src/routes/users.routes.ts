@@ -8,7 +8,9 @@ import { authMiddleware } from "../middlewares/auth-midleware";
 const router = Router();
 
 router.get("/", async (req, res) => {
-	const users = await prisma.user.findMany({
+	const { page, limit } = req.query;
+	const total = await prisma.user.count();
+	const rows = await prisma.user.findMany({
 		select: {
 			id: true,
 			email: true,
@@ -23,8 +25,10 @@ router.get("/", async (req, res) => {
 				},
 			},
 		},
+		skip: (parseInt(page as string) - 1) * (parseInt(limit as string) || 25),
+		take: parseInt(limit as string) || 25,
 	});
-	res.status(200).json(users);
+	res.status(200).json({ rows, total });
 });
 router.get("/search", async (req, res) => {
 	const { query } = req.query;

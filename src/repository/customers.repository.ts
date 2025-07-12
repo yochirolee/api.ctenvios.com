@@ -1,17 +1,21 @@
-import { Customer, Prisma, Receipt } from "@prisma/client";
+import { City, Customer, Prisma, Province, Receipt } from "@prisma/client";
 import prisma from "../config/prisma_db";
 
 const customers = {
-	get: async (page: number = 1, limit: number = 10): Promise<Customer[]> => {
+	get: async (
+		page: number = 1,
+		limit: number = 10,
+	): Promise<{ rows: Customer[]; total: number }> => {
 		// Ensure valid numeric values
-		const customers = await prisma.customer.findMany({
+		const total = await prisma.customer.count();
+		const rows = await prisma.customer.findMany({
 			skip: (page - 1) * limit,
 			take: limit,
 			orderBy: {
 				first_name: "asc",
 			},
 		});
-		return customers;
+		return { rows, total };
 	},
 	search: async (query: string, page: number = 1, limit: number = 10): Promise<Customer[]> => {
 		// Decode URL-encoded query and trim whitespace
@@ -89,7 +93,7 @@ const customers = {
 		});
 		return customer;
 	},
-	getReceipts: async (customerId: number): Promise<Receipt[]> => {
+	getReceipts: async (customerId: number, page: number = 1, limit: number = 10): Promise<(Receipt & { province: Province; city: City })[]> => {
 		const receipts = await prisma.receipt.findMany({
 			where: {
 				customers: {
@@ -102,15 +106,10 @@ const customers = {
 				province: true,
 				city: true,
 			},
+			skip: (page - 1) * limit,
+			take: limit,
 		});
-		const flat_receipts = receipts.map((receipt) => {
-			return {
-				...receipt,
-				province: receipt.province.name,
-				city: receipt.city.name,
-			};
-		});
-		return flat_receipts;
+		return receipts;
 	},
 	create: async (customer: Prisma.CustomerCreateInput): Promise<Customer> => {
 		const newCustomer = await prisma.customer.create({

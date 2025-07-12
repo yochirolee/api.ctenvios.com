@@ -1,10 +1,13 @@
-import { Prisma, Receipt } from "@prisma/client";
+import { City, Prisma, Province, Receipt } from "@prisma/client";
 import prisma from "../config/prisma_db";
 
+
+
 const receipts = {
-	get: async (page: number = 1, limit: number = 10): Promise<Receipt[]> => {
+	get: async (page: number = 1, limit: number = 10): Promise<{ rows: (Receipt & { province: Province; city: City })[]; total: number }> => {
 		// Ensure valid numeric values
-		const receipts = await prisma.receipt.findMany({
+		const total = await prisma.receipt.count();
+		const rows = await prisma.receipt.findMany({
 			skip: (page - 1) * limit,
 			take: limit,
 			orderBy: {
@@ -15,14 +18,8 @@ const receipts = {
 				city: true,
 			},
 		});
-		const flat_receipts = receipts.map((receipt) => {
-			return {
-				...receipt,
-				province: receipt.province.name,
-				city: receipt.city.name,
-			};
-		});
-		return flat_receipts;
+	
+		return { rows, total };
 	},
 	search: async (query: string, page: number = 1, limit: number = 10): Promise<Receipt[]> => {
 		const receipts = await prisma.receipt.findMany({

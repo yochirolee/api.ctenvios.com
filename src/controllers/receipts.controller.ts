@@ -4,20 +4,21 @@ import { Prisma, Receipt } from "@prisma/client";
 import repository from "../repository";
 import { receiptSchema } from "../types/types";
 
-const paginationSchema = z.object({
-	page: z.number().min(1).optional().default(1),
-	limit: z.number().min(1).optional().default(50),
-});
-
 export const receipts = {
 	get: async (req: Request, res: Response) => {
 		const { page, limit } = req.query;
-		const receipts = await repository.receipts.get(
+		const { rows, total } = await repository.receipts.get(
 			parseInt(page as string) || 1,
 			parseInt(limit as string) || 50,
 		);
-		console.log(receipts);
-		res.status(200).json(receipts);
+		const flat_rows = rows.map((row) => {
+			return {
+				...row,
+				province: row.province?.name || "",
+				city: row.city?.name || "",
+			};
+		});
+		res.status(200).json({ rows: flat_rows, total });
 	},
 	search: async (req: Request, res: Response) => {
 		const { query, page, limit } = req.query;
@@ -25,12 +26,15 @@ export const receipts = {
 			return res.status(400).json({ message: "Query is required" });
 		}
 
-		const receipts = await repository.receipts.search(
+		const data = await repository.receipts.search(
 			req.query.query as string,
 			parseInt(page as unknown as string) || 1,
 			parseInt(limit as unknown as string) || 50,
 		);
-		res.status(200).json(receipts);
+		res.status(200).json({
+			rows: data as unknown as Receipt[],
+			total: data.length,
+		});
 	},
 	create: async (req: Request, res: Response) => {
 		const { error } = receiptSchema.safeParse(req.body);

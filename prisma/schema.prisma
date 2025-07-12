@@ -36,6 +36,7 @@ model User {
   // Better Auth relations
   sessions      Session[]
   accounts      Account[]
+  invoice_history InvoiceHistory[]
 
   @@map("user")
 }
@@ -236,7 +237,6 @@ model Invoice {
   service_id       Int
   service          Service       @relation(fields: [service_id], references: [id])
   items            Item[]
-  total            Decimal       @default(0)
   rate             Float         @default(0)
   discount_type    DiscountType?
   discount_value   Decimal       @default(0)
@@ -251,7 +251,20 @@ model Invoice {
   status           String
   created_at       DateTime      @default(now())
   updated_at       DateTime      @updatedAt
+  invoice_history  InvoiceHistory[]
 }
+
+model InvoiceHistory {
+  id             Int       @id @default(autoincrement())
+  invoice_id     Int
+  invoice        Invoice   @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
+  user_id        String
+  user           User      @relation(fields: [user_id], references: [id])
+  changed_fields Json
+  comment        String?
+  created_at     DateTime  @default(now())
+}
+
 
 model Item {
   hbl              String        @id
@@ -334,7 +347,6 @@ enum PaymentMethod {
   BANK_TRANSFER
   PAYPAL
   ZELLE
-  MOBILE_PAYMENT
   CHECK
 }
 

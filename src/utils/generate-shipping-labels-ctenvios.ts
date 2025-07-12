@@ -66,6 +66,53 @@ export const generateCTEnviosLabels = (
 	});
 };
 
+// Export internal functions for bulk generation
+export const generateBulkCTEnviosLabels = (
+	invoices: InvoiceWithRelations[],
+): Promise<PDFKit.PDFDocument> => {
+	// 4x6 inch labels (288x432 points at 72 DPI)
+	const labelWidth = 288; // 4 inches * 72 points/inch
+	const labelHeight = 432; // 6 inches * 72 points/inch
+
+	const doc = new PDFKit({
+		size: [labelWidth, labelHeight],
+		margin: 10,
+	});
+
+	// Generate labels for all invoices using the existing internal functions
+	return new Promise(async (resolve, reject) => {
+		try {
+			let isFirstLabel = true;
+
+			for (const invoice of invoices) {
+				for (let i = 0; i < invoice.items.length; i++) {
+					if (!isFirstLabel) {
+						doc.addPage(); // New page for each main label
+					}
+					isFirstLabel = false;
+
+					// Generate main label using existing function
+					await generateCleanCTEnviosLabel(
+						doc,
+						invoice,
+						invoice.items[i],
+						i,
+						labelWidth,
+						labelHeight,
+					);
+
+					// Generate province/city label
+					doc.addPage();
+					await generateProvinceLabel(doc, invoice, invoice.items[i], i, labelWidth, labelHeight);
+				}
+			}
+			resolve(doc);
+		} catch (error) {
+			reject(error);
+		}
+	});
+};
+
 async function generateCleanCTEnviosLabel(
 	doc: PDFKit.PDFDocument,
 	invoice: InvoiceWithRelations,

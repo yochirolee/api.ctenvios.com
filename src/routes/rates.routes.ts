@@ -20,6 +20,7 @@ rates_routes.get("/agency/:agency_id", async (req, res) => {
 			service: {
 				select: {
 					id: true,
+					service_type: true,
 					provider: {
 						select: { id: true, name: true },
 					},
@@ -54,6 +55,11 @@ rates_routes.put("/:id", async (req, res) => {
 		data: { name, agency_rate, public_rate },
 	});
 	res.status(200).json(rate);
+});
+rates_routes.delete("/:id", async (req, res) => {
+	const { id } = req.params;
+	await prisma.rates.delete({ where: { id: parseInt(id) } });
+	res.status(200).json({ message: "Rate deleted successfully" });
 });
 
 export default rates_routes;

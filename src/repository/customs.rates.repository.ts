@@ -2,9 +2,13 @@ import prisma from "../config/prisma_db";
 import { Prisma } from "@prisma/client";
 
 export const customsRates = {
-	get: async () => {
-		const rates = await prisma.customsRates.findMany();
-		return rates;
+	get: async (page: number, limit: number) => {
+		const total = await prisma.customsRates.count();
+		const rows = await prisma.customsRates.findMany({
+			take: limit,
+			skip: (page - 1) * limit,
+		});
+		return { rows, total };
 	},
 	getById: async (id: number) => {
 		const rate = await prisma.customsRates.findUnique({ where: { id } });
