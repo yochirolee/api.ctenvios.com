@@ -59,6 +59,7 @@ export async function generarTracking(
 			});
 
 			return codigos;
+			//return `CTE${fecha}${servicio}${agencia}${secuencia}`;
 		});
 	} catch (error: any) {
 		console.log(error.message);
