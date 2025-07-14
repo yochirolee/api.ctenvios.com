@@ -295,7 +295,7 @@ router.post("/", async (req, res) => {
 		// Generate all HBL codes first (outside transaction for bulk efficiency)
 		console.log(req.body, "req.body");
 		const totalQuantity = items.reduce((sum: number, item: any) => sum + (item.quantity || 1), 0);
-		const allHblCodes = await generarTracking(agency_id, totalQuantity);
+		const allHblCodes = await generarTracking(agency_id, service_id, totalQuantity);
 
 		// Map items with their respective HBL codes
 		let hblIndex = 0;
