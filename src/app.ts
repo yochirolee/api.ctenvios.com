@@ -10,11 +10,15 @@ import compression from "compression";
 
 const app: Application = express();
 // Mount BetterAuth handler BEFORE express.json() middleware
-app.use("/api/auth/{*any}", toNodeHandler(auth));
 
 app.use(
 	cors({
-		origin: "http://localhost:5173",
+		origin: [
+			"http://localhost:5173",
+			"http://localhost:3000",
+			"https://dashboard-ctenvios-com-g851.vercel.app",
+		],
+
 		methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
 		credentials: true,
 	}),
@@ -27,7 +31,7 @@ app.use(morgan("dev"));
 app.use(compression());
 app.use(express.urlencoded({ extended: true }));
 app.use(errorHandler);
-
+app.use("/api/auth/{*any}", toNodeHandler(auth));
 app.use("/api/v1/", router);
 
 //all other router redirect to api/v1

@@ -10,12 +10,22 @@ export const auth = betterAuth({
 	database: prismaAdapter(prisma, {
 		provider: "postgresql",
 	}),
+	cookies: {
+		secure: true,
+		sameSite: "none",
+		domain: "vercel.app",
+		httpOnly: true,
+	},
 
 	emailAndPassword: {
 		enabled: true,
 	},
 	advanced: {
 		cookiePrefix: "ctenvios",
+		cookieDomain: "vercel.app",
+		cookieSameSite: "none",
+		cookieSecure: true,
+		cookieHttpOnly: true,
 	},
 	user: {
 		additionalFields: {

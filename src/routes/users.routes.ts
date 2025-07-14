@@ -93,9 +93,11 @@ router.post("/sign-in/email", async (req, res) => {
 });
 
 router.get("/get-session", async (req, res) => {
+	console.log(req.headers, "headers");
 	const user = await auth.api.getSession({
 		headers: fromNodeHeaders(req.headers),
 	});
+	console.log(user, "user");
 	res.status(200).json(user);
 });
 
