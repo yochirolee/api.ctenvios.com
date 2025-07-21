@@ -16,26 +16,26 @@ datasource db {
 }
 
 model User {
-  id            String     @id @default(uuid())
-  name          String
-  email         String     @unique
-  emailVerified Boolean    @default(false)
-  image         String?
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  id              String           @id @default(uuid())
+  name            String
+  email           String           @unique
+  emailVerified   Boolean          @default(false)
+  image           String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
   // Your custom fields
-  created_by    String?
-  forwarder_id  Int?
-  forwarder     Forwarder? @relation(fields: [forwarder_id], references: [id])
-  agency_id     Int?
-  agency        Agency?    @relation(fields: [agency_id], references: [id])
-  is_active     Boolean    @default(true)
-  is_root       Boolean    @default(false)
-  role          Roles      @default(AGENCY_SALES)
-  invoices      Invoice[]
+  created_by      String?
+  forwarder_id    Int?
+  forwarder       Forwarder?       @relation(fields: [forwarder_id], references: [id])
+  agency_id       Int?
+  agency          Agency?          @relation(fields: [agency_id], references: [id])
+  is_active       Boolean          @default(true)
+  is_root         Boolean          @default(false)
+  role            Roles            @default(AGENCY_SALES)
+  invoices        Invoice[]
   // Better Auth relations
-  sessions      Session[]
-  accounts      Account[]
+  sessions        Session[]
+  accounts        Account[]
   invoice_history InvoiceHistory[]
 
   @@map("user")
@@ -130,6 +130,7 @@ model City {
   province_id Int
   province    Province  @relation(fields: [province_id], references: [id])
   receipts    Receipt[]
+  carrier_rates CarrierRates[]
 }
 
 enum Roles {
@@ -190,19 +191,45 @@ model Service {
   is_active    Boolean     @default(true)
   invoices     Invoice[]
   items        Item[]
+  carrier_id   Int?
+  carrier      Carrier?     @relation(fields: [carrier_id], references: [id])
 }
 
 model Rates {
   id              Int     @id @default(autoincrement())
-  name  String @default("Nueva Tarifa")
+  name            String  @default("Nueva Tarifa")
   service_id      Int
   service         Service @relation(fields: [service_id], references: [id], onDelete: Cascade, onUpdate: Cascade)
   agency_id       Int
   agency          Agency  @relation(fields: [agency_id], references: [id])
+  carrier_rates_id Int?
+  carrier_rates   CarrierRates? @relation(fields: [carrier_rates_id], references: [id])
   agency_rate     Float   @default(0)
-  public_rate     Float   @default(0)
+  public_rate      Float   @default(0)
   forwarders_rate Float   @default(1.25)
 }
+
+model Carrier {
+  id         Int        @id @default(autoincrement())
+  name       String     @unique
+  created_at DateTime   @default(now())
+  updated_at DateTime   @updatedAt
+  services    Service[]
+  carrier_rates CarrierRates[]
+}
+
+model CarrierRates {
+  id         Int        @id @default(autoincrement())
+  carrier_id Int
+  carrier    Carrier    @relation(fields: [carrier_id], references: [id])
+  rate       Float
+  city_id    Int
+  rates      Rates[]
+  city       City       @relation(fields: [city_id], references: [id])
+  created_at DateTime   @default(now())
+  updated_at DateTime   @updatedAt
+  }
+
 
 model Offer {
   id             Int          @id @default(autoincrement())
@@ -225,46 +252,45 @@ model Offer {
 }
 
 model Invoice {
-  id               Int           @id @default(autoincrement())
+  id               Int              @id @default(autoincrement())
   user_id          String
-  user             User          @relation(fields: [user_id], references: [id])
+  user             User             @relation(fields: [user_id], references: [id])
   agency_id        Int
-  agency           Agency        @relation(fields: [agency_id], references: [id])
+  agency           Agency           @relation(fields: [agency_id], references: [id])
   customer_id      Int
-  customer         Customer      @relation(fields: [customer_id], references: [id])
+  customer         Customer         @relation(fields: [customer_id], references: [id])
   receipt_id       Int
-  receipt          Receipt       @relation(fields: [receipt_id], references: [id])
+  receipt          Receipt          @relation(fields: [receipt_id], references: [id])
   service_id       Int
-  service          Service       @relation(fields: [service_id], references: [id])
+  service          Service          @relation(fields: [service_id], references: [id])
   items            Item[]
-  rate             Float         @default(0)
+  rate             Float            @default(0)
   discount_type    DiscountType?
-  discount_value   Decimal       @default(0)
+  discount_value   Float          @default(0)
   discount_reason  String?
   offer_id         Int?
-  offer            Offer?        @relation(fields: [offer_id], references: [id])
-  total_amount     Decimal       @default(0)
-  paid_amount      Decimal       @default(0)
-  remaining_amount Decimal       @default(0)
-  payment_status   PaymentStatus @default(PENDING)
+  offer            Offer?           @relation(fields: [offer_id], references: [id])
+  total_amount     Float            @default(0)
+  paid_amount      Float            @default(0)
+  remaining_amount Float            @default(0)
+  payment_status   PaymentStatus    @default(PENDING)
   payments         Payment[]
   status           String
-  created_at       DateTime      @default(now())
-  updated_at       DateTime      @updatedAt
+  created_at       DateTime         @default(now())
+  updated_at       DateTime         @updatedAt
   invoice_history  InvoiceHistory[]
 }
 
 model InvoiceHistory {
-  id             Int       @id @default(autoincrement())
+  id             Int      @id @default(autoincrement())
   invoice_id     Int
-  invoice        Invoice   @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
+  invoice        Invoice  @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
   user_id        String
-  user           User      @relation(fields: [user_id], references: [id])
+  user           User     @relation(fields: [user_id], references: [id])
   changed_fields Json
   comment        String?
-  created_at     DateTime  @default(now())
+  created_at     DateTime @default(now())
 }
-
 
 model Item {
   hbl              String        @id
@@ -273,13 +299,13 @@ model Item {
   updated_at       DateTime      @updatedAt
   weight           Float
   volume           Float         @default(0)
-  customs_fee      Float         @default(0)
   service_id       Int
   service          Service       @relation(fields: [service_id], references: [id])
   quantity         Int           @default(1)
   rate             Float
-  insurance_fee    Decimal?      @default(0)
-  delivery_fee     Decimal?      @default(0)
+  customs_fee      Float         @default(0)
+  insurance_fee    Float?      @default(0)
+  delivery_fee     Float?      @default(0)
   customs_rates_id Int?
   customs_rates    CustomsRates? @relation(fields: [customs_rates_id], references: [id])
   invoice_id       Int
@@ -287,6 +313,7 @@ model Item {
   agency_id        Int
   agency           Agency        @relation(fields: [agency_id], references: [id])
 }
+
 
 model Payment {
   id                Int           @id @default(autoincrement())

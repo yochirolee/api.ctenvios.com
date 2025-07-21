@@ -4,11 +4,14 @@ import { fromNodeHeaders } from "better-auth/node";
 import express from "express";
 import prisma from "../config/prisma_db";
 import { authMiddleware } from "../middlewares/auth-midleware";
+import jwt from "jsonwebtoken";
+
+type Roles = "admin" | "user" | "agent" | string;
 
 const router = Router();
 
 router.get("/", async (req, res) => {
-	const { page, limit } = req.query;
+	const { page = 1, limit = 25 } = req.query;
 	const total = await prisma.user.count();
 	const rows = await prisma.user.findMany({
 		select: {
@@ -52,8 +55,6 @@ router.post("/sign-up/email", authMiddleware, async (req, res) => {
 			email,
 			password,
 			name: name,
-			role: role as Roles,
-			agency_id,
 		},
 	});
 	if (user) {
@@ -68,24 +69,28 @@ router.post("/sign-up/email", authMiddleware, async (req, res) => {
 
 router.post("/sign-in/email", async (req, res) => {
 	const { email, password } = req.body;
+	console.log(req.headers, "headers");
+
+	console.log({ email, password });
 
 	try {
-		const result = await auth.api.signInEmail({
+		const { response } = await auth.api.signInEmail({
 			returnHeaders: true,
 			body: { email, password },
+			headers: fromNodeHeaders(req.headers),
 		});
 
-		// Set session cookie
-		const headers = new Headers();
-		if (result.headers.get("Set-Cookie")) {
-			headers.set(
-				"Set-Cookie",
-				`${result.headers.get("Set-Cookie")}; HttpOnly; Path=/; Max-Age=604800`,
-			);
-		}
+		const { token } = response;
 
-		res.set(Object.fromEntries(headers.entries()));
-		res.json(result.response.user);
+		// Use the token to get the session
+		const sessionHeaders = new Headers();
+		sessionHeaders.set("Authorization", `Bearer ${token}`);
+
+		const session = await auth.api.getSession({
+			headers: sessionHeaders,
+		});
+
+		res.status(200).json(session);
 	} catch (error) {
 		console.log(error);
 		res.status(500).json({ error: "Login failed" });
@@ -93,18 +98,17 @@ router.post("/sign-in/email", async (req, res) => {
 });
 
 router.get("/get-session", async (req, res) => {
-	console.log(req.headers, "headers");
-	const user = await auth.api.getSession({
+	const session = await auth.api.getSession({
 		headers: fromNodeHeaders(req.headers),
 	});
-	console.log(user, "user");
-	res.status(200).json(user);
+	res.status(200).json(session);
 });
 
 router.post("/sign-out", async (req, res) => {
 	const user = await auth.api.signOut({
 		headers: fromNodeHeaders(req.headers),
 	});
+	console.log(user, "user");
 	res.status(200).json(user);
 });
 

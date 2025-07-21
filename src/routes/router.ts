@@ -29,6 +29,6 @@ router.use("/users", users_routes);
 router.use("/customers", customers_routes);
 router.use("/receipts", receipts_routes);
 router.use("/provinces", provinces_routes);
-router.use("/invoices", authMiddleware, invoices_routes);
+router.use("/invoices", invoices_routes);
 router.use("/test", test_routes);
 export default router;

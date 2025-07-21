@@ -140,7 +140,7 @@ async function generateCleanCTEnviosLabel(
 	doc.rect(margin + 5, currentY + 15, 50, 50).stroke();
 
 	doc
-		.fontSize(36)
+		.fontSize(28)
 		.font("Helvetica-Bold")
 		.fillColor("#000000")
 		.text(transportLetter, margin + 5, currentY + 27, { width: 50, align: "center" });
@@ -202,16 +202,10 @@ async function generateCleanCTEnviosLabel(
 			width: 140,
 			align: "right",
 		});
-	//Description
+
 	currentY += 80;
 	doc
-		.fontSize(10)
-		.font("Helvetica")
-		.text(item.description?.toUpperCase() || "", margin, currentY);
-	// Service section with border
-	currentY += 70;
-	doc
-		.fontSize(28)
+		.fontSize(24)
 		.font("Helvetica-Bold")
 		.text(`${invoice.service.provider.name.toUpperCase()}`, margin, currentY + 5, {
 			width: labelWidth - margin * 2,
@@ -230,63 +224,102 @@ async function generateCleanCTEnviosLabel(
 			width: labelWidth - margin * 2 - 10,
 			align: "center",
 		});
+	//Description
+	currentY += 40;
+	doc
+		.fontSize(10)
+		.font("Helvetica")
+		.text(item.description?.toUpperCase() || "", margin, currentY);
+	// Service section with border
+
+	currentY += 70;
+	//Sender Info
+	const senderInfo = `${invoice.customer.first_name} ${invoice.customer.middle_name || ""} ${
+		invoice.customer.last_name
+	} ${invoice.customer.second_last_name || ""}`.trim();
+
+	doc
+		.fontSize(8)
+		.font("Helvetica")
+		.text("ENVIA:", margin + 5, currentY);
+
+	doc
+		.fontSize(8)
+		.font("Helvetica")
+		.text(senderInfo.toUpperCase(), margin + 70, currentY);
 
 	// Transport type checkboxes
+	currentY += 10;
 
-	currentY += 40;
-	// Sender section
-	const senderName = `${invoice.customer.first_name} ${invoice.customer.middle_name || ""} ${
-		invoice.customer.last_name || ""
-	} ${invoice.customer.second_last_name || ""}`.trim();
+	//Dashed line
 	doc
-		.fontSize(9)
-		.font("Helvetica-Bold")
-		.text("ENVIA:", margin + 5, currentY, { continued: true })
-		.font("Helvetica")
-		.text(`  ${senderName.toUpperCase()}`, { continued: false });
-
-	currentY += 15;
-
+		.strokeColor("#808080")
+		.lineWidth(0.1)
+		.dash(5, { space: 5 })
+		.moveTo(margin + 10, currentY + 5)
+		.lineTo(labelWidth - margin * 2 - 10, currentY + 5)
+		.stroke()
+		.undash();
+	currentY += 10;
 	const recipientName = `${invoice.receipt.first_name} ${invoice.receipt.middle_name || ""} ${
 		invoice.receipt.last_name
 	} ${invoice.receipt.second_last_name || ""}`.trim();
 
 	doc
-		.fontSize(9)
-		.font("Helvetica-Bold")
-		.text(`RECIBE: ${recipientName.toUpperCase()}`, margin + 5, currentY + 5);
+		.fontSize(8)
+		.font("Helvetica")
+		.text("RECIBE:", margin + 5, currentY + 5);
 
 	doc
-		.fontSize(8)
+		.fontSize(10)
 		.font("Helvetica-Bold")
-		.text(`TELEFONOS: ${invoice.receipt.phone}`, margin + 5, currentY + 20, {
-			continued: true,
-		})
-		.text(`    CI: ${invoice.receipt.ci}`, { continued: false });
-
-	doc
-		.fontSize(8)
-		.font("Helvetica-Bold")
-		.text("DIRECCION:", margin + 5, currentY + 35);
+		.text(recipientName.toUpperCase(), margin + 70, currentY + 5);
 
 	doc
 		.fontSize(8)
 		.font("Helvetica")
-		.text(invoice.receipt.address, margin + 5, currentY + 48, {
-			width: labelWidth - margin * 2 - 10,
-			height: 30,
-		});
+		.text("TELEFONOS:", margin + 5, currentY + 20);
 
 	doc
-		.fontSize(8)
-		.font("Helvetica")
+		.fontSize(10)
+		.font("Helvetica-Bold")
 		.text(
-			`${invoice.receipt.province?.name || ""} / ${invoice.receipt.city?.name || ""}`,
-			margin + 5,
-			currentY + 58,
+			invoice.receipt.phone || "" + " " + invoice.receipt.mobile || "",
+			margin + 70,
+			currentY + 20,
 		);
 
-	currentY += 100;
+	doc
+		.fontSize(8)
+		.font("Helvetica")
+		.text("CI:", margin + 5, currentY + 35);
+
+	doc
+		.fontSize(10)
+		.font("Helvetica-Bold")
+		.text(invoice.receipt.ci || "", margin + 70, currentY + 35);
+
+	doc
+		.fontSize(8)
+		.font("Helvetica")
+		.text("DIRECCION:", margin + 5, currentY + 50);
+
+	doc
+		.fontSize(10)
+		.font("Helvetica")
+		.text(
+			`${invoice.receipt.address + " " + invoice.receipt.province?.name || ""} / ${
+				invoice.receipt.city?.name || ""
+			}`,
+			margin + 70,
+			currentY + 50,
+			{
+				width: labelWidth - margin - 70 - 10,
+				height: 30,
+			},
+		);
+
+	currentY += 90;
 
 	// Left QR Code
 	try {

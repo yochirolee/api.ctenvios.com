@@ -17,7 +17,10 @@ const invoiceItemSchema = z.object({
 	description: z.string().min(1, "Description is required"),
 	rate: z.number().min(1, "Rate is required"),
 	weight: z.number().min(0, "Weight is required"),
-	fee: z.number().min(0, "Fees is required"),
+	customs_fee: z.number().min(0, "Fees is required"),
+	delivery_fee: z.number().optional(),
+	insurance_fee: z.number().optional(),
+	quantity: z.number().optional(),
 });
 
 const newInvoiceSchema = z.object({
@@ -289,11 +292,11 @@ router.get("/search", async (req, res) => {
 
 router.post("/", async (req, res) => {
 	try {
+		console.log(req.body, "req.body");
 		const { agency_id, user_id, customer_id, receipt_id, total_amount, service_id, items } =
 			newInvoiceSchema.parse(req.body);
 
 		// Generate all HBL codes first (outside transaction for bulk efficiency)
-		console.log(req.body, "req.body");
 		const totalQuantity = items.reduce((sum: number, item: any) => sum + (item.quantity || 1), 0);
 		const allHblCodes = await generarTracking(agency_id, service_id, totalQuantity);
 
@@ -308,8 +311,10 @@ router.post("/", async (req, res) => {
 					hbl,
 					description: item.description,
 					rate: item.rate,
-					customs_fee: item.fee,
-
+					customs_fee: item.customs_fee || 0,
+					delivery_fee: item.delivery_fee || 0,
+					insurance_fee: item.insurance_fee || 0,
+					quantity: item.quantity || 1,
 					// Each HBL represents 1 unit
 					weight: item.weight || 0, // Distribute weight evenly
 					service_id,
@@ -317,6 +322,8 @@ router.post("/", async (req, res) => {
 				}));
 			})
 			.flat();
+
+		console.log(items_hbl, "items_hbl");
 
 		const transaction = await prisma.$transaction(
 			async (tx) => {
@@ -518,7 +525,7 @@ router.get("/:id/pdf", async (req, res) => {
 		// Convert Decimal fields to numbers for PDF generation
 		const invoiceForPDF = {
 			...invoice,
-			total: Number(invoice.total),
+			total: Number(invoice.total_amount),
 		};
 
 		// Generate PDF

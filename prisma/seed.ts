@@ -6,6 +6,7 @@ const prisma = new PrismaClient();
 
 const provinciasConCiudades = [
 	{
+		id: 1,
 		name: "Pinar del Río",
 		cities: [
 			"Pinar del Rio",
@@ -22,6 +23,7 @@ const provinciasConCiudades = [
 		],
 	},
 	{
+		id: 2,
 		name: "Artemisa",
 		cities: [
 			"Alquizar",
@@ -34,9 +36,11 @@ const provinciasConCiudades = [
 			"Mariel",
 			"San Antonio de los Baños",
 			"San Cristobal",
+			"Bahia Honda",
 		],
 	},
 	{
+		id: 3,
 		name: "La Habana",
 		cities: [
 			"Arroyo Naranjo",
@@ -57,6 +61,7 @@ const provinciasConCiudades = [
 		],
 	},
 	{
+		id: 4,
 		name: "Mayabeque",
 		cities: [
 			"Batabano",
@@ -69,9 +74,11 @@ const provinciasConCiudades = [
 			"Quivican",
 			"San Jose de las Lajas",
 			"San Nicolas",
+			"Santa Cruz del Norte",
 		],
 	},
 	{
+		id: 5,
 		name: "Matanzas",
 		cities: [
 			"Cardenas",
@@ -86,9 +93,11 @@ const provinciasConCiudades = [
 			"Pedro Betancourt",
 			"Perico",
 			"Union de Reyes",
+			"Calimete",
 		],
 	},
 	{
+		id: 6,
 		name: "Cienfuegos",
 		cities: [
 			"Abreus",
@@ -102,6 +111,7 @@ const provinciasConCiudades = [
 		],
 	},
 	{
+		id: 7,
 		name: "Villa Clara",
 		cities: [
 			"Caibarien",
@@ -120,6 +130,7 @@ const provinciasConCiudades = [
 		],
 	},
 	{
+		id: 8,
 		name: "Sancti Spiritus",
 		cities: [
 			"Cabaiguan",
@@ -133,6 +144,7 @@ const provinciasConCiudades = [
 		],
 	},
 	{
+		id: 9,
 		name: "Ciego de Avila",
 		cities: [
 			"Baragua",
@@ -148,6 +160,7 @@ const provinciasConCiudades = [
 		],
 	},
 	{
+		id: 10,
 		name: "Camaguey",
 		cities: [
 			"Camaguey",
@@ -166,6 +179,7 @@ const provinciasConCiudades = [
 		],
 	},
 	{
+		id: 11,
 		name: "Las Tunas",
 		cities: [
 			"Amancio",
@@ -179,6 +193,7 @@ const provinciasConCiudades = [
 		],
 	},
 	{
+		id: 12,
 		name: "Holguin",
 		cities: [
 			"Antilla",
@@ -195,9 +210,11 @@ const provinciasConCiudades = [
 			"Rafael Freyre",
 			"Sagua de Tanamo",
 			"Urbano Noris",
+			"Velasco",
 		],
 	},
 	{
+		id: 13,
 		name: "Granma",
 		cities: [
 			"Bartolome Maso",
@@ -216,6 +233,7 @@ const provinciasConCiudades = [
 		],
 	},
 	{
+		id: 14,
 		name: "Santiago de Cuba",
 		cities: [
 			"Contramaestre",
@@ -225,11 +243,12 @@ const provinciasConCiudades = [
 			"San Luis",
 			"Santiago de Cuba",
 			"Segundo Frente",
-			"Songo-La Maya",
+			"Songo La Maya",
 			"Tercer Frente",
 		],
 	},
 	{
+		id: 15,
 		name: "Guantanamo",
 		cities: [
 			"Baracoa",
@@ -245,12 +264,15 @@ const provinciasConCiudades = [
 		],
 	},
 	{
+		id: 16,
 		name: "Isla de la Juventud",
 		cities: ["Isla de la Juventud"],
 	},
 ];
 
-async function main() {
+async function main(): Promise<void> {
+	console.log("🚀 Starting database seed...");
+
 	// Create forwarder
 	const forwarder = await prisma.forwarder.upsert({
 		where: { id: 1 },
@@ -264,7 +286,7 @@ async function main() {
 		},
 	});
 
-	console.log(`Forwarder created: ${forwarder.name}`);
+	console.log(`✅ Forwarder created: ${forwarder.name}`);
 
 	const cuba = await prisma.country.upsert({
 		where: { id: 1 },
@@ -274,11 +296,10 @@ async function main() {
 			code: "CU",
 		},
 	});
-	console.log(`Country created: ${cuba.name}`);
+	console.log(`✅ Country created: ${cuba.name}`);
 
 	const provider = await prisma.provider.upsert({
 		where: { id: 1 },
-
 		update: {},
 		create: {
 			name: "Transcargo",
@@ -289,12 +310,11 @@ async function main() {
 		},
 	});
 
-	console.log(`Provider created: ${provider.name}`);
+	console.log(`✅ Provider created: ${provider.name}`);
 
 	// Create services
 	const maritimeService = await prisma.service.upsert({
 		where: { id: 1 },
-
 		update: {},
 		create: {
 			name: "Maritimo",
@@ -305,7 +325,7 @@ async function main() {
 		},
 	});
 
-	console.log(`Maritime service created: ${maritimeService.name}`);
+	console.log(`✅ Maritime service created: ${maritimeService.name}`);
 
 	// Create Agencia Habana (padre)
 	const CTEnvios = await prisma.agency.upsert({
@@ -320,32 +340,69 @@ async function main() {
 		},
 		update: {},
 	});
-	console.log(`Agency created: ${CTEnvios.name}`);
+	console.log(`✅ Agency created: ${CTEnvios.name}`);
 
+	console.log("🏝️ Creating provinces and cities...");
 	for (const provincia of provinciasConCiudades) {
-		const createdProvince = await prisma.province.create({
-			data: {
+		// First, upsert the province
+		const createdProvince = await prisma.province.upsert({
+			where: { id: provincia.id },
+			update: {
 				name: provincia.name,
-				cities: {
-					create: provincia.cities.map((name) => ({ name })),
-				},
+			},
+			create: {
+				name: provincia.name,
 			},
 		});
-		console.log(`Province created: ${createdProvince.name}`);
+
+		// Then, create cities that don't exist for this province
+		for (const cityName of provincia.cities) {
+			const existingCity = await prisma.city.findFirst({
+				where: {
+					name: cityName,
+					province_id: createdProvince.id,
+				},
+			});
+
+			if (!existingCity) {
+				await prisma.city.create({
+					data: {
+						name: cityName,
+						province_id: createdProvince.id,
+					},
+				});
+			}
+		}
+
+		console.log(`✅ Province created: ${createdProvince.name} (${provincia.cities.length} cities)`);
 	}
+
 	const user = await auth.api.signUpEmail({
 		body: {
 			email: "yleecruz@gmail.com",
 			password: "Audioslave*84",
 			name: "Yochiro Lee Cruz",
+		},
+	});
+
+	// Update the user with role and agency_id
+	await prisma.user.update({
+		where: { id: user.user.id },
+		data: {
 			role: Roles.ROOT,
 			agency_id: 1,
 		},
 	});
 
-	console.log(`User created: ${user.user.name}`);
+	console.log(`✅ User created: ${user.user.name} with ROOT role`);
+	console.log("🎉 Database seed completed successfully!");
 }
 
 main()
-	.catch((e) => console.error(e))
-	.finally(() => prisma.$disconnect());
+	.catch((e) => {
+		console.error("❌ Error seeding database:", e);
+		process.exit(1);
+	})
+	.finally(async () => {
+		await prisma.$disconnect();
+	});

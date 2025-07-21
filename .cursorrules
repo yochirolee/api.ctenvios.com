@@ -1,0 +1,159 @@
+# CTEnvios Backend - Package Tracking System
+
+## Project Context
+
+A comprehensive package tracking system backend that manages packages through multiple locations and
+status updates. The system handles multiple stakeholders (customers, agencies, forwarders,
+providers) throughout the delivery process until packages are delivered.
+
+## Tech Stack
+
+- **Backend**: Node.js with Express.js
+- **Language**: TypeScript
+- **Database**: PostgreSQL with Prisma ORM
+- **PDF Generation**: PDFKit with barcode generation (bwip-js)
+- **Authentication**: JWT-based authentication
+- **Testing**: Jest with concurrent testing capabilities
+- **Deployment**: Vercel
+
+## Code Style and Structure
+
+- Write concise, technical TypeScript code with accurate examples
+- Use functional and declarative programming patterns; avoid classes
+- Prefer iteration and modularization over code duplication
+- Use explicit return types for all functions
+- Avoid try/catch blocks unless there's good reason to translate or handle error in that abstraction
+
+## File Structure Conventions
+
+- **Controllers**: Handle HTTP requests and responses and Bussines Logic Layer (`src/controllers/`)
+
+- **Repository**: Data access layer (`src/repository/`)
+- **Routes**: API endpoint definitions (`src/routes/`)
+- **Middlewares**: Request/response middleware (`src/middlewares/`)
+- **Utils**: Utility functions and helpers (`src/utils/`)
+- **Types**: TypeScript type definitions (`src/types/`)
+
+## Naming Conventions
+
+- Use lowercase with dashes for directories (e.g., `src/controllers/`)
+- Use PascalCase for class-like files and components
+- Use camelCase for utility files (e.g., `generateInvoicePdf.ts`)
+- Use kebab-case for route files (e.g., `customers.routes.ts`)
+- Database entities use PascalCase (Customer, Invoice, Receipt)
+
+## TypeScript Usage
+
+- Use TypeScript for all code; prefer interfaces over types
+- Avoid enums; use const objects with 'as const' assertion
+- Define strict types for all database entities and API responses
+- Use Prisma-generated types with extensions when needed
+- Always define explicit return types for functions
+- Use proper error handling with custom error classes
+
+## Database and Prisma Patterns
+
+- Use Prisma Client for all database operations
+- Implement repository pattern for data access
+- Use transactions for operations that modify multiple entities
+- Follow Prisma naming conventions (camelCase for fields, PascalCase for models)
+- Use proper relations and include statements for data fetching
+
+## API Design Patterns
+
+- Use RESTful conventions for routes
+- Implement proper error handling with status codes
+- Use middleware for authentication and validation
+- Return consistent response formats
+- Implement pagination for list endpoints
+
+## PDF Generation Patterns
+
+- Use PDFKit for document generation
+- Implement proper pagination for multi-page documents
+- Generate barcodes for tracking numbers
+- Use consistent styling and layout
+- Handle image assets properly (company logos, etc.)
+
+## Authentication and Security
+
+- Use JWT tokens for authentication
+- Implement proper middleware for route protection
+- Validate user permissions for operations
+- Use secure password hashing
+- Implement rate limiting for sensitive endpoints
+
+## Testing Patterns
+
+- Write unit tests for business logic
+- Implement integration tests for API endpoints
+- Use concurrent testing for performance validation
+- Mock external dependencies properly
+- Test error scenarios and edge cases
+
+## Error Handling
+
+- Use custom error classes that extend Error
+- Implement global error handling middleware
+- Log errors with proper context
+- Return user-friendly error messages
+- Use proper HTTP status codes
+
+## Performance Considerations
+
+- Implement database query optimization
+- Use proper indexing strategies
+- Implement caching where appropriate
+- Handle concurrent operations properly
+- Monitor and test for race conditions
+
+## Business Logic Patterns
+
+- Separate business logic from HTTP handling
+- Use service layer for complex operations
+- Implement proper validation for business rules
+- Handle money calculations with precision
+- Use proper date/time handling for tracking
+
+## Common Entities and Their Relationships
+
+- **Customer**: Users who send packages
+- **Receipt**: Package recipients
+- **Invoice**: Billing information for packages
+- **Agency**: Local agencies handling packages
+- **Service**: Shipping service types
+- **Item**: Individual items within packages
+- **Forwarder**: Shipping forwarders
+- **Provider**: Service providers
+
+## Utility Functions
+
+- Use utility functions for common operations (PDF generation, barcode creation, etc.)
+- Implement proper error handling in utilities
+- Make utilities testable and reusable
+- Use TypeScript strict typing for utility parameters
+
+## Environment and Configuration
+
+- Use environment variables for configuration
+- Implement proper configuration management
+- Use different configs for development/production
+- Handle sensitive data securely
+
+## Deployment and DevOps
+
+- Use Vercel for deployment
+- Implement proper build processes
+- Use environment-specific configurations
+- Handle database migrations properly
+
+## Code Quality
+
+- Use ESLint and Prettier for code formatting
+- Implement proper logging
+- Use meaningful variable and function names
+- Write self-documenting code
+- Add comments for complex business logic only
+
+Every time you apply these rules, briefly mention which specific conventions you're following (e.g.,
+"TypeScript strict typing", "Repository pattern", "RESTful API design").
