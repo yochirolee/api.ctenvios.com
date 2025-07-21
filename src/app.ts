@@ -58,7 +58,6 @@ app.get("/health", (req, res) => {
 });
 
 app.use("/api/v1", router);
-
 // Catch-all for undefined routes
 app.use("*", (req, res) => {
 	res.status(404).json({
