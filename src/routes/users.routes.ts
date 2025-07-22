@@ -74,7 +74,7 @@ router.post("/sign-in/email", async (req, res) => {
 	console.log({ email, password });
 
 	try {
-		const {  token } = await auth.api.signInEmail({
+		const { token } = await auth.api.signInEmail({
 			returnHeaders: true,
 			body: { email, password },
 			headers: fromNodeHeaders(req.headers),

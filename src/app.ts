@@ -15,9 +15,7 @@ app.use(
 		origin: [
 			"http://localhost:5173",
 			"http://localhost:3000",
-			"https://dashboard-ctenvios-com-g851.vercel.app",
-			"https://dashboard-ctenvios-37jauqv6f-yoshos-projects.vercel.app",
-			"https://dashboard-ctenvios",
+			"https://api-ctenvios-com.vercel.app/api/v1/",
 		],
 
 		methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
