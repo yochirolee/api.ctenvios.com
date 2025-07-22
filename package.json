@@ -3,15 +3,16 @@
 	"version": "1.0.0",
 	"main": "index.js",
 	"scripts": {
-		"build": "prisma generate",
-		"start": "node src/server.ts",
+		"build": "tsc",
+		"start": "ts-node src/server.ts",
 		"postinstall": "prisma generate",
 		"dev": "nodemon --exec tsx watch src/server.ts",
 		"test": "echo \"Error: no test specified\" && exit 1",
 		"seed": "tsx prisma/seed.ts",
 		"seed-provinces": "tsx prisma/province-cities.seed.ts",
 		"seed-custom-tariffs": "tsx prisma/seed-custom-tarrifs.seed.ts",
-		"seed-receipts": "tsx prisma/recepit-seed.ts"
+		"seed-receipts": "tsx prisma/recepit-seed.ts",
+		"generate": "npx prisma migrate reset --preview-feature && npx prisma migrate deploy"
 	},
 	"keywords": [],
 	"author": "Yochiro Lee Cruz",
