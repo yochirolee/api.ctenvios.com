@@ -23,9 +23,9 @@
 		"@types/express": "^5.0.1",
 		"@types/morgan": "^1.9.9",
 		"@types/node": "^22.15.24",
+		"nodemon": "^3.1.10",
 		"ts-node": "^10.9.2",
-		"tsx": "^4.19.4",
-		"nodemon": "^3.1.10"
+		"tsx": "^4.19.4"
 	},
 	"dependencies": {
 		"@faker-js/faker": "^9.8.0",
@@ -33,7 +33,7 @@
 		"@types/jsonwebtoken": "^9.0.10",
 		"@types/pdfkit": "^0.14.0",
 		"@types/qrcode": "^1.5.5",
-		"better-auth": "^1.2.8",
+		"better-auth": "1.1.4",
 		"bwip-js": "^4.6.0",
 		"compression": "^1.8.0",
 		"cors": "^2.8.5",
