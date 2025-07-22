@@ -192,12 +192,12 @@ function generateSenderRecipientInfo(doc: PDFKit.PDFDocument, invoice: InvoiceWi
 			.fontSize(9)
 			.font("Helvetica")
 			.text(
-				`Tel: ${invoice.receipt.phone} ${
-					invoice.receipt.mobile ? `- ${invoice.receipt.mobile}` : ""
-				}`,
+				`Tel: ${invoice.receipt.mobile || ""}${
+					invoice.receipt.mobile && invoice.receipt.phone ? " - " : ""
+				}${invoice.receipt.phone || ""}`,
 				320,
 				recipientY,
-				{ width: 100, align: "left" },
+				{ width: 250, align: "left" },
 			);
 		recipientY += 14;
 	}

@@ -44,6 +44,7 @@ export const receipts = {
 		const customer_id = parseInt(req.query.customerId as string);
 
 		const receipt = await repository.receipts.create(req.body as Prisma.ReceiptCreateInput);
+
 		if (customer_id) {
 			await repository.receipts.connect(receipt.id, customer_id);
 		}

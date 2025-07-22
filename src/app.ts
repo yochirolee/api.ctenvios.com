@@ -25,7 +25,6 @@ app.use(
 		credentials: false,
 	}),
 );
-
 //middleware betterAuth
 
 //app.use("/api/auth/{*any}", toNodeHandler(auth));
@@ -34,40 +33,8 @@ app.use(helmet());
 app.use(morgan("dev"));
 app.use(compression());
 app.use(express.urlencoded({ extended: true }));
-
-// Root health check endpoint
-app.get("/", (req, res) => {
-	res.json({
-		status: "ok",
-		message: "CTEnvios Backend API",
-		timestamp: new Date().toISOString(),
-		endpoints: {
-			api: "/api/v1",
-			health: "/health",
-		},
-	});
-});
-
-// Health check endpoint
-app.get("/health", (req, res) => {
-	res.json({
-		status: "healthy",
-		uptime: process.uptime(),
-		timestamp: new Date().toISOString(),
-	});
-});
-
-app.use("/api/v1", router);
-// Catch-all for undefined routes
-app.use("*", (req, res) => {
-	res.status(404).json({
-		error: "Not Found",
-		message: `Route ${req.originalUrl} not found`,
-		availableEndpoints: ["/", "/health", "/api/v1"],
-	});
-});
-
 app.use(errorHandler);
+app.use("/api/v1/", router);
 
 //all other router redirect to api/v1
 

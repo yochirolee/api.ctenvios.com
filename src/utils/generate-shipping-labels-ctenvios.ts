@@ -284,7 +284,9 @@ async function generateCleanCTEnviosLabel(
 		.fontSize(10)
 		.font("Helvetica-Bold")
 		.text(
-			invoice.receipt.phone || "" + " " + invoice.receipt.mobile || "",
+			`${invoice.receipt.mobile || ""}${
+				invoice.receipt.mobile && invoice.receipt.phone ? " - " : ""
+			}${invoice.receipt.phone || ""}`,
 			margin + 70,
 			currentY + 20,
 		);
