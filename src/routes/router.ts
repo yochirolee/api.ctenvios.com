@@ -14,7 +14,7 @@ import { authMiddleware } from "../middlewares/auth-midleware";
 const router = Router();
 
 router.get("/", (req: Request, res: Response) => {
-	res.send("Hello World");
+	res.send("Welcome to CTEnvios API V1");
 });
 
 router.use("/providers", authMiddleware, providers_routes);
