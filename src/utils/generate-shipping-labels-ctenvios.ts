@@ -11,6 +11,7 @@ import {
 } from "@prisma/client";
 import bwipjs from "bwip-js";
 import QRCode from "qrcode";
+import { formatName } from "./capitalize";
 
 interface InvoiceWithRelations extends Invoice {
 	customer: Customer;
@@ -234,9 +235,13 @@ async function generateCleanCTEnviosLabel(
 
 	currentY += 70;
 	//Sender Info
-	const senderInfo = `${invoice.customer.first_name} ${invoice.customer.middle_name || ""} ${
-		invoice.customer.last_name
-	} ${invoice.customer.second_last_name || ""}`.trim();
+	const senderInfo = formatName(
+		invoice.customer.first_name,
+		invoice.customer.middle_name,
+		invoice.customer.last_name,
+		invoice.customer.second_last_name,
+		25, // Max length for label display
+	);
 
 	doc
 		.fontSize(8)
@@ -246,7 +251,7 @@ async function generateCleanCTEnviosLabel(
 	doc
 		.fontSize(8)
 		.font("Helvetica")
-		.text(senderInfo.toUpperCase(), margin + 70, currentY);
+		.text(senderInfo.toUpperCase(), margin + 65, currentY);
 
 	// Transport type checkboxes
 	currentY += 10;
@@ -261,19 +266,34 @@ async function generateCleanCTEnviosLabel(
 		.stroke()
 		.undash();
 	currentY += 10;
-	const recipientName = `${invoice.receipt.first_name} ${invoice.receipt.middle_name || ""} ${
-		invoice.receipt.last_name
-	} ${invoice.receipt.second_last_name || ""}`.trim();
+	const recipientName = formatName(
+		invoice.receipt.first_name,
+		invoice.receipt.middle_name,
+		invoice.receipt.last_name,
+		invoice.receipt.second_last_name,
+		25, // Max length for label display
+	);
 
 	doc
 		.fontSize(8)
 		.font("Helvetica")
 		.text("RECIBE:", margin + 5, currentY + 5);
 
+	// Smart name formatting with width constraints and font sizing
+	const maxNameWidth = labelWidth - margin - 65 - 10;
+	const nameUpperCase = recipientName.toUpperCase();
+
+	// Use smaller font for very long names
+	const nameFontSize = nameUpperCase.length > 25 ? 8 : 10;
+
 	doc
-		.fontSize(10)
+		.fontSize(nameFontSize)
 		.font("Helvetica-Bold")
-		.text(recipientName.toUpperCase(), margin + 70, currentY + 5);
+		.text(nameUpperCase, margin + 65, currentY + 5, {
+			width: maxNameWidth,
+			height: 20,
+			ellipsis: true,
+		});
 
 	doc
 		.fontSize(8)
@@ -287,7 +307,7 @@ async function generateCleanCTEnviosLabel(
 			`${invoice.receipt.mobile || ""}${
 				invoice.receipt.mobile && invoice.receipt.phone ? " - " : ""
 			}${invoice.receipt.phone || ""}`,
-			margin + 70,
+			margin + 65,
 			currentY + 20,
 		);
 
@@ -299,7 +319,7 @@ async function generateCleanCTEnviosLabel(
 	doc
 		.fontSize(10)
 		.font("Helvetica-Bold")
-		.text(invoice.receipt.ci || "", margin + 70, currentY + 35);
+		.text(invoice.receipt.ci || "", margin + 65, currentY + 35);
 
 	doc
 		.fontSize(8)
@@ -313,10 +333,10 @@ async function generateCleanCTEnviosLabel(
 			`${invoice.receipt.address + " " + invoice.receipt.province?.name || ""} / ${
 				invoice.receipt.city?.name || ""
 			}`,
-			margin + 70,
+			margin + 65,
 			currentY + 50,
 			{
-				width: labelWidth - margin - 70 - 10,
+				width: labelWidth - margin - 65 - 10,
 				height: 30,
 			},
 		);

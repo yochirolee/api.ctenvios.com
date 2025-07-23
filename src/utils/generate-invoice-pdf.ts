@@ -3,6 +3,7 @@ import * as bwipjs from "bwip-js";
 import * as fs from "fs";
 import * as path from "path";
 import { Invoice, Customer, Receipt, Agency, Service, Item } from "@prisma/client";
+import { formatName } from "./capitalize";
 
 interface InvoiceWithRelations extends Omit<Invoice, "total"> {
 	customer: Customer;
@@ -145,9 +146,13 @@ function generateSenderRecipientInfo(doc: PDFKit.PDFDocument, invoice: InvoiceWi
 	let currentY = 110;
 
 	// Left side - Sender information
-	const senderName = `${invoice.customer.first_name} ${invoice.customer.last_name} ${
-		invoice.customer.second_last_name || ""
-	}`.trim();
+	const senderName = formatName(
+		invoice.customer.first_name,
+		invoice.customer.middle_name,
+		invoice.customer.last_name,
+		invoice.customer.second_last_name,
+		30, // Max length for invoice display
+	);
 
 	// Sender name
 	doc.fillColor("#000000").fontSize(10).font("Helvetica-Bold").text(senderName, 40, currentY);
@@ -177,12 +182,28 @@ function generateSenderRecipientInfo(doc: PDFKit.PDFDocument, invoice: InvoiceWi
 	// Right side - Recipient information
 	let recipientY = 110;
 
-	const recipientName = `${invoice.receipt.first_name} ${invoice.receipt.last_name} ${
-		invoice.receipt.second_last_name || ""
-	}`.trim();
+	const recipientName = formatName(
+		invoice.receipt.first_name,
+		invoice.receipt.middle_name,
+		invoice.receipt.last_name,
+		invoice.receipt.second_last_name,
+		30, // Max length for invoice display
+	);
 
-	// Recipient name
-	doc.fillColor("#000000").fontSize(10).font("Helvetica-Bold").text(recipientName, 320, recipientY);
+	// Smart recipient name formatting with width constraints
+	const maxRecipientWidth = 250;
+	const recipientFontSize = recipientName.length > 25 ? 9 : 10;
+
+	// Recipient name with proper width constraints
+	doc
+		.fillColor("#000000")
+		.fontSize(recipientFontSize)
+		.font("Helvetica-Bold")
+		.text(recipientName, 320, recipientY, {
+			width: maxRecipientWidth,
+			height: 16,
+			ellipsis: true,
+		});
 	recipientY += 14;
 
 	// Recipient phone (only number, no label)

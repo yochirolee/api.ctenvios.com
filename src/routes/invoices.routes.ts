@@ -10,7 +10,6 @@ import {
 } from "../utils/generate-shipping-labels-ctenvios";
 import { z } from "zod";
 import AppError from "../utils/app.error";
-import { triggerAsyncId } from "async_hooks";
 import { invoiceHistoryMiddleware } from "../middlewares/invoice-middleware";
 
 const invoiceItemSchema = z.object({
@@ -130,160 +129,132 @@ router.get("/", async (req, res) => {
 	res.status(200).json({ rows, total });
 });
 
-router.get("/agency/:agency_id", async (req, res) => {
-	const { page, limit } = req.query;
-	const { agency_id } = req.params;
-	const total = await prisma.invoice.count({
-		where: { agency_id: parseInt(agency_id as string) },
-	});
-	const rows = await prisma.invoice.findMany({
-		include: {
-			service: {
-				select: {
-					id: true,
-					name: true,
-				},
-			},
-			agency: {
-				select: {
-					id: true,
-					name: true,
-				},
-			},
-			customer: {
-				select: {
-					id: true,
-					first_name: true,
-					middle_name: true,
-					last_name: true,
-					second_last_name: true,
-					mobile: true,
-				},
-			},
-			receipt: {
-				select: {
-					id: true,
-					first_name: true,
-					middle_name: true,
-					last_name: true,
-					second_last_name: true,
-					mobile: true,
-				},
-			},
-			_count: {
-				select: {
-					items: true,
-				},
-			},
-		},
-		where: { agency_id: parseInt(agency_id as string) },
-		orderBy: {
-			created_at: "desc",
-		},
-		take: limit ? parseInt(limit as string) : 25,
-		skip: page ? (parseInt(page as string) - 1) * (limit ? parseInt(limit as string) : 25) : 0,
-	});
-	res.status(200).json({ rows, total });
-});
+function parseDateFlexible(dateStr: string): Date | null {
+	if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
+		const d = new Date(dateStr);
+		return isNaN(d.getTime()) ? null : d;
+	}
+	if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
+		const [day, month, year] = dateStr.split("/");
+		const d = new Date(`${year}-${month}-${day}T00:00:00`);
+		return isNaN(d.getTime()) ? null : d;
+	}
+	return null;
+}
+
+function buildNameSearchFilter(words: string[]) {
+	return {
+		AND: words.map((w) => ({
+			OR: [
+				{ first_name: { contains: w, mode: "insensitive" } },
+				{ middle_name: { contains: w, mode: "insensitive" } },
+				{ last_name: { contains: w, mode: "insensitive" } },
+				{ second_last_name: { contains: w, mode: "insensitive" } },
+			],
+		})),
+	};
+}
 
 router.get("/search", async (req, res) => {
 	try {
-		const { page, limit } = req.query;
-		const { search } = req.query;
-		const searchTerm = search?.toString().toLowerCase() || "";
+		const { page, limit, search, startDate, endDate } = req.query;
+		console.log(req.query, "req.query");
 
-		const rows = await prisma.invoice.findMany({
-			include: {
-				service: {
-					select: { id: true, name: true },
-				},
-				agency: {
-					select: { id: true, name: true },
-				},
-				customer: {
-					select: {
-						id: true,
-						first_name: true,
-						middle_name: true,
-						last_name: true,
-						second_last_name: true,
-						mobile: true,
+		const searchTerm = (search?.toString().trim() || "").toLowerCase();
+		const words = searchTerm.split(/\s+/).filter(Boolean);
+
+		// Construir filtro fechas
+		let dateFilter: any = {};
+		if (startDate || endDate) {
+			dateFilter.created_at = {};
+			if (startDate) {
+				const start = parseDateFlexible(startDate as string);
+				if (start) dateFilter.created_at.gte = start;
+				else return res.status(400).json({ message: "startDate inválida" });
+			}
+			if (endDate) {
+				const end = parseDateFlexible(endDate as string);
+				if (end) {
+					end.setHours(23, 59, 59, 999);
+					dateFilter.created_at.lte = end;
+				} else return res.status(400).json({ message: "endDate inválida" });
+			}
+		}
+
+		const isInvoiceIdSearch = /^\d+$/.test(searchTerm);
+		const isHblSearch = /^cte/i.test(searchTerm); // comienza con "cte" insensible
+
+		let whereClause: any = { ...dateFilter };
+
+		if (searchTerm) {
+			if (isInvoiceIdSearch) {
+				whereClause.id = parseInt(searchTerm);
+			} else if (isHblSearch) {
+				whereClause.items = {
+					some: {
+						hbl: { equals: searchTerm, mode: "insensitive" },
 					},
-				},
-				receipt: {
-					select: {
-						id: true,
-						first_name: true,
-						middle_name: true,
-						last_name: true,
-						second_last_name: true,
-						mobile: true,
-					},
-				},
-				_count: {
-					select: {
-						items: true,
-					},
-				},
-			},
-			where: {
-				OR: [
+				};
+			} else {
+				const nameFilters = buildNameSearchFilter(words);
+				whereClause.OR = [
+					{ customer: nameFilters },
 					{
-						customer: {
-							OR: [
-								{ first_name: { contains: searchTerm, mode: "insensitive" } },
-								{ second_last_name: { contains: searchTerm, mode: "insensitive" } },
-								{ middle_name: { contains: searchTerm, mode: "insensitive" } },
-								{ last_name: { contains: searchTerm, mode: "insensitive" } },
-								{ mobile: { contains: searchTerm, mode: "insensitive" } },
+						receipt: {
+							AND: [
+								nameFilters,
 								{
-									AND: [
-										{
-											OR: searchTerm.split(" ").map((term: string, index: number) => {
-												if (index === 0) {
-													return {
-														OR: [
-															{ first_name: { contains: term, mode: "insensitive" } },
-															{ middle_name: { contains: term, mode: "insensitive" } },
-														],
-													};
-												} else {
-													return {
-														OR: [
-															{ middle_name: { contains: term, mode: "insensitive" } },
-															{ last_name: { contains: term, mode: "insensitive" } },
-															{ second_last_name: { contains: term, mode: "insensitive" } },
-														],
-													};
-												}
-											}),
-										},
+									OR: [
+										{ mobile: { contains: searchTerm, mode: "insensitive" } },
+										{ ci: { contains: searchTerm, mode: "insensitive" } },
 									],
 								},
 							],
 						},
 					},
-					{
-						receipt: {
-							OR: [
-								{ first_name: { contains: searchTerm, mode: "insensitive" } },
-								{ second_last_name: { contains: searchTerm, mode: "insensitive" } },
-								{ middle_name: { contains: searchTerm, mode: "insensitive" } },
-								{ last_name: { contains: searchTerm, mode: "insensitive" } },
-								{ mobile: { contains: searchTerm, mode: "insensitive" } },
-							],
+				];
+			}
+		}
+		const [count, rows] = await Promise.all([
+			prisma.invoice.count({
+				where: whereClause,
+			}),
+			prisma.invoice.findMany({
+				include: {
+					service: { select: { id: true, name: true } },
+					agency: { select: { id: true, name: true } },
+					customer: {
+						select: {
+							id: true,
+							first_name: true,
+							middle_name: true,
+							last_name: true,
+							second_last_name: true,
+							mobile: true,
 						},
 					},
-				],
-			},
-			orderBy: {
-				created_at: "desc",
-			},
-			take: limit ? parseInt(limit as string) : 25,
-			skip: page ? (parseInt(page as string) - 1) * (limit ? parseInt(limit as string) : 25) : 0,
-		});
+					receipt: {
+						select: {
+							id: true,
+							first_name: true,
+							middle_name: true,
+							last_name: true,
+							second_last_name: true,
+							mobile: true,
+							ci: true,
+						},
+					},
+					items: true,
+					_count: { select: { items: true } },
+				},
+				where: whereClause,
+				orderBy: { created_at: "desc" },
+				take: limit ? parseInt(limit as string) : 25,
+				skip: page ? (parseInt(page as string) - 1) * (limit ? parseInt(limit as string) : 25) : 0,
+			}),
+		]);
 
-		res.status(200).json({ rows, total: rows.length });
+		res.status(200).json({ rows, total: count });
 	} catch (error) {
 		console.error("Search error:", error);
 		res.status(500).json({ message: "Error searching invoices", error });

@@ -11,6 +11,7 @@ import invoices_routes from "./invoices.routes";
 import users_routes from "./users.routes";
 import customs_rates_routes from "./customs.rates.routes";
 import { authMiddleware } from "../middlewares/auth-midleware";
+import roles_routes from "./roles.routes";
 const router = Router();
 
 router.get("/", (req: Request, res: Response) => {
@@ -29,4 +30,6 @@ router.use("/customers", customers_routes);
 router.use("/receipts", receipts_routes);
 router.use("/provinces", provinces_routes);
 router.use("/invoices", invoices_routes);
+router.use("/roles", roles_routes);
+
 export default router;

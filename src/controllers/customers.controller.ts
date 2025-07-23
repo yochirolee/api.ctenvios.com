@@ -1,10 +1,9 @@
-import { Customer, Prisma } from "@prisma/client";
-import { Request, Response, RequestHandler } from "express";
-import AppError from "../utils/app.error";
-
+import { Request, RequestHandler, Response } from "express";
 import { customerSchema } from "../types/types";
 import repository from "../repository";
-import { capitalize } from "../utils/capitalize";
+import AppError from "../utils/app.error";
+import { Prisma } from "@prisma/client";
+import capitalize from "../utils/capitalize";
 
 export const customers = {
 	get: (async (req: Request, res: Response) => {
@@ -78,7 +77,11 @@ export const customers = {
 		if (!id) {
 			throw new AppError("Customer ID is required", 400);
 		}
-		const receipts = await repository.customers.getReceipts(parseInt(id), parseInt(page as string) || 1, parseInt(limit as string) || 25);
+		const receipts = await repository.customers.getReceipts(
+			parseInt(id),
+			parseInt(page as string) || 1,
+			parseInt(limit as string) || 25,
+		);
 		const flat_receipts = receipts.map((receipt) => {
 			return {
 				...receipt,
