@@ -20,6 +20,23 @@ export const receipts = {
 		});
 		res.status(200).json({ rows: flat_rows, total });
 	},
+	getByCi: async (req: Request, res: Response) => {
+		const { ci } = req.params;
+
+		if (!ci) {
+			return res.status(400).json({ message: "CI is required" });
+		}
+		const receipt = await repository.receipts.getByCi(ci);
+		if (!receipt) {
+			return res.status(404).json({ message: "Receipt not found", receipt: undefined });
+		}
+		const flat_receipt = {
+			...receipt,
+			province: receipt.province?.name || "",
+			city: receipt.city?.name || "",
+		};
+		res.status(200).json(flat_receipt);
+	},
 	search: async (req: Request, res: Response) => {
 		const { query, page, limit } = req.query;
 		if (!query) {

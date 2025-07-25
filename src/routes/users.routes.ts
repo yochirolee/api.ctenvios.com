@@ -49,22 +49,39 @@ router.get("/search", async (req, res) => {
 });
 
 router.post("/sign-up/email", authMiddleware, async (req, res) => {
-	const { email, password, agency_id, role, name } = req.body;
-	const user = await auth.api.signUpEmail({
-		body: {
-			email,
-			password,
-			name: name,
-		},
-	});
-	if (user) {
-		await prisma.user.update({
-			where: { id: user.user.id },
-			data: { agency_id, role },
-		});
-	}
+	try {
+		const { email, password, agency_id, role, name } = req.body;
+		console.log(req.body, "req.body");
 
-	res.status(200).json(user);
+		// Register user with external auth provider
+		const response = await auth.api.signUpEmail({
+			returnHeaders: true,
+			body: {
+				email,
+				password,
+				name,
+			},
+		});
+
+		
+		if (!response.token) {
+			return res.status(400).json({ message: "User registration failed." });
+		}
+
+		// Update internal Prisma user record
+		const updatedUser = await prisma.user.update({
+			where: { email },
+			data: {
+				agency_id,
+				role,
+			},
+		});
+
+		return res.status(200).json(updatedUser);
+	} catch (error) {
+		console.error("Error during sign-up:", error);
+		return res.status(500).json({ message: "Internal error", error });
+	}
 });
 
 router.post("/sign-in/email", async (req, res) => {
@@ -108,7 +125,7 @@ router.post("/sign-out", async (req, res) => {
 	const user = await auth.api.signOut({
 		headers: fromNodeHeaders(req.headers),
 	});
-	console.log(user, "user");
+	
 	res.status(200).json(user);
 });
 

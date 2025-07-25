@@ -3,6 +3,7 @@ import prisma from "../config/prisma_db";
 import receipts_db from "../repository/receipts.repository";
 import { generarTracking } from "../utils/generate_hbl";
 import { generateInvoicePDF } from "../utils/generate-invoice-pdf";
+import { Roles } from "@prisma/client";
 // Removed unused imports for shipping labels
 import {
 	generateCTEnviosLabels,
@@ -11,6 +12,7 @@ import {
 import { z } from "zod";
 import AppError from "../utils/app.error";
 import { invoiceHistoryMiddleware } from "../middlewares/invoice-middleware";
+import { authMiddleware } from "../middlewares/auth-midleware";
 
 const invoiceItemSchema = z.object({
 	description: z.string().min(1, "Description is required"),
@@ -155,15 +157,16 @@ function buildNameSearchFilter(words: string[]) {
 	};
 }
 
-router.get("/search", async (req, res) => {
+router.get("/search", authMiddleware, async (req: any, res) => {
 	try {
+		const user = req.user;
+		console.log(user, "user");
 		const { page, limit, search, startDate, endDate } = req.query;
-		console.log(req.query, "req.query");
 
 		const searchTerm = (search?.toString().trim() || "").toLowerCase();
 		const words = searchTerm.split(/\s+/).filter(Boolean);
+		const isNumeric = /^\d+$/.test(searchTerm);
 
-		// Construir filtro fechas
 		let dateFilter: any = {};
 		if (startDate || endDate) {
 			dateFilter.created_at = {};
@@ -181,44 +184,45 @@ router.get("/search", async (req, res) => {
 			}
 		}
 
-		const isInvoiceIdSearch = /^\d+$/.test(searchTerm);
-		const isHblSearch = /^cte/i.test(searchTerm); // comienza con "cte" insensible
-
 		let whereClause: any = { ...dateFilter };
+		let fallbackClause: any = null;
 
-		if (searchTerm) {
-			if (isInvoiceIdSearch) {
+		if (searchTerm && isNumeric) {
+			if (searchTerm.length <= 5) {
 				whereClause.id = parseInt(searchTerm);
-			} else if (isHblSearch) {
-				whereClause.items = {
-					some: {
-						hbl: { equals: searchTerm, mode: "insensitive" },
+			} else if (searchTerm.length === 10) {
+				whereClause.customer = {
+					mobile: { contains: searchTerm, mode: "insensitive" },
+				};
+				fallbackClause = {
+					...dateFilter,
+					receipt: {
+						mobile: { contains: searchTerm, mode: "insensitive" },
 					},
 				};
+			} else if (searchTerm.length === 11) {
+				whereClause.receipt = {
+					ci: { contains: searchTerm, mode: "insensitive" },
+				};
 			} else {
-				const nameFilters = buildNameSearchFilter(words);
-				whereClause.OR = [
-					{ customer: nameFilters },
-					{
-						receipt: {
-							AND: [
-								nameFilters,
-								{
-									OR: [
-										{ mobile: { contains: searchTerm, mode: "insensitive" } },
-										{ ci: { contains: searchTerm, mode: "insensitive" } },
-									],
-								},
-							],
-						},
-					},
-				];
+				return res.status(400).json({ message: "Formato de búsqueda inválido" });
+			}
+		} else if (searchTerm) {
+			const nameFilters = buildNameSearchFilter(words);
+			whereClause.OR = [{ customer: nameFilters }, { receipt: nameFilters }];
+		}
+
+		// ⛔ Si NO es ROOT ni ADMINISTRATOR, filtrar por agencia
+		const allowedRoles = [Roles.ROOT, Roles.ADMINISTRATOR];
+		if (!allowedRoles.includes(user.role)) {
+			whereClause.agency_id = user.agency_id;
+			if (fallbackClause) {
+				fallbackClause.agency_id = user.agency_id;
 			}
 		}
-		const [count, rows] = await Promise.all([
-			prisma.invoice.count({
-				where: whereClause,
-			}),
+
+		let [count, rows] = await Promise.all([
+			prisma.invoice.count({ where: whereClause }),
 			prisma.invoice.findMany({
 				include: {
 					service: { select: { id: true, name: true } },
@@ -253,6 +257,47 @@ router.get("/search", async (req, res) => {
 				skip: page ? (parseInt(page as string) - 1) * (limit ? parseInt(limit as string) : 25) : 0,
 			}),
 		]);
+
+		if (rows.length === 0 && fallbackClause) {
+			[count, rows] = await Promise.all([
+				prisma.invoice.count({ where: fallbackClause }),
+				prisma.invoice.findMany({
+					include: {
+						service: { select: { id: true, name: true } },
+						agency: { select: { id: true, name: true } },
+						customer: {
+							select: {
+								id: true,
+								first_name: true,
+								middle_name: true,
+								last_name: true,
+								second_last_name: true,
+								mobile: true,
+							},
+						},
+						receipt: {
+							select: {
+								id: true,
+								first_name: true,
+								middle_name: true,
+								last_name: true,
+								second_last_name: true,
+								mobile: true,
+								ci: true,
+							},
+						},
+						items: true,
+						_count: { select: { items: true } },
+					},
+					where: fallbackClause,
+					orderBy: { created_at: "desc" },
+					take: limit ? parseInt(limit as string) : 25,
+					skip: page
+						? (parseInt(page as string) - 1) * (limit ? parseInt(limit as string) : 25)
+						: 0,
+				}),
+			]);
+		}
 
 		res.status(200).json({ rows, total: count });
 	} catch (error) {
@@ -365,8 +410,10 @@ router.post("/", async (req, res) => {
 		res.status(500).json({ message: "Error creating invoice", error: error });
 	}
 });
-router.get("/:id", async (req, res) => {
+router.get("/:id", authMiddleware, async (req: any, res) => {
 	const { id } = req.params;
+	const user = req.user;
+	console.log(user, "user");
 	const rows = await prisma.invoice.findUnique({
 		where: { id: parseInt(id) },
 		include: {

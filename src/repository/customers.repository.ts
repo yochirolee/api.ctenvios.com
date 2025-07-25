@@ -18,61 +18,39 @@ const customers = {
 		return { rows, total };
 	},
 	search: async (query: string, page: number = 1, limit: number = 10): Promise<Customer[]> => {
-		// Decode URL-encoded query and trim whitespace
 		const trimmedQuery = query.trim();
 		const queryWords = trimmedQuery.split(/\s+/).filter((word) => word.length > 0);
 
-		// Base OR conditions for searching in individual fields
 		const baseConditions = [
 			{ first_name: { contains: trimmedQuery, mode: "insensitive" as const } },
-			{ last_name: { contains: trimmedQuery, mode: "insensitive" as const } },
 			{ middle_name: { contains: trimmedQuery, mode: "insensitive" as const } },
+			{ last_name: { contains: trimmedQuery, mode: "insensitive" as const } },
 			{ second_last_name: { contains: trimmedQuery, mode: "insensitive" as const } },
 			{ mobile: { contains: trimmedQuery, mode: "insensitive" as const } },
 			{ identity_document: { contains: trimmedQuery, mode: "insensitive" as const } },
 			{ email: { contains: trimmedQuery, mode: "insensitive" as const } },
 		];
 
-		// Additional conditions for multi-word searches (first_name + last_name combinations)
-		const multiWordConditions = [];
-		if (queryWords.length >= 2) {
-			const [firstName, ...lastNameParts] = queryWords;
-			const lastName = lastNameParts.join(" ");
-
-			// first_name + last_name
-			multiWordConditions.push({
-				AND: [
-					{ first_name: { contains: firstName, mode: "insensitive" as const } },
-					{ last_name: { contains: lastName, mode: "insensitive" as const } },
-				],
-			});
-
-			// first_name + second_last_name
-			multiWordConditions.push({
-				AND: [
-					{ first_name: { contains: firstName, mode: "insensitive" as const } },
-					{ second_last_name: { contains: lastName, mode: "insensitive" as const } },
-				],
-			});
-
-			// If there are 3+ words, also try first_name + middle_name + last_name
-			if (queryWords.length >= 3) {
-				const [first, middle, ...lastParts] = queryWords;
-				const last = lastParts.join(" ");
-
-				multiWordConditions.push({
-					AND: [
-						{ first_name: { contains: first, mode: "insensitive" as const } },
-						{ middle_name: { contains: middle, mode: "insensitive" as const } },
-						{ last_name: { contains: last, mode: "insensitive" as const } },
-					],
-				});
-			}
-		}
+		// Búsqueda combinada: cada palabra debe aparecer en al menos un campo
+		const combinedNameConditions =
+			queryWords.length > 1
+				? [
+						{
+							AND: queryWords.map((word) => ({
+								OR: [
+									{ first_name: { contains: word, mode: "insensitive" as const } },
+									{ middle_name: { contains: word, mode: "insensitive" as const } },
+									{ last_name: { contains: word, mode: "insensitive" as const } },
+									{ second_last_name: { contains: word, mode: "insensitive" as const } },
+								],
+							})),
+						},
+				  ]
+				: [];
 
 		const customers = await prisma.customer.findMany({
 			where: {
-				OR: [...baseConditions, ...multiWordConditions],
+				OR: [...baseConditions, ...combinedNameConditions],
 			},
 			skip: (page - 1) * limit,
 			take: limit,
@@ -93,7 +71,11 @@ const customers = {
 		});
 		return customer;
 	},
-	getReceipts: async (customerId: number, page: number = 1, limit: number = 10): Promise<(Receipt & { province: Province; city: City })[]> => {
+	getReceipts: async (
+		customerId: number,
+		page: number = 1,
+		limit: number = 10,
+	): Promise<(Receipt & { province: Province; city: City })[]> => {
 		const receipts = await prisma.receipt.findMany({
 			where: {
 				customers: {
