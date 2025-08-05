@@ -2,7 +2,7 @@ import PDFKit from "pdfkit";
 import {
 	Invoice,
 	Customer,
-	Receipt,
+	Receiver,
 	Agency,
 	Service,
 	Item,
@@ -15,7 +15,7 @@ import { formatName } from "./capitalize";
 
 interface InvoiceWithRelations extends Invoice {
 	customer: Customer;
-	receipt: Receipt & {
+	receiver: Receiver & {
 		province: { id: number; name: string };
 		city: { id: number; name: string };
 	};
@@ -214,8 +214,8 @@ async function generateCleanCTEnviosLabel(
 		});
 	currentY += 30;
 
-	const destination = `${invoice.receipt.province?.name || ""} / ${
-		invoice.receipt.city?.name || ""
+	const destination = `${invoice.receiver.province?.name || ""} / ${
+		invoice.receiver.city?.name || ""
 	}`;
 
 	doc
@@ -267,10 +267,10 @@ async function generateCleanCTEnviosLabel(
 		.undash();
 	currentY += 10;
 	const recipientName = formatName(
-		invoice.receipt.first_name,
-		invoice.receipt.middle_name,
-		invoice.receipt.last_name,
-		invoice.receipt.second_last_name,
+		invoice.receiver.first_name,
+		invoice.receiver.middle_name,
+		invoice.receiver.last_name,
+		invoice.receiver.second_last_name,
 		25, // Max length for label display
 	);
 
@@ -304,9 +304,9 @@ async function generateCleanCTEnviosLabel(
 		.fontSize(10)
 		.font("Helvetica-Bold")
 		.text(
-			`${invoice.receipt.mobile || ""}${
-				invoice.receipt.mobile && invoice.receipt.phone ? " - " : ""
-			}${invoice.receipt.phone || ""}`,
+			`${invoice.receiver.mobile || ""}${
+				invoice.receiver.mobile && invoice.receiver.phone ? " - " : ""
+			}${invoice.receiver.phone || ""}`,
 			margin + 65,
 			currentY + 20,
 		);
@@ -319,7 +319,7 @@ async function generateCleanCTEnviosLabel(
 	doc
 		.fontSize(10)
 		.font("Helvetica-Bold")
-		.text(invoice.receipt.ci || "", margin + 65, currentY + 35);
+		.text(invoice.receiver.ci || "", margin + 65, currentY + 35);
 
 	doc
 		.fontSize(8)
@@ -330,8 +330,8 @@ async function generateCleanCTEnviosLabel(
 		.fontSize(10)
 		.font("Helvetica")
 		.text(
-			`${invoice.receipt.address + " " + invoice.receipt.province?.name || ""} / ${
-				invoice.receipt.city?.name || ""
+			`${invoice.receiver.address + " " + invoice.receiver.province?.name || ""} / ${
+				invoice.receiver.city?.name || ""
 			}`,
 			margin + 65,
 			currentY + 50,
@@ -345,7 +345,7 @@ async function generateCleanCTEnviosLabel(
 
 	// Left QR Code
 	try {
-		const qrData = `${item.hbl},${invoice.id},${recipientName},${invoice.receipt.ci}`;
+		const qrData = `${item.hbl},${invoice.id},${recipientName},${invoice.receiver.ci}`;
 
 		const qrCodeDataURL = await QRCode.toDataURL(qrData, {
 			width: 80,
@@ -399,7 +399,7 @@ async function generateProvinceLabel(
 	doc
 		.fontSize(40)
 		.font("Helvetica-Bold")
-		.text(invoice.receipt.province?.name.toUpperCase() || "", margin, currentY + 50, {
+		.text(invoice.receiver.province?.name.toUpperCase() || "", margin, currentY + 50, {
 			width: labelWidth - margin * 2,
 			align: "center",
 		});
@@ -407,7 +407,7 @@ async function generateProvinceLabel(
 	doc
 		.fontSize(30)
 		.font("Helvetica-Bold")
-		.text(invoice.receipt.city?.name.toUpperCase() || "", margin, currentY + 160, {
+		.text(invoice.receiver.city?.name.toUpperCase() || "", margin, currentY + 160, {
 			width: labelWidth - margin * 2,
 			align: "center",
 		});
@@ -416,7 +416,7 @@ async function generateProvinceLabel(
 		.fontSize(40)
 		.font("Helvetica-Bold")
 		.text(
-			`${invoice.receipt.province?.id || ""} - ${invoice.receipt.city?.id || ""}`,
+			`${invoice.receiver.province?.id || ""} - ${invoice.receiver.city?.id || ""}`,
 			margin,
 			labelHeight - 60,
 			{

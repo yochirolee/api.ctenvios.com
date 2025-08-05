@@ -1,12 +1,9 @@
 import { Router } from "express";
 import { auth } from "../lib/auth";
 import { fromNodeHeaders } from "better-auth/node";
-import express from "express";
 import prisma from "../config/prisma_db";
 import { authMiddleware } from "../middlewares/auth-midleware";
-import jwt from "jsonwebtoken";
 
-type Roles = "admin" | "user" | "agent" | string;
 
 const router = Router();
 
@@ -35,15 +32,10 @@ router.get("/", async (req, res) => {
 });
 router.get("/search", async (req, res) => {
 	const { query } = req.query;
-	console.log(query, "query");
+	
 	const users = await auth.api.listUserAccounts({
 		headers: fromNodeHeaders(req.headers),
-		query: {
-			email: query,
-			phone: query,
-			firstName: query,
-			lastName: query,
-		},
+		
 	});
 	res.status(200).json(users);
 });

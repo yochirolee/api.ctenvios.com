@@ -6,7 +6,7 @@ import rates_routes from "./rates.routes";
 import forwarders_routes from "./forwarders.routes";
 import customers_routes from "./customers.routes";
 import provinces_routes from "./provinces.routes";
-import receipts_routes from "./receipts.routes";
+import receivers_routes from "./receivers.routes";
 import invoices_routes from "./invoices.routes";
 import users_routes from "./users.routes";
 import customs_rates_routes from "./customs.rates.routes";
@@ -27,7 +27,7 @@ router.use("/customs-rates", customs_rates_routes);
 
 router.use("/users", users_routes);
 router.use("/customers", customers_routes);
-router.use("/receipts", receipts_routes);
+router.use("/receivers", receivers_routes);
 router.use("/provinces", provinces_routes);
 router.use("/invoices", invoices_routes);
 router.use("/roles", roles_routes);

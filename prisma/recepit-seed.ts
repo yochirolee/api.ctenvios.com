@@ -420,7 +420,7 @@ async function batchUpsertReceipts(receipts: ProcessedReceipt[]): Promise<void> 
 					const chunkCIs = chunk.map((r) => r.ci);
 
 					// Find existing receipts
-					const existingReceipts = await tx.receipt.findMany({
+					const existingReceipts = await tx.receiver.findMany({
 						where: { ci: { in: chunkCIs } },
 						select: { ci: true },
 					});
@@ -433,7 +433,7 @@ async function batchUpsertReceipts(receipts: ProcessedReceipt[]): Promise<void> 
 
 					// Insert new receipts using createMany
 					if (newReceipts.length > 0) {
-						await tx.receipt.createMany({
+						await tx.receiver.createMany({
 							data: newReceipts.map((receipt) => ({
 								first_name: receipt.first_name,
 								middle_name: receipt.middle_name,
@@ -454,7 +454,7 @@ async function batchUpsertReceipts(receipts: ProcessedReceipt[]): Promise<void> 
 					// since updateMany doesn't support different data per record
 					if (existingReceiptsToUpdate.length > 0) {
 						for (const receipt of existingReceiptsToUpdate) {
-							await tx.receipt.update({
+							await tx.receiver.update({
 								where: { ci: receipt.ci },
 								data: {
 									first_name: receipt.first_name,
@@ -485,7 +485,7 @@ async function batchUpsertReceipts(receipts: ProcessedReceipt[]): Promise<void> 
 				console.log(`🔍 Processing batch ${i + 1} individually to identify problematic records...`);
 				for (const receipt of chunk) {
 					try {
-						await prisma.receipt.upsert({
+						await prisma.receiver.upsert({
 							where: { ci: receipt.ci },
 							create: {
 								first_name: receipt.first_name,
@@ -536,7 +536,7 @@ async function batchUpsertReceiptsFast(receipts: ProcessedReceipt[]): Promise<vo
 				async (tx) => {
 					// Step 1: Check which records already exist
 					const chunkCIs = chunk.map((r) => r.ci);
-					const existingReceipts = await tx.receipt.findMany({
+					const existingReceipts = await tx.receiver.findMany({
 						where: { ci: { in: chunkCIs } },
 						select: { ci: true },
 					});
@@ -549,7 +549,7 @@ async function batchUpsertReceiptsFast(receipts: ProcessedReceipt[]): Promise<vo
 
 					// Step 3: Insert new records using createMany
 					if (newReceipts.length > 0) {
-						await tx.receipt.createMany({
+						await tx.receiver.createMany({
 							data: newReceipts.map((receipt) => ({
 								first_name: receipt.first_name,
 								middle_name: receipt.middle_name,
@@ -571,7 +571,7 @@ async function batchUpsertReceiptsFast(receipts: ProcessedReceipt[]): Promise<vo
 						// For now, update individually since each record has different data
 						// In the future, we could group by common patterns for updateMany
 						for (const receipt of existingReceiptsToUpdate) {
-							await tx.receipt.update({
+							await tx.receiver.update({
 								where: { ci: receipt.ci },
 								data: {
 									first_name: receipt.first_name,
@@ -605,7 +605,7 @@ async function batchUpsertReceiptsFast(receipts: ProcessedReceipt[]): Promise<vo
 				console.log(`🔍 Processing batch ${i + 1} individually to identify problematic records...`);
 				for (const receipt of chunk) {
 					try {
-						await prisma.receipt.upsert({
+							await prisma.receiver.upsert({
 							where: { ci: receipt.ci },
 							create: {
 								first_name: receipt.first_name,

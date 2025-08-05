@@ -2,12 +2,12 @@ import PDFKit from "pdfkit";
 import * as bwipjs from "bwip-js";
 import * as fs from "fs";
 import * as path from "path";
-import { Invoice, Customer, Receipt, Agency, Service, Item } from "@prisma/client";
+import { Invoice, Customer, Receiver, Agency, Service, Item } from "@prisma/client";
 import { formatName } from "./capitalize";
 
 interface InvoiceWithRelations extends Omit<Invoice, "total"> {
 	customer: Customer;
-	receipt: Receipt & {
+	receiver: Receiver & {
 		province?: { name: string };
 		city?: { name: string };
 	};
@@ -80,7 +80,7 @@ async function generatePageHeader(
 
 	// Company details below name
 	doc
-		.fillColor("#000000")
+		.fillColor("#666666")
 		.fontSize(9)
 		.font("Helvetica")
 		.text("Address: 10230 NW 80th Ave. Miami, FL 33016", 40, currentY);
@@ -183,10 +183,10 @@ function generateSenderRecipientInfo(doc: PDFKit.PDFDocument, invoice: InvoiceWi
 	let recipientY = 110;
 
 	const recipientName = formatName(
-		invoice.receipt.first_name,
-		invoice.receipt.middle_name,
-		invoice.receipt.last_name,
-		invoice.receipt.second_last_name,
+		invoice.receiver.first_name,
+		invoice.receiver.middle_name,
+		invoice.receiver.last_name,
+		invoice.receiver.second_last_name,
 		30, // Max length for invoice display
 	);
 
@@ -207,15 +207,15 @@ function generateSenderRecipientInfo(doc: PDFKit.PDFDocument, invoice: InvoiceWi
 	recipientY += 14;
 
 	// Recipient phone (only number, no label)
-	if (invoice.receipt.phone) {
+	if (invoice.receiver.mobile) {
 		doc
 			.fillColor("#000000")
 			.fontSize(9)
 			.font("Helvetica")
 			.text(
-				`Tel: ${invoice.receipt.mobile || ""}${
-					invoice.receipt.mobile && invoice.receipt.phone ? " - " : ""
-				}${invoice.receipt.phone || ""}`,
+				`Tel: ${invoice.receiver.mobile || ""}${
+					invoice.receiver.mobile && invoice.receiver.phone ? " - " : ""
+				}${invoice.receiver.phone || ""}`,
 				320,
 				recipientY,
 				{ width: 250, align: "left" },
@@ -223,23 +223,23 @@ function generateSenderRecipientInfo(doc: PDFKit.PDFDocument, invoice: InvoiceWi
 		recipientY += 14;
 	}
 	//receiip ci
-	if (invoice.receipt.ci) {
+	if (invoice.receiver.ci) {
 		doc
 			.fillColor("#000000")
 			.fontSize(9)
 			.font("Helvetica")
-			.text(`CI: ${invoice.receipt.ci}`, 320, recipientY, { width: 100, align: "left" });
+			.text(`CI: ${invoice.receiver.ci}`, 320, recipientY, { width: 100, align: "left" });
 		recipientY += 14;
 	}
 
 	// Recipient address with location
-	const location = `${invoice.receipt.city?.name || ""} ${
-		invoice.receipt.province?.name || ""
+	const location = `${invoice.receiver.city?.name || ""} ${
+		invoice.receiver.province?.name || ""
 	}`.trim();
 
 	const fullAddress = location
-		? `${invoice.receipt.address}, ${location}`
-		: invoice.receipt.address;
+		? `${invoice.receiver.address}, ${location}`
+		: invoice.receiver.address;
 
 	doc
 		.fillColor("#000000")
@@ -318,7 +318,7 @@ async function generateItemsTableWithPagination(
 		// Row data
 
 		const subtotal =
-			item.rate * item.weight +
+			item.rate/100 * item.weight +
 			item?.customs_fee +
 			(item?.delivery_fee || 0) +
 			(item?.insurance_fee || 0);
@@ -348,9 +348,15 @@ async function generateItemsTableWithPagination(
 			})
 			.text(`$${item.delivery_fee?.toFixed(2)}`, 340, verticalCenter, { width: 40, align: "right" })
 			.text(`$${item.customs_fee?.toFixed(2)}`, 385, verticalCenter, { width: 40, align: "right" })
-			.text(`$${item.rate.toFixed(2)}`, 430, verticalCenter, { width: 40, align: "right" })
+			.text(`$${(item.rate / 100).toFixed(2)}`, 430, verticalCenter, {
+				width: 40,
+				align: "right",
+			})
 			.text(`${item.weight.toFixed(2)}`, 470, verticalCenter, { width: 40, align: "right" })
-			.text(`$${subtotal.toFixed(2)}`, 520, verticalCenter, { width: 40, align: "right" });
+			.text(`$${(subtotal ).toFixed(2)}`, 520, verticalCenter, {
+				width: 40,
+				align: "right",
+			});
 
 		// Row bottom border (dashed) - positioned at the bottom of the dynamic row
 		doc
@@ -382,7 +388,10 @@ async function generateItemsTableWithPagination(
 		.fontSize(10)
 		.font("Helvetica")
 		.text("Subtotal", 420, currentY)
-		.text(`$${invoice.total_amount.toFixed(2)}`, 520, currentY, { width: 50, align: "right" });
+		.text(`$${((invoice.total_amount || 0) / 100).toFixed(2)}`, 520, currentY, {
+			width: 50,
+			align: "right",
+		});
 
 	currentY += 15;
 
@@ -416,7 +425,10 @@ async function generateItemsTableWithPagination(
 		.fontSize(12)
 		.font("Helvetica-Bold")
 		.text("Total", 420, currentY)
-		.text(`$${invoice.total_amount.toFixed(2)}`, 520, currentY, { width: 50, align: "right" });
+		.text(`$${((invoice.total_amount || 0) / 100).toFixed(2)}`, 520, currentY, {
+			width: 50,
+			align: "right",
+		});
 
 	return { totalPages: currentPage, total: invoice.total_amount };
 }

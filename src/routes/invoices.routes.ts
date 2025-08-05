@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import prisma from "../config/prisma_db";
-import receipts_db from "../repository/receipts.repository";
+import receivers_db from "../repository/receivers.repository";
 import { generarTracking } from "../utils/generate_hbl";
 import { generateInvoicePDF } from "../utils/generate-invoice-pdf";
 import { PaymentMethod, PaymentStatus, Roles } from "@prisma/client";
@@ -28,7 +28,7 @@ const newInvoiceSchema = z.object({
 	user_id: z.string().min(1, "User ID is required"),
 	agency_id: z.number().min(1, "Agency ID is required"),
 	customer_id: z.number().min(1, "Customer ID is required"),
-	receipt_id: z.number().min(1, "Receipt ID is required"),
+	receiver_id: z.number().min(1, "Receiver ID is required"),
 	service_id: z.number().min(1, "Service ID is required"),
 	items: z.array(invoiceItemSchema),
 	total_amount: z.number().min(1, "Total amount is required"),
@@ -93,7 +93,7 @@ router.get("/", async (req, res) => {
 					mobile: true,
 				},
 			},
-			receipt: {
+			receiver: {
 				select: {
 					id: true,
 					first_name: true,
@@ -184,12 +184,12 @@ router.get("/search", authMiddleware, async (req: any, res) => {
 				};
 				fallbackClause = {
 					...dateFilter,
-					receipt: {
+					receiver: {
 						mobile: { contains: searchTerm, mode: "insensitive" },
 					},
 				};
 			} else if (searchTerm.length === 11) {
-				whereClause.receipt = {
+				whereClause.receiver = {
 					ci: { contains: searchTerm, mode: "insensitive" },
 				};
 			} else {
@@ -197,7 +197,7 @@ router.get("/search", authMiddleware, async (req: any, res) => {
 			}
 		} else if (searchTerm) {
 			const nameFilters = buildNameSearchFilter(words);
-			whereClause.OR = [{ customer: nameFilters }, { receipt: nameFilters }];
+			whereClause.OR = [{ customer: nameFilters }, { receiver: nameFilters }];
 		}
 
 		// ⛔ Si NO es ROOT ni ADMINISTRATOR, filtrar por agencia
@@ -225,7 +225,7 @@ router.get("/search", authMiddleware, async (req: any, res) => {
 							mobile: true,
 						},
 					},
-					receipt: {
+					receiver: {
 						select: {
 							id: true,
 							first_name: true,
@@ -263,7 +263,7 @@ router.get("/search", authMiddleware, async (req: any, res) => {
 								mobile: true,
 							},
 						},
-						receipt: {
+						receiver: {
 							select: {
 								id: true,
 								first_name: true,
@@ -297,7 +297,7 @@ router.get("/search", authMiddleware, async (req: any, res) => {
 router.post("/", async (req, res) => {
 	try {
 		console.log(req.body, "req.body");
-		const { agency_id, user_id, customer_id, receipt_id, total_amount, service_id, items } =
+		const { agency_id, user_id, customer_id, receiver_id, total_amount, service_id, items } =
 			newInvoiceSchema.parse(req.body);
 
 		// Generate all HBL codes first (outside transaction for bulk efficiency)
@@ -314,7 +314,7 @@ router.post("/", async (req, res) => {
 				return itemHbls.map((hbl) => ({
 					hbl,
 					description: item.description,
-					rate: item.rate,
+					rate: Math.round(item.rate * 100),
 					customs_fee: item.customs_fee || 0,
 					delivery_fee: item.delivery_fee || 0,
 					insurance_fee: item.insurance_fee || 0,
@@ -336,7 +336,7 @@ router.post("/", async (req, res) => {
 						user_id: user_id,
 						agency_id: agency_id,
 						customer_id: customer_id,
-						receipt_id: receipt_id,
+						receiver_id: receiver_id,
 						service_id: service_id,
 						total_amount: Math.round(Number(total_amount) * 100),
 						rate: 0,
@@ -351,7 +351,7 @@ router.post("/", async (req, res) => {
 						},
 					},
 				});
-				await receipts_db.connect(receipt_id, customer_id);
+				await receivers_db.connect(receiver_id, customer_id);
 				return invoice;
 			},
 			{
@@ -474,7 +474,7 @@ router.get("/:id", authMiddleware, async (req: any, res) => {
 		where: { id: parseInt(id) },
 		include: {
 			customer: true,
-			receipt: true,
+			receiver: true,
 			agency: {
 				select: {
 					name: true,
@@ -516,7 +516,8 @@ router.delete("/:id", async (req, res) => {
 
 router.put("/:id", async (req, res) => {
 	const { id } = req.params;
-	const { user_id, agency_id, customer_id, receipt_id, service_id, total_amount, items } = req.body;
+	const { user_id, agency_id, customer_id, receiver_id, service_id, total_amount, items } =
+		req.body;
 
 	// Generate new HBL codes for items that might be created
 	const newItemsCount = items.filter((item: any) => !item.hbl).length;
@@ -541,7 +542,7 @@ router.put("/:id", async (req, res) => {
 			user_id: user_id,
 			agency_id: agency_id,
 			customer_id: customer_id,
-			receipt_id: receipt_id,
+			receiver_id: receiver_id,
 			service_id: service_id,
 			total_amount: total_amount,
 			items: {
@@ -578,7 +579,7 @@ router.get("/:id/pdf", async (req, res) => {
 			where: { id: parseInt(id) },
 			include: {
 				customer: true,
-				receipt: {
+				receiver: {
 					include: {
 						province: true,
 						city: true,
@@ -643,7 +644,7 @@ router.get("/:id/labels/", async (req, res) => {
 			where: { id: parseInt(id) },
 			include: {
 				customer: true,
-				receipt: {
+					receiver: {
 					include: {
 						province: true,
 						city: true,
@@ -716,7 +717,7 @@ router.post("/labels/bulk", async (req: Request, res: Response) => {
 			},
 			include: {
 				customer: true,
-				receipt: {
+					receiver: {
 					include: {
 						province: true,
 						city: true,

@@ -1,4 +1,4 @@
-import { City, Customer, Prisma, Province, Receipt } from "@prisma/client";
+import { City, Customer, Prisma, Province, Receiver } from "@prisma/client";
 import prisma from "../config/prisma_db";
 
 const customers = {
@@ -66,17 +66,17 @@ const customers = {
 				id: customerId,
 			},
 			include: {
-				receipts: true,
+				receivers: true,
 			},
 		});
 		return customer;
 	},
-	getReceipts: async (
+	getReceivers: async (
 		customerId: number,
 		page: number = 1,
 		limit: number = 10,
-	): Promise<(Receipt & { province: Province; city: City })[]> => {
-		const receipts = await prisma.receipt.findMany({
+	): Promise<(Receiver & { province: Province; city: City })[]> => {
+		const receivers = await prisma.receiver.findMany({
 			where: {
 				customers: {
 					some: {
@@ -91,7 +91,8 @@ const customers = {
 			skip: (page - 1) * limit,
 			take: limit,
 		});
-		return receipts;
+		console.log(receivers);
+		return receivers as (Receiver & { province: Province; city: City })[];
 	},
 	create: async (customer: Prisma.CustomerCreateInput): Promise<Customer> => {
 		const newCustomer = await prisma.customer.create({

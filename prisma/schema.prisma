@@ -60,7 +60,7 @@ model Agency {
   users            User[] // Usuarios que pertenecen a esta agencia
   rates            Rates[] // Tarifas personalizadas
   customers        Customer[]
-  receipts         Receipt[]
+  receivers        Receiver[]
   invoices         Invoice[]
   items            Item[]
   counters         Counter[]
@@ -78,7 +78,7 @@ model Customer {
   address           String?
   created_at        DateTime  @default(now())
   updated_at        DateTime  @updatedAt
-  receipts          Receipt[]
+  receivers         Receiver[]
   agency_id         Int?
   agency            Agency?   @relation(fields: [agency_id], references: [id])
   invoices          Invoice[]
@@ -86,7 +86,7 @@ model Customer {
   @@unique([mobile, first_name, last_name])
 }
 
-model Receipt {
+model Receiver {
   id               Int        @id @default(autoincrement())
   first_name       String
   middle_name      String?
@@ -118,7 +118,7 @@ model Province {
   created_at DateTime  @default(now())
   updated_at DateTime  @updatedAt
   cities     City[]
-  receipts   Receipt[]
+  receivers   Receiver[]
 }
 
 model City {
@@ -128,7 +128,7 @@ model City {
   updated_at  DateTime  @updatedAt
   province_id Int
   province    Province  @relation(fields: [province_id], references: [id])
-  receipts    Receipt[]
+  receivers    Receiver[]
   carrier_rates CarrierRates[]
 }
 
@@ -239,8 +239,8 @@ model Invoice {
   agency           Agency           @relation(fields: [agency_id], references: [id])
   customer_id      Int
   customer         Customer         @relation(fields: [customer_id], references: [id])
-  receipt_id       Int
-  receipt          Receipt          @relation(fields: [receipt_id], references: [id])
+  receiver_id       Int
+  receiver          Receiver          @relation(fields: [receiver_id], references: [id])
   service_id       Int
   service          Service          @relation(fields: [service_id], references: [id])
   items            Item[]
@@ -276,7 +276,7 @@ model Item {
   service_id       Int
   service          Service       @relation(fields: [service_id], references: [id])
   quantity         Int           @default(1)
-  rate             Float
+  rate             Int           @default(0)// in cents
   customs_fee      Float         @default(0)
   insurance_fee    Float?      @default(0)
   delivery_fee     Float?      @default(0)

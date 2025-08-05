@@ -4,7 +4,7 @@ import forwarders from "./forwarders.repository";
 import services from "./services.repository";
 import customers from "./customers.repository";
 import provinces from "./provinces.repository";
-import receipts from "./receipts.repository";
+import receivers from "./receivers.repository";
 import customsRates from "./customs.rates.repository";
 
 export const repository = {
@@ -14,7 +14,7 @@ export const repository = {
 	services,
 	customers,
 	provinces,
-	receipts,
+	receivers,
 	customsRates,
 };
 

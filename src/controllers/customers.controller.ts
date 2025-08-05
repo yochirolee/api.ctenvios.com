@@ -71,25 +71,25 @@ export const customers = {
 		res.status(200).json(customer);
 	}) as RequestHandler,
 
-	getReceipts: (async (req: Request, res: Response) => {
+	getReceivers: (async (req: Request, res: Response) => {
 		const { id } = req.params;
 		const { page, limit } = req.query;
 		if (!id) {
 			throw new AppError("Customer ID is required", 400);
 		}
-		const receipts = await repository.customers.getReceipts(
+		const receivers = await repository.customers.getReceivers(
 			parseInt(id),
 			parseInt(page as string) || 1,
 			parseInt(limit as string) || 25,
 		);
-		const flat_receipts = receipts.map((receipt) => {
+				const flat_receivers = receivers.map((receiver) => {
 			return {
-				...receipt,
-				province: receipt.province?.name || "",
-				city: receipt.city?.name || "",
+				...receiver,
+				province: receiver.province?.name || "",
+				city: receiver.city?.name || "",
 			};
 		});
-		res.status(200).json({ rows: flat_receipts, total: flat_receipts.length });
+		res.status(200).json({ rows: flat_receivers, total: flat_receivers.length });
 	}) as RequestHandler,
 
 	edit: (async (req: Request, res: Response) => {

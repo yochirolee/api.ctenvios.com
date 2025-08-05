@@ -1,14 +1,14 @@
-import { City, Prisma, Province, Receipt } from "@prisma/client";
+import { City, Prisma, Province, Receiver } from "@prisma/client";
 import prisma from "../config/prisma_db";
 
-const receipts = {
+const receivers = {
 	get: async (
 		page: number = 1,
 		limit: number = 10,
-	): Promise<{ rows: (Receipt & { province: Province; city: City })[]; total: number }> => {
+	): Promise<{ rows: (Receiver & { province: Province; city: City })[]; total: number }> => {
 		// Ensure valid numeric values
-		const total = await prisma.receipt.count();
-		const rows = await prisma.receipt.findMany({
+		const total = await prisma.receiver.count();
+		const rows = await prisma.receiver.findMany({
 			skip: (page - 1) * limit,
 			take: limit,
 			orderBy: {
@@ -22,10 +22,10 @@ const receipts = {
 
 		return { rows, total };
 	},
-	search: async (query: string, page: number = 1, limit: number = 10): Promise<Receipt[]> => {
+	search: async (query: string, page: number = 1, limit: number = 10): Promise<Receiver[]> => {
 		const terms = query.trim().split(/\s+/).filter(Boolean);
 
-		const receipts = await prisma.receipt.findMany({
+		const receivers = await prisma.receiver.findMany({
 			where: {
 				OR: [
 					// Búsqueda por campos individuales
@@ -60,47 +60,47 @@ const receipts = {
 			},
 		});
 
-		return receipts.map((receipt) => ({
-			...receipt,
-			province: receipt.province.name,
-			city: receipt.city.name,
+		return receivers.map((receiver) => ({
+			...receiver,
+			province: receiver.province.name,
+			city: receiver.city.name,
 		}));
 	},
 
-	create: async (receipt: Prisma.ReceiptCreateInput): Promise<Receipt> => {
-		const newReceipt = await prisma.receipt.create({
-			data: receipt,
+	create: async (receiver: Prisma.ReceiverCreateInput): Promise<Receiver> => {
+		const newReceiver = await prisma.receiver.create({
+			data: receiver,
 			include: {
 				province: true,
 				city: true,
 			},
 		});
-		const flat_receipt = {
-			...newReceipt,
-			province: newReceipt.province.name,
-			city: newReceipt.city.name,
+		const flat_receiver = {
+			...newReceiver,
+			province: newReceiver.province.name,
+			city: newReceiver.city.name,
 		};
-		return flat_receipt;
+		return flat_receiver;
 	},
-	getByCi: async (ci: string): Promise<Receipt & { province: Province; city: City }> => {
-		const receipt = await prisma.receipt.findUnique({
+	getByCi: async (ci: string): Promise<Receiver & { province: Province; city: City }> => {
+		const receiver = await prisma.receiver.findUnique({
 			where: { ci: ci },
 			include: {
 				province: true,
 				city: true,
 			},
 		});
-		return receipt;
+		return receiver as Receiver & { province: Province; city: City };
 	},
-	connect: async (receiptId: number, customerId: number): Promise<Receipt> => {
+	connect: async (receiverId: number, customerId: number): Promise<Receiver> => {
 		// Ensure both IDs are valid
-		if (!receiptId || !customerId) {
-			throw new Error("Both receiptId and customerId are required");
+		if (!receiverId || !customerId) {
+			throw new Error("Both receiverId and customerId are required");
 		}
 
-		const updatedReceipt = await prisma.receipt.update({
+		const updatedReceiver = await prisma.receiver.update({
 			where: {
-				id: receiptId,
+				id: receiverId,
 			},
 			data: {
 				customers: {
@@ -115,32 +115,36 @@ const receipts = {
 				customers: true, // Include customer data in response
 			},
 		});
-		const flat_receipt = {
-			...updatedReceipt,
-			province: updatedReceipt.province.name,
-			city: updatedReceipt.city.name,
+		const flat_receiver = {
+			...updatedReceiver,
+			province: updatedReceiver.province.name,
+			city: updatedReceiver.city.name,
 		};
 
-		return flat_receipt;
+		return flat_receiver;
 	},
-	disconnect: async (receiptId: number, customerId: number): Promise<Receipt> => {
-		const updatedReceipt = await prisma.receipt.update({
-			where: { id: receiptId },
+	disconnect: async (receiverId: number, customerId: number): Promise<Receiver> => {
+		const updatedReceiver = await prisma.receiver.update({
+			where: { id: receiverId },
 			data: {
 				customers: {
 					disconnect: { id: customerId },
 				},
 			},
 		});
-		return updatedReceipt;
+		return updatedReceiver;
 	},
-	edit: async (id: number, receipt: Prisma.ReceiptUpdateInput): Promise<Receipt> => {
-		const updatedReceipt = await prisma.receipt.update({
+	edit: async (id: number, receiver: Prisma.ReceiverUpdateInput): Promise<Receiver> => {
+		const updatedReceiver = await prisma.receiver.update({
 			where: { id },
-			data: receipt,
+			data: receiver,
+			include: {
+				province: true,
+				city: true,
+			},
 		});
-		return updatedReceipt;
+		return updatedReceiver;
 	},
 };
 
-export default receipts;
+export default receivers;

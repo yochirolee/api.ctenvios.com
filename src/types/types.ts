@@ -37,7 +37,7 @@ export const customerSchema = z
 		path: ["mobile"], // This will show the error on the mobile field
 	});
 
-export const receiptSchema = z
+export const receiverSchema = z
 	.object({
 		first_name: z.string().min(1, "First name is required"),
 		middle_name: z.string().optional(),

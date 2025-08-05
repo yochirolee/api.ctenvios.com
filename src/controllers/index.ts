@@ -4,7 +4,7 @@ import forwarders from "./forwarders.controller";
 import services from "./services.controller";
 import customers from "./customers.controller";
 import provinces from "./provinces.controller";
-import receipts from "./receipts.controller";
+import receivers from "./receivers.controller";
 import customsRates from "./customs.rates.controller";
 
 const controllers = {
@@ -14,7 +14,7 @@ const controllers = {
 	services,
 	customers,
 	provinces,
-	receipts,
+	receivers,
 	customsRates,
 };
 
