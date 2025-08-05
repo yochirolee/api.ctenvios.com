@@ -318,7 +318,7 @@ async function generateItemsTableWithPagination(
 		// Row data
 
 		const subtotal =
-			item.rate/100 * item.weight +
+			(item.rate / 100) * item.weight +
 			item?.customs_fee +
 			(item?.delivery_fee || 0) +
 			(item?.insurance_fee || 0);
@@ -353,7 +353,7 @@ async function generateItemsTableWithPagination(
 				align: "right",
 			})
 			.text(`${item.weight.toFixed(2)}`, 470, verticalCenter, { width: 40, align: "right" })
-			.text(`$${(subtotal ).toFixed(2)}`, 520, verticalCenter, {
+			.text(`$${subtotal.toFixed(2)}`, 520, verticalCenter, {
 				width: 40,
 				align: "right",
 			});
