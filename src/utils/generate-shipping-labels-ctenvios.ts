@@ -141,7 +141,7 @@ async function generateCleanCTEnviosLabel(
 	doc.rect(margin + 5, currentY + 15, 50, 50).stroke();
 
 	doc
-		.fontSize(28)
+		.fontSize(34)
 		.font("Helvetica-Bold")
 		.fillColor("#000000")
 		.text(transportLetter, margin + 5, currentY + 27, { width: 50, align: "center" });
