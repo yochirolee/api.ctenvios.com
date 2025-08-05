@@ -63,7 +63,6 @@ router.post("/sign-up/email", authMiddleware, async (req, res) => {
 			},
 		});
 
-		
 		if (!response.token) {
 			return res.status(400).json({ message: "User registration failed." });
 		}
@@ -121,11 +120,20 @@ router.get("/get-session", async (req, res) => {
 	res.status(200).json(session);
 });
 
+router.post("/reset-password", async (req, res) => {
+	const { email, password, token } = req.body;
+	const response = await auth.api.resetPassword({
+		body: { newPassword: password, token },
+		headers: fromNodeHeaders(req.headers),
+	});
+	res.status(200).json(response);
+});
+
 router.post("/sign-out", async (req, res) => {
 	const user = await auth.api.signOut({
 		headers: fromNodeHeaders(req.headers),
 	});
-	
+
 	res.status(200).json(user);
 });
 

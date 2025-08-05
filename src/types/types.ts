@@ -1,20 +1,23 @@
 import { z } from "zod";
 import { Request } from "express";
+import { Roles } from "@prisma/client";
 
-// Extended Request interface with auth session and agency info
+// Role hierarchy types
+export interface RoleResponse {
+	success: boolean;
+	data: Roles[];
+	userRole: Roles;
+	message: string;
+}
+
 export interface AuthenticatedRequest extends Request {
 	user: {
 		id: string;
-		name: string;
-		email: string;
-		role?: string;
+		role: Roles;
 		agency_id?: number;
-		agency?: {
-			id: number;
-			name: string;
-		};
+		forwarder_id?: number;
+		[key: string]: any;
 	};
-	session: any; // Better Auth session object
 }
 
 export const customerSchema = z

@@ -3,7 +3,7 @@ import prisma from "../config/prisma_db";
 import receipts_db from "../repository/receipts.repository";
 import { generarTracking } from "../utils/generate_hbl";
 import { generateInvoicePDF } from "../utils/generate-invoice-pdf";
-import { Roles } from "@prisma/client";
+import { PaymentMethod, PaymentStatus, Roles } from "@prisma/client";
 // Removed unused imports for shipping labels
 import {
 	generateCTEnviosLabels,
@@ -55,25 +55,14 @@ const bulkLabelsSchema = z.object({
 		.min(1, "At least one invoice ID is required"),
 });
 
-const router = Router();
-
-// Simple test endpoint to check database connection
-router.get("/test", async (req, res) => {
-	try {
-		const count = await prisma.invoice.count();
-		const first5 = await prisma.invoice.findMany({
-			take: 5,
-			select: { id: true, agency_id: true, created_at: true },
-		});
-		res.json({
-			totalInvoices: count,
-			sampleInvoices: first5,
-			message: "Database connection working",
-		});
-	} catch (error) {
-		res.status(500).json({ error: "Database connection failed", details: error });
-	}
+const paymentSchema = z.object({
+	amount: z.number().min(0, "Amount is required"),
+	payment_method: z.nativeEnum(PaymentMethod),
+	payment_reference: z.string().optional(),
+	notes: z.string().optional(),
 });
+
+const router = Router();
 
 router.get("/", async (req, res) => {
 	const { page, limit } = req.query;
@@ -160,7 +149,6 @@ function buildNameSearchFilter(words: string[]) {
 router.get("/search", authMiddleware, async (req: any, res) => {
 	try {
 		const user = req.user;
-		console.log(user, "user");
 		const { page, limit, search, startDate, endDate } = req.query;
 
 		const searchTerm = (search?.toString().trim() || "").toLowerCase();
@@ -350,7 +338,7 @@ router.post("/", async (req, res) => {
 						customer_id: customer_id,
 						receipt_id: receipt_id,
 						service_id: service_id,
-						total_amount: total_amount,
+						total_amount: Math.round(Number(total_amount) * 100),
 						rate: 0,
 						status: "CREATED",
 						items: {
@@ -408,6 +396,74 @@ router.post("/", async (req, res) => {
 		}
 
 		res.status(500).json({ message: "Error creating invoice", error: error });
+	}
+});
+router.post("/:id/payments", async (req, res) => {
+	try {
+		const {
+			amount, // monto recibido en dólares (ej. 2.47)
+			payment_method,
+			payment_reference,
+			notes,
+		} = paymentSchema.parse(req.body);
+		const { id } = req.params;
+
+		const invoice = await prisma.invoice.findUnique({
+			where: { id: parseInt(id) },
+		});
+
+		if (!invoice) {
+			return res.status(404).json({ message: "Invoice not found" });
+		}
+
+		// Convertimos todos los montos a centavos (enteros)
+		const invoiceTotalCents = Math.round(Number(invoice.total_amount) * 100);
+		const invoicePaidCents = Math.round(Number(invoice.paid_amount) * 100);
+		const paymentCents = Math.round(Number(amount) * 100);
+
+		const pendingCents = invoiceTotalCents - invoicePaidCents;
+
+		if (paymentCents > pendingCents) {
+			return res.status(400).json({
+				message: `Amount is greater than the invoice pending amount. Pending: $${(
+					pendingCents / 100
+				).toFixed(2)}`,
+			});
+		}
+
+		const payment_status =
+			paymentCents === pendingCents ? PaymentStatus.PAID : PaymentStatus.PARTIALLY_PAID;
+
+		const result = await prisma.$transaction(async (tx) => {
+			const updatedInvoice = await tx.invoice.update({
+				where: { id: parseInt(id) },
+				data: {
+					paid_amount: {
+						increment: paymentCents, // guardamos en centavos
+					},
+					payment_status,
+				},
+			});
+
+			const newPayment = await tx.payment.create({
+				data: {
+					invoice_id: parseInt(id),
+					amount: paymentCents, // guardamos en centavos
+					payment_method,
+					payment_reference,
+					payment_date: new Date(),
+					notes,
+					status: payment_status,
+				},
+			});
+
+			return { updatedInvoice, newPayment };
+		});
+
+		res.json(result);
+	} catch (error) {
+		console.error("Payment error:", error);
+		res.status(500).json({ message: "Something went wrong" });
 	}
 });
 router.get("/:id", authMiddleware, async (req: any, res) => {

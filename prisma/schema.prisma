@@ -62,7 +62,6 @@ model Agency {
   customers        Customer[]
   receipts         Receipt[]
   invoices         Invoice[]
-  offers           Offer[]
   items            Item[]
   counters         Counter[]
 }
@@ -204,9 +203,9 @@ model Rates {
   agency          Agency  @relation(fields: [agency_id], references: [id])
   carrier_rates_id Int?
   carrier_rates   CarrierRates? @relation(fields: [carrier_rates_id], references: [id])
-  agency_rate     Float   @default(0)
-  public_rate      Float   @default(0)
-  forwarders_rate Float   @default(1.25)
+  agency_rate     Int   @default(0) // in cents
+  public_rate     Int   @default(0) // in cents
+  forwarders_rate Int   @default(125) // in cents
 }
 
 model Carrier {
@@ -222,7 +221,7 @@ model CarrierRates {
   id         Int        @id @default(autoincrement())
   carrier_id Int
   carrier    Carrier    @relation(fields: [carrier_id], references: [id])
-  rate       Float
+  rate       Int        @default(0) // in cents
   city_id    Int
   rates      Rates[]
   city       City       @relation(fields: [city_id], references: [id])
@@ -231,25 +230,6 @@ model CarrierRates {
   }
 
 
-model Offer {
-  id             Int          @id @default(autoincrement())
-  name           String
-  description    String?
-  discount_type  DiscountType
-  discount_value Decimal
-  min_amount     Decimal? // Minimum purchase amount to apply offer
-  max_discount   Decimal? // Maximum discount amount (for percentage discounts)
-  start_date     DateTime
-  end_date       DateTime
-  is_active      Boolean      @default(true)
-  usage_limit    Int? // Maximum number of times this offer can be used
-  usage_count    Int          @default(0)
-  agency_id      Int? // If null, available for all agencies
-  agency         Agency?      @relation(fields: [agency_id], references: [id])
-  created_at     DateTime     @default(now())
-  updated_at     DateTime     @updatedAt
-  invoices       Invoice[]
-}
 
 model Invoice {
   id               Int              @id @default(autoincrement())
@@ -264,15 +244,9 @@ model Invoice {
   service_id       Int
   service          Service          @relation(fields: [service_id], references: [id])
   items            Item[]
-  rate             Float            @default(0)
-  discount_type    DiscountType?
-  discount_value   Float          @default(0)
-  discount_reason  String?
-  offer_id         Int?
-  offer            Offer?           @relation(fields: [offer_id], references: [id])
-  total_amount     Float            @default(0)
-  paid_amount      Float            @default(0)
-  remaining_amount Float            @default(0)
+  rate             Int              @default(0) // in cents
+  total_amount     Int              @default(0) // in cents
+  paid_amount      Int              @default(0) // in cents
   payment_status   PaymentStatus    @default(PENDING)
   payments         Payment[]
   status           String
@@ -319,7 +293,7 @@ model Payment {
   id                Int           @id @default(autoincrement())
   invoice_id        Int
   invoice           Invoice       @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
-  amount            Decimal
+  amount            Int           @default(0) // in cents
   payment_method    PaymentMethod
   payment_reference String?
   payment_date      DateTime      @default(now())
@@ -362,10 +336,6 @@ enum ServiceType {
   AIR
 }
 
-enum DiscountType {
-  PERCENTAGE
-  FIXED_AMOUNT
-}
 
 enum PaymentMethod {
   CASH
