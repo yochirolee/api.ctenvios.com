@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { authMiddleware } from "../middlewares/auth-midleware";
 import providers_routes from "./providers.routes";
 import agencies_routes from "./agencies.routes";
 import services_routes from "./services.routes";
@@ -10,8 +11,8 @@ import receivers_routes from "./receivers.routes";
 import invoices_routes from "./invoices.routes";
 import users_routes from "./users.routes";
 import customs_rates_routes from "./customs.rates.routes";
-import { authMiddleware } from "../middlewares/auth-midleware";
 import roles_routes from "./roles.routes";
+import payments_routes from "./payments.routes";
 const router = Router();
 
 router.get("/", (req: Request, res: Response) => {
@@ -31,5 +32,6 @@ router.use("/receivers", receivers_routes);
 router.use("/provinces", provinces_routes);
 router.use("/invoices", invoices_routes);
 router.use("/roles", roles_routes);
+router.use("/payments", payments_routes);
 
 export default router;

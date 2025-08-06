@@ -103,6 +103,12 @@ router.get("/", async (req, res) => {
 					mobile: true,
 				},
 			},
+			user: {
+				select: {
+					id: true,
+					name: true,
+				},
+			},
 			_count: {
 				select: {
 					items: true,
@@ -236,7 +242,13 @@ router.get("/search", authMiddleware, async (req: any, res) => {
 							ci: true,
 						},
 					},
-					items: true,
+					items: true,		
+					user: {
+						select: {
+							id: true,
+							name: true,
+						},
+					},
 					_count: { select: { items: true } },
 				},
 				where: whereClause,
@@ -275,6 +287,12 @@ router.get("/search", authMiddleware, async (req: any, res) => {
 							},
 						},
 						items: true,
+						user: {
+							select: {
+								id: true,
+								name: true,
+							},
+						},
 						_count: { select: { items: true } },
 					},
 					where: fallbackClause,
@@ -398,7 +416,7 @@ router.post("/", async (req, res) => {
 		res.status(500).json({ message: "Error creating invoice", error: error });
 	}
 });
-router.post("/:id/payments", async (req, res) => {
+router.post("/:id/payments", authMiddleware, async (req: any, res) => {
 	try {
 		const {
 			amount, // monto recibido en dólares (ej. 2.47)
@@ -407,6 +425,9 @@ router.post("/:id/payments", async (req, res) => {
 			notes,
 		} = paymentSchema.parse(req.body);
 		const { id } = req.params;
+		const user = req.user;
+
+		console.log(user, "user");
 
 		const invoice = await prisma.invoice.findUnique({
 			where: { id: parseInt(id) },
@@ -416,12 +437,16 @@ router.post("/:id/payments", async (req, res) => {
 			return res.status(404).json({ message: "Invoice not found" });
 		}
 
-		// Convertimos todos los montos a centavos (enteros)
-		const invoiceTotalCents = Math.round(Number(invoice.total_amount) * 100);
-		const invoicePaidCents = Math.round(Number(invoice.paid_amount) * 100);
+		console.log(invoice, "invoice");
+		console.log(invoice?.total_amount, "invoice.total_amount");
+		console.log(invoice?.paid_amount, "invoice.paid_amount");
+		console.log(amount, "amount");
+		//paymento to cents
 		const paymentCents = Math.round(Number(amount) * 100);
 
-		const pendingCents = invoiceTotalCents - invoicePaidCents;
+		const pendingCents = invoice.total_amount - invoice.paid_amount;
+
+		console.log(pendingCents, paymentCents, "pendingCents, paymentCents");
 
 		if (paymentCents > pendingCents) {
 			return res.status(400).json({
@@ -454,6 +479,7 @@ router.post("/:id/payments", async (req, res) => {
 					payment_date: new Date(),
 					notes,
 					status: payment_status,
+					user_id: user.id,
 				},
 			});
 
@@ -465,6 +491,14 @@ router.post("/:id/payments", async (req, res) => {
 		console.error("Payment error:", error);
 		res.status(500).json({ message: "Something went wrong" });
 	}
+});
+router.delete("/:id/payments", authMiddleware, async (req: any, res) => {
+	const { id } = req.params;
+	const user = req.user;
+	const payment = await prisma.payment.delete({
+		where: { id: parseInt(id) },
+	});
+	res.status(200).json(payment);
 });
 router.get("/:id", authMiddleware, async (req: any, res) => {
 	const { id } = req.params;
@@ -644,7 +678,7 @@ router.get("/:id/labels/", async (req, res) => {
 			where: { id: parseInt(id) },
 			include: {
 				customer: true,
-					receiver: {
+				receiver: {
 					include: {
 						province: true,
 						city: true,
@@ -717,7 +751,7 @@ router.post("/labels/bulk", async (req: Request, res: Response) => {
 			},
 			include: {
 				customer: true,
-					receiver: {
+				receiver: {
 					include: {
 						province: true,
 						city: true,

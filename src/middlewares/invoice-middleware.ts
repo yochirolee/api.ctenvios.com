@@ -28,7 +28,15 @@ export function invoiceHistoryMiddleware(userId: string, prisma: PrismaClient): 
 			const changes: any = {};
 
 			// Campos directos en Invoice a comparar
-			const fieldsToTrack = ["service_id", "customer_id", "receipt_id", "total"];
+			const fieldsToTrack = [
+				"service_id",
+				"customer_id",
+				"receipt_id",
+				"total_amount",
+				"paid_amount",
+				"payment_status",
+				"status",
+			];
 
 			// Helper function to normalize values for comparison
 			const normalizeValue = (value: any) => {
