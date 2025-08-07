@@ -363,23 +363,23 @@ async function generateCleanCTEnviosLabel(
 		.fontSize(20)
 		.font("Helvetica-Bold")
 		.fillColor("#000000")
-		.text(`${invoice.id}`, labelWidth - 140, labelHeight - 35, { width: 60, align: "right" });
+		.text(`${invoice.id}`, labelWidth - 160, labelHeight - 35, { width: 60, align: "center" });
 
 	doc
 		.fontSize(8)
 		.font("Helvetica")
-		.text("Factura", labelWidth - 140, labelHeight - 45, { width: 60, align: "right" });
+		.text("Factura", labelWidth - 165, labelHeight - 45, { width: 60, align: "center" });
 	// Pack number
 	doc
 		.fontSize(8)
 		.font("Helvetica")
-		.text("Paquete", labelWidth - 70, labelHeight - 45, { width: 60, align: "right" });
+		.text("Paquete", labelWidth - 85, labelHeight - 45, { width: 60, align: "center" });
 	doc
 		.fontSize(20)
 		.font("Helvetica-Bold")
-		.text(`${itemIndex + 1}-${invoice.items.length}`, labelWidth - 70, labelHeight - 35, {
-			width: 60,
-			align: "right",
+		.text(`${itemIndex + 1}-${invoice.items.length}`, labelWidth - 85, labelHeight - 35, {
+			width: 80,
+			align: "center",
 		});
 }
 

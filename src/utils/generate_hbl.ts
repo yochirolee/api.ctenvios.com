@@ -1,49 +1,70 @@
 import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
+interface HBLGenerationResult {
+	success: boolean;
+	hblCodes: string[];
+	error?: string;
+}
+
 export async function generarTracking(
 	agencyId: number,
 	serviceId: number,
 	cantidad = 1,
 ): Promise<string[]> {
+	const maxRetries = 5;
+
+	for (let attempt = 1; attempt <= maxRetries; attempt++) {
+		const result = await generateUniqueHBL(agencyId, serviceId, cantidad);
+
+		if (result.success) {
+			return result.hblCodes;
+		}
+
+		if (attempt === maxRetries) {
+			console.error(`Failed to generate unique HBL after ${maxRetries} attempts:`, result.error);
+			throw new Error(`Unable to generate unique HBL codes: ${result.error}`);
+		}
+
+		// Wait before retry with exponential backoff
+		await new Promise((resolve) => setTimeout(resolve, Math.pow(2, attempt) * 100));
+	}
+
+	return [];
+}
+
+async function generateUniqueHBL(
+	agencyId: number,
+	serviceId: number,
+	cantidad: number,
+): Promise<HBLGenerationResult> {
 	try {
 		const today = new Date();
 		const todayOnlyDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
 		return await prisma.$transaction(async (tx) => {
-			let updatedCounter;
-
-			try {
-				// Intenta actualizar el contador atómicamente
-				updatedCounter = await tx.counter.update({
-					where: {
-						date_agency_id: {
-							agency_id: agencyId,
-							date: todayOnlyDate,
-						},
-					},
-					data: {
-						counter: {
-							increment: cantidad,
-						},
-					},
-					select: {
-						counter: true,
-					},
-				});
-			} catch (error) {
-				// Si no existe, lo crea
-				updatedCounter = await tx.counter.create({
-					data: {
+			// Intenta actualizar el contador atómicamente
+			const updatedCounter = await tx.counter.upsert({
+				where: {
+					date_agency_id: {
 						agency_id: agencyId,
 						date: todayOnlyDate,
-						counter: cantidad,
 					},
-					select: {
-						counter: true,
+				},
+				create: {
+					agency_id: agencyId,
+					date: todayOnlyDate,
+					counter: cantidad,
+				},
+				update: {
+					counter: {
+						increment: cantidad,
 					},
-				});
-			}
+				},
+				select: {
+					counter: true,
+				},
+			});
 
 			// Genera los códigos
 			const newSequence = updatedCounter.counter;
@@ -58,11 +79,40 @@ export async function generarTracking(
 				return `CTE${fecha}${servicio}${agencia}${secuencia}`;
 			});
 
-			return codigos;
-			//return `CTE${fecha}${servicio}${agencia}${secuencia}`;
+			// Verificar que no existan HBL duplicados en la base de datos
+			/* 	const existingHBLs = await tx.item.findMany({
+				where: {
+					hbl: {
+						in: codigos,
+					},
+				},
+				select: {
+					hbl: true,
+				},
+			});
+
+			if (existingHBLs.length > 0) {
+				const duplicates = existingHBLs.map((item) => item.hbl);
+				return {
+					success: false,
+					hblCodes: [],
+					error: `Duplicate HBL codes found: ${duplicates.join(", ")}`,
+				};
+			} */
+
+			return {
+				success: true,
+				hblCodes: codigos,
+			};
 		});
 	} catch (error: any) {
-		console.log(error.message);
-		return [];
+		console.error("Error generating HBL:", error.message);
+		return {
+			success: false,
+			hblCodes: [],
+			error: error.message,
+		};
 	}
 }
+
+
