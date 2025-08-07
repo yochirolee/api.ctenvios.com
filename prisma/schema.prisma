@@ -415,7 +415,7 @@ model Jwks {
 
 model Counter {
   id         Int      @id @default(autoincrement())
-  date       DateTime
+  date       String
   agency_id  Int
   agency     Agency   @relation(fields: [agency_id], references: [id])
   counter    Int
