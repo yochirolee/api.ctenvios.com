@@ -40,7 +40,7 @@ async function generateUniqueHBL(
 ): Promise<HBLGenerationResult> {
 	try {
 		const today = new Date();
-		const todayOnlyDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+		const todayOnlyDate = today.toISOString().slice(2, 10).replace(/-/g, "");
 
 		return await prisma.$transaction(async (tx) => {
 			// Intenta actualizar el contador atómicamente
