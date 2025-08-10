@@ -17,9 +17,9 @@ const paymentSchema = z.object({
 router.post("/invoice/:id", authMiddleware, async (req: any, res) => {
 	try {
 		const { id } = req.params;
+
 		if (!id) return res.status(400).json({ message: "Invoice ID is required" });
 		const { amount, payment_method, payment_reference, notes } = paymentSchema.parse(req.body);
-
 		const user = req.user;
 		const invoice = await prisma.invoice.findUnique({
 			where: { id: parseInt(id) },
@@ -47,7 +47,7 @@ router.post("/invoice/:id", authMiddleware, async (req: any, res) => {
 				},
 			});
 
-			const newPayment = await tx.payment.create({
+			 await tx.payment.create({
 				data: {
 					invoice_id: parseInt(id),
 					amount: paymentCents,
@@ -59,7 +59,7 @@ router.post("/invoice/:id", authMiddleware, async (req: any, res) => {
 					user_id: user.id,
 				},
 			});
-			await registerInvoiceChange	(
+			await registerInvoiceChange(
 				tx as PrismaClient,
 				invoice as Invoice,
 				updatedInvoice as Invoice,
@@ -67,7 +67,7 @@ router.post("/invoice/:id", authMiddleware, async (req: any, res) => {
 				`Payment of $${(amount / 100).toFixed(2)} added to invoice ${id}`,
 			);
 
-			return { updatedInvoice, newPayment };
+			return  updatedInvoice;
 		});
 
 		res.json(result);

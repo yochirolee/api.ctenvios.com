@@ -13,6 +13,7 @@ import { z } from "zod";
 import AppError from "../utils/app.error";
 import { invoiceHistoryMiddleware } from "../middlewares/invoice-middleware";
 import { authMiddleware } from "../middlewares/auth-midleware";
+import { buildInvoiceTimeline } from "../utils/build-invoice-timeline";
 
 const invoiceItemSchema = z.object({
 	description: z.string().min(1, "Description is required"),
@@ -242,7 +243,7 @@ router.get("/search", authMiddleware, async (req: any, res) => {
 							ci: true,
 						},
 					},
-					items: true,		
+					items: true,
 					user: {
 						select: {
 							id: true,
@@ -416,90 +417,7 @@ router.post("/", async (req, res) => {
 		res.status(500).json({ message: "Error creating invoice", error: error });
 	}
 });
-router.post("/:id/payments", authMiddleware, async (req: any, res) => {
-	try {
-		const {
-			amount, // monto recibido en dólares (ej. 2.47)
-			payment_method,
-			payment_reference,
-			notes,
-		} = paymentSchema.parse(req.body);
-		const { id } = req.params;
-		const user = req.user;
 
-		console.log(user, "user");
-
-		const invoice = await prisma.invoice.findUnique({
-			where: { id: parseInt(id) },
-		});
-
-		if (!invoice) {
-			return res.status(404).json({ message: "Invoice not found" });
-		}
-
-		console.log(invoice, "invoice");
-		console.log(invoice?.total_amount, "invoice.total_amount");
-		console.log(invoice?.paid_amount, "invoice.paid_amount");
-		console.log(amount, "amount");
-		//paymento to cents
-		const paymentCents = Math.round(Number(amount) * 100);
-
-		const pendingCents = invoice.total_amount - invoice.paid_amount;
-
-		console.log(pendingCents, paymentCents, "pendingCents, paymentCents");
-
-		if (paymentCents > pendingCents) {
-			return res.status(400).json({
-				message: `Amount is greater than the invoice pending amount. Pending: $${(
-					pendingCents / 100
-				).toFixed(2)}`,
-			});
-		}
-
-		const payment_status =
-			paymentCents === pendingCents ? PaymentStatus.PAID : PaymentStatus.PARTIALLY_PAID;
-
-		const result = await prisma.$transaction(async (tx) => {
-			const updatedInvoice = await tx.invoice.update({
-				where: { id: parseInt(id) },
-				data: {
-					paid_amount: {
-						increment: paymentCents, // guardamos en centavos
-					},
-					payment_status,
-				},
-			});
-
-			const newPayment = await tx.payment.create({
-				data: {
-					invoice_id: parseInt(id),
-					amount: paymentCents, // guardamos en centavos
-					payment_method,
-					payment_reference,
-					payment_date: new Date(),
-					notes,
-					status: payment_status,
-					user_id: user.id,
-				},
-			});
-
-			return { updatedInvoice, newPayment };
-		});
-
-		res.json(result);
-	} catch (error) {
-		console.error("Payment error:", error);
-		res.status(500).json({ message: "Something went wrong" });
-	}
-});
-router.delete("/:id/payments", authMiddleware, async (req: any, res) => {
-	const { id } = req.params;
-	const user = req.user;
-	const payment = await prisma.payment.delete({
-		where: { id: parseInt(id) },
-	});
-	res.status(200).json(payment);
-});
 router.get("/:id", authMiddleware, async (req: any, res) => {
 	const { id } = req.params;
 	const user = req.user;
@@ -539,6 +457,33 @@ router.get("/:id", authMiddleware, async (req: any, res) => {
 		},
 	});
 	res.status(200).json({ rows: rows ? [rows] : [], total: rows ? 1 : 0 });
+});
+
+router.get("/:id/history", authMiddleware, async (req, res) => {
+	const { id } = req.params;
+	if (!id)
+		res.status(401).send({
+			message: "The id is required",
+		});
+	const invoice = await prisma.invoice.findFirst({
+		where: {
+			id: parseInt(id),
+		},
+		include: {
+			payments: {
+				orderBy: {
+					created_at: "desc",
+				},
+			},
+			invoice_history: {
+				orderBy: {
+					created_at: "desc",
+				},
+			},
+		},
+	});
+	const timeline = buildInvoiceTimeline(invoice as any);
+	res.status(200).json(timeline);
 });
 router.delete("/:id", async (req, res) => {
 	const { id } = req.params;

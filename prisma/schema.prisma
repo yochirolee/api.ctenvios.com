@@ -248,6 +248,7 @@ model Invoice {
   rate             Int              @default(0) // in cents
   total_amount     Int              @default(0) // in cents
   paid_amount      Int              @default(0) // in cents
+  fee_amount       Int              @default(0) // in cents
   payment_status   PaymentStatus    @default(PENDING)
   payments         Payment[]
   status           String
