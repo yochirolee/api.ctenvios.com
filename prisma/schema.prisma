@@ -38,6 +38,7 @@ model User {
   accounts        Account[]
   invoice_history InvoiceHistory[]
   payments        Payment[]
+  discounts       Discount[]
 
   @@map("user")
 }
@@ -173,6 +174,7 @@ model Forwarder {
   agencies   Agency[]
   users      User[]
   providers  Provider[]
+  carriers   Carrier[]
 }
 
 model Service {
@@ -216,6 +218,8 @@ model Carrier {
   updated_at DateTime   @updatedAt
   services    Service[]
   carrier_rates CarrierRates[]
+  forwarder_id Int
+  forwarder    Forwarder @relation(fields: [forwarder_id], references: [id])
 }
 
 model CarrierRates {
@@ -251,6 +255,7 @@ model Invoice {
   fee_amount       Int              @default(0) // in cents
   payment_status   PaymentStatus    @default(PENDING)
   payments         Payment[]
+  discounts        Discount[]
   status           String
   created_at       DateTime         @default(now())
   updated_at       DateTime         @updatedAt
@@ -306,6 +311,18 @@ model Payment {
   user_id           String
   user              User          @relation(fields: [user_id], references: [id])
 }
+model Discount {
+  id         Int        @id @default(autoincrement())
+  name       String
+  invoice_id Int
+  invoice    Invoice    @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
+  user_id    String
+  user       User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  type       DiscountType
+  description String?
+  discount   Int @default(0)// in cents
+  created_at DateTime   @default(now())
+}
 
 model CustomsRates {
   id           Int      @id @default(autoincrement())
@@ -349,6 +366,14 @@ enum PaymentMethod {
   PAYPAL
   ZELLE
   CHECK
+}
+
+enum DiscountType {
+  PERCENTAGE
+  CASH
+  RATE
+  FIXED
+  CUSTOM
 }
 
 enum PaymentStatus {

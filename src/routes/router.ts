@@ -13,6 +13,8 @@ import users_routes from "./users.routes";
 import customs_rates_routes from "./customs.rates.routes";
 import roles_routes from "./roles.routes";
 import payments_routes from "./payments.routes";
+import analytics_routes from "./analytics.routes";
+
 const router = Router();
 
 router.get("/", (req: Request, res: Response) => {
@@ -33,5 +35,6 @@ router.use("/provinces", provinces_routes);
 router.use("/invoices", invoices_routes);
 router.use("/roles", roles_routes);
 router.use("/payments", payments_routes);
+router.use("/analytics", analytics_routes);
 
 export default router;

@@ -6,6 +6,7 @@ import customers from "./customers.controller";
 import provinces from "./provinces.controller";
 import receivers from "./receivers.controller";
 import customsRates from "./customs.rates.controller";
+import { analytics } from "./analytics.controller";
 
 const controllers = {
 	agencies,
@@ -16,6 +17,7 @@ const controllers = {
 	provinces,
 	receivers,
 	customsRates,
+	analytics,
 };
 
 export default controllers;

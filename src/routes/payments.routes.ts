@@ -47,7 +47,7 @@ router.post("/invoice/:id", authMiddleware, async (req: any, res) => {
 				},
 			});
 
-			 await tx.payment.create({
+			await tx.payment.create({
 				data: {
 					invoice_id: parseInt(id),
 					amount: paymentCents,
@@ -67,7 +67,7 @@ router.post("/invoice/:id", authMiddleware, async (req: any, res) => {
 				`Payment of $${(amount / 100).toFixed(2)} added to invoice ${id}`,
 			);
 
-			return  updatedInvoice;
+			return updatedInvoice;
 		});
 
 		res.json(result);
@@ -103,13 +103,11 @@ router.delete("/:id", authMiddleware, async (req: any, res) => {
 	});
 	if (!invoice) return res.status(404).json({ message: "Invoice not found" });
 
-	invoice.paid_amount = invoice.paid_amount - payment_to_delete.amount;
-
 	//transaction to update invoice and delete payment
 	await prisma.$transaction(async (tx) => {
 		await tx.invoice.update({
 			where: { id: invoice.id },
-			data: { paid_amount: invoice.paid_amount },
+			data: { paid_amount: { decrement: payment_to_delete.amount } },
 		});
 		await tx.payment.delete({ where: { id: parseInt(id) } });
 	});

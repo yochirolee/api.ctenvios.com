@@ -55,22 +55,20 @@ export const receivers = {
 	},
 	create: async (req: Request, res: Response) => {
 		const { error } = receiverSchema.safeParse(req.body);
+		console.log(req.body, "req.body");
+		console.log(error, "error");
 		if (error) {
 			return res.status(400).json({ message: error.message });
 		}
 		const customer_id = parseInt(req.query.customerId as string);
 
 		const receiver = await repository.receivers.create(req.body as Prisma.ReceiverCreateInput);
-		const flat_receiver = {
-			...receiver,
-			province: receiver?.province?.name,
-			city: receiver?.city?.name,
-		};
+		
 
-		if (customer_id) {
+		if (customer_id && customer_id > 0) {
 			await repository.receivers.connect(receiver.id, customer_id);
 		}
-		res.status(201).json(flat_receiver);
+		res.status(201).json(receiver);
 	},
 
 	edit: async (req: Request, res: Response) => {

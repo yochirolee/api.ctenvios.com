@@ -6,6 +6,7 @@ import customers from "./customers.repository";
 import provinces from "./provinces.repository";
 import receivers from "./receivers.repository";
 import customsRates from "./customs.rates.repository";
+import { analytics } from "./analytics.repository";
 
 export const repository = {
 	agencies,
@@ -16,6 +17,7 @@ export const repository = {
 	provinces,
 	receivers,
 	customsRates,
+	analytics,
 };
 
 export default repository;

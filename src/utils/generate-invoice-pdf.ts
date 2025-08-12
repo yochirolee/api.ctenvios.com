@@ -317,7 +317,7 @@ async function generateItemsTableWithPagination(
 
 		// Row data
 
-		const subtotal =
+		const row_subtotal =
 			(item.rate / 100) * item.weight +
 			item?.customs_fee +
 			(item?.delivery_fee || 0) +
@@ -353,7 +353,7 @@ async function generateItemsTableWithPagination(
 				align: "right",
 			})
 			.text(`${item.weight.toFixed(2)}`, 470, verticalCenter, { width: 40, align: "right" })
-			.text(`$${subtotal.toFixed(2)}`, 520, verticalCenter, {
+			.text(`$${row_subtotal.toFixed(2)}`, 520, verticalCenter, {
 				width: 40,
 				align: "right",
 			});
@@ -378,6 +378,13 @@ async function generateItemsTableWithPagination(
 	currentY += 30;
 
 	// Totals section - right aligned
+	const subtotal = invoice.items.reduce((acc, item) => acc + (item.rate * item.weight) / 100, 0);
+
+	const total_customs_fee = invoice?.items.reduce(
+		(acc: number, item: any) => acc + item?.customs_fee,
+		0,
+	);
+
 	const shipping = 0;
 	const tax = 0;
 	const discount = 0;
@@ -388,18 +395,18 @@ async function generateItemsTableWithPagination(
 		.fontSize(10)
 		.font("Helvetica")
 		.text("Subtotal", 420, currentY)
-		.text(`$${((invoice.total_amount || 0) / 100).toFixed(2)}`, 520, currentY, {
+		.text(`$${subtotal.toFixed(2)}`, 520, currentY, {
 			width: 50,
 			align: "right",
 		});
 
 	currentY += 15;
 
-	// Shipping
+	// Customs fee
 	doc
 		.fillColor("#000000")
-		.text("Shipping", 420, currentY)
-		.text(`$${shipping}`, 520, currentY, { width: 50, align: "right" });
+		.text("Aranceles", 420, currentY)
+		.text(`$${total_customs_fee}`, 520, currentY, { width: 50, align: "right" });
 
 	currentY += 15;
 
