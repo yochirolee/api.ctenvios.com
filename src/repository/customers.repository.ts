@@ -91,7 +91,6 @@ const customers = {
 			skip: (page - 1) * limit,
 			take: limit,
 		});
-		console.log(receivers);
 		return receivers as (Receiver & { province: Province; city: City })[];
 	},
 	create: async (customer: Prisma.CustomerCreateInput): Promise<Customer> => {

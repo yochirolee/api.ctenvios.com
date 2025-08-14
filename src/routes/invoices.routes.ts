@@ -32,6 +32,7 @@ const newInvoiceSchema = z.object({
 	receiver_id: z.number().min(1, "Receiver ID is required"),
 	service_id: z.number().min(1, "Service ID is required"),
 	items: z.array(invoiceItemSchema),
+	rate_id: z.number().min(1, "Rate ID is required"),
 	total_amount: z.number().min(1, "Total amount is required"),
 });
 
@@ -54,13 +55,6 @@ const bulkLabelsSchema = z.object({
 			},
 		)
 		.min(1, "At least one invoice ID is required"),
-});
-
-const paymentSchema = z.object({
-	amount: z.number().min(0, "Amount is required"),
-	payment_method: z.nativeEnum(PaymentMethod),
-	payment_reference: z.string().optional(),
-	notes: z.string().optional(),
 });
 
 const router = Router();
@@ -315,9 +309,24 @@ router.get("/search", authMiddleware, async (req: any, res) => {
 
 router.post("/", async (req, res) => {
 	try {
-		console.log(req.body, "req.body");
-		const { agency_id, user_id, customer_id, receiver_id, total_amount, service_id, items } =
-			newInvoiceSchema.parse(req.body);
+		const {
+			agency_id,
+			user_id,
+			customer_id,
+			receiver_id,
+			rate_id,
+			total_amount,
+			service_id,
+			items,
+		} = newInvoiceSchema.parse(req.body);
+
+		const rate = await prisma.rates.findUnique({
+			where: { id: rate_id },
+		});
+
+		if (!rate) {
+			return res.status(400).json({ message: "Rate not found" });
+		}
 
 		// Generate all HBL codes first (outside transaction for bulk efficiency)
 		const totalQuantity = items.reduce((sum: number, item: any) => sum + (item.quantity || 1), 0);
@@ -334,6 +343,8 @@ router.post("/", async (req, res) => {
 					hbl,
 					description: item.description,
 					rate: Math.round(item.rate * 100),
+					agency_rate: rate?.agency_rate || 0,
+					forwarder_rate: rate?.forwarder_rate || 0,
 					customs_fee: item.customs_fee || 0,
 					delivery_fee: item.delivery_fee || 0,
 					insurance_fee: item.insurance_fee || 0,
@@ -346,8 +357,6 @@ router.post("/", async (req, res) => {
 			})
 			.flat();
 
-		console.log(items_hbl, "items_hbl");
-
 		const transaction = await prisma.$transaction(
 			async (tx) => {
 				const invoice = await tx.invoice.create({
@@ -358,7 +367,7 @@ router.post("/", async (req, res) => {
 						receiver_id: receiver_id,
 						service_id: service_id,
 						total_amount: Math.round(Number(total_amount) * 100),
-						rate: 0,
+						rate_id: rate_id,
 						status: "CREATED",
 						items: {
 							create: [...items_hbl],
@@ -379,8 +388,6 @@ router.post("/", async (req, res) => {
 		);
 		res.status(200).json(transaction);
 	} catch (error) {
-		console.log(error, "error");
-
 		// Handle Zod validation errors specifically
 		if (error instanceof z.ZodError) {
 			console.log("Validation errors with paths:");

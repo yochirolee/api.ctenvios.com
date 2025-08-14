@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Request } from "express";
-import { Roles } from "@prisma/client";
+import { AgencyType, Roles } from "@prisma/client";
 
 // Role hierarchy types
 export interface RoleResponse {
@@ -69,4 +69,6 @@ export const agencySchema = z.object({
 	created_at: z.date().optional(),
 	updated_at: z.date().optional(),
 	services: z.array(z.number()).optional(),
+	website: z.string().optional(),
+	agency_type: z.nativeEnum(AgencyType).optional().default(AgencyType.AGENCY),
 });

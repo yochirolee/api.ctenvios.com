@@ -1,6 +1,6 @@
-import { Request, Response, NextFunction } from "express";
+import { Request, Response } from "express";
 import { z } from "zod";
-import { Agency, Prisma } from "@prisma/client";
+import { Agency, AgencyType, Prisma, Roles } from "@prisma/client";
 import AppError from "../utils/app.error";
 
 import { agencySchema } from "../types/types";
@@ -10,8 +10,16 @@ import repository from "../repository";
 const agencyUpdateSchema = agencySchema.partial();
 
 const agencies = {
-	getAll: async (req: Request, res: Response) => {
-		const agencies = await repository.agencies.getAll();
+	getAll: async (req: any, res: Response) => {
+		const user = req.user;
+		const user_agency = await repository.agencies.getById(user.agency_id);
+		let agencies = [];
+		if (user_agency?.agency_type === AgencyType.FORWARDER) {
+			agencies = await repository.agencies.getAll();
+		} else {
+			agencies.push(user_agency);
+			agencies.push(...(await repository.agencies.getChildren(Number(user_agency?.id))));
+		}
 		res.status(200).json(agencies);
 	},
 	getById: async (req: Request, res: Response) => {
@@ -29,21 +37,88 @@ const agencies = {
 		res.status(200).json(users);
 	},
 
-	create: async (req: Request, res: Response) => {
-		const result = agencySchema.safeParse(req.body);
+	create: async (req: any, res: Response) => {
+		const user = req.user;
+		if (
+			user.role !== Roles.ROOT &&
+			user.role !== Roles.ADMINISTRATOR &&
+			user.role !== Roles.AGENCY_ADMIN
+		) {
+			res.status(400).json({
+				message: "You are not authorized to create this agency, please contact the administrator",
+			});
+			return;
+		}
+		const user_agency = await repository.agencies.getById(user.agency_id);
+		console.log("User agency:", {
+			id: user_agency?.id,
+			type: user_agency?.agency_type,
+			name: user_agency?.name,
+		});
+		if (
+			user_agency?.agency_type !== AgencyType.FORWARDER &&
+			user_agency?.agency_type !== AgencyType.RESELLER
+		) {
+			res.status(400).json({
+				message: "You are not authorized to create this agency, please contact the administrator",
+			});
+			return;
+		}
+
+		console.log(req.body);
+		const result = agencySchema.safeParse(req.body) as z.SafeParseReturnType<
+			typeof agencySchema,
+			Agency
+		>;
 		if (!result.success) {
+			console.log(result.error.flatten().fieldErrors);
 			throw new AppError("Invalid agency data", 400, result.error.flatten().fieldErrors, "zod");
 		}
-		const agency = await repository.agencies.create(result.data as Partial<Prisma.AgencyCreateInput>);
-		res.status(201).json({
-			agency,
-		});
+
+		const data = result.data;
+
+		// Set parent agency relationship based on user's agency type
+		if (user_agency?.agency_type === AgencyType.FORWARDER) {
+			// FORWARDER can create agencies without parent (top-level) or with themselves as parent
+			data.parent_agency_id = data.parent_agency_id || null;
+		} else if (user_agency?.agency_type === AgencyType.RESELLER) {
+			// RESELLER agencies must have the current user's agency as parent
+			data.parent_agency_id = user_agency.id;
+			data.agency_type = AgencyType.AGENCY;
+		}
+
+		// Validate that forwarder_id is set correctly
+		if (!data.forwarder_id) {
+			data.forwarder_id = user_agency?.forwarder_id || 1; // Default to forwarder 1 if not specified
+		}
+
+		try {
+			console.log("Creating agency with data:", {
+				name: data.name,
+				type: data.agency_type,
+				parent_id: data.parent_agency_id,
+				forwarder_id: data.forwarder_id,
+			});
+
+			const agency = await repository.agencies.create(data as Partial<Prisma.AgencyCreateInput>);
+
+			console.log("Agency created successfully:", { id: agency.id, name: agency.name });
+
+			res.status(201).json({
+				message: "Agency created successfully",
+				agency,
+			});
+		} catch (error) {
+			console.error("Failed to create agency:", error);
+			throw new AppError("Failed to create agency", 500, [], "database");
+		}
 	},
+
 	update: async (req: Request, res: Response) => {
 		const { id } = req.params;
 		const result = agencyUpdateSchema.safeParse(req.body) as z.SafeParseReturnType<
 			typeof agencyUpdateSchema,
-			Agency
+			Prisma.AgencyUpdateInput
 		>;
 		if (!result.success) {
 			throw new AppError("Invalid agency data", 400, result.error.flatten().fieldErrors, "zod");
@@ -75,7 +150,6 @@ const agencies = {
 		const servicesAndRates = await repository.agencies.getServicesAndRates(Number(id));
 		res.status(200).json(servicesAndRates);
 	},
-	
 };
 
 export default agencies;

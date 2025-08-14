@@ -2,7 +2,7 @@ import { Request, RequestHandler, Response } from "express";
 import { customerSchema } from "../types/types";
 import repository from "../repository";
 import AppError from "../utils/app.error";
-import { Prisma } from "@prisma/client";
+import { Prisma, Customer } from "@prisma/client";
 import capitalize from "../utils/capitalize";
 
 export const customers = {
@@ -33,33 +33,39 @@ export const customers = {
 	}) as RequestHandler,
 
 	create: (async (req: Request, res: Response) => {
-		const { error } = customerSchema.safeParse(req.body);
-		if (error) {
-			throw new AppError("Invalid customer data", 400, error.flatten().fieldErrors, "zod");
-		}
-		const {
-			mobile,
-			first_name,
-			last_name,
-			middle_name,
-			second_last_name,
-			address,
-			identity_document,
-			email,
-		} = req.body;
-		const new_customer = {
-			identity_document: identity_document?.trim() || null,
-			email: email?.trim() || null,
-			first_name: capitalize(first_name.trim()),
-			last_name: capitalize(last_name.trim()),
-			middle_name: middle_name ? capitalize(middle_name.trim()) : null,
-			second_last_name: second_last_name ? capitalize(second_last_name.trim()) : null,
-			mobile: mobile.replace(/\s+/g, ""),
-			address: address?.trim() || null,
-		};
+		try {
+			const { error } = customerSchema.safeParse(req.body);
+			if (error) {
+				throw new AppError("Invalid customer data", 400, error.flatten().fieldErrors, "zod");
+			}
+			const {
+				mobile,
+				first_name,
+				last_name,
+				middle_name,
+				second_last_name,
+				address,
+				identity_document,
+				email,
+			} = req.body;
+			const new_customer = {
+				identity_document: identity_document?.trim() || null,
+				email: email?.trim() || null,
+				first_name: capitalize(first_name.trim()),
+				last_name: capitalize(last_name.trim()),
+				middle_name: middle_name ? capitalize(middle_name.trim()) : null,
+				second_last_name: second_last_name ? capitalize(second_last_name.trim()) : null,
+				mobile: mobile.replace(/\s+/g, ""),
+				address: address?.trim() || null,
+			};
 
-		const customer = await repository.customers.create(new_customer as Prisma.CustomerCreateInput);
-		res.status(201).json(customer);
+			const customer = await repository.customers.create(
+				new_customer as Prisma.CustomerCreateInput,
+			);
+			res.status(201).json(customer);
+		} catch (error: any) {
+			res.status(400).json({ message: "Error creating customer" });
+		}
 	}) as RequestHandler,
 
 	getById: (async (req: Request, res: Response) => {
@@ -82,7 +88,7 @@ export const customers = {
 			parseInt(page as string) || 1,
 			parseInt(limit as string) || 25,
 		);
-				const flat_receivers = receivers.map((receiver) => {
+		const flat_receivers = receivers.map((receiver) => {
 			return {
 				...receiver,
 				province: receiver.province?.name || "",

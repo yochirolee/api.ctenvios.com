@@ -1,7 +1,6 @@
 import prisma from "../config/prisma_db";
 import { Prisma } from "@prisma/client";
 import repository from "./index";
-import { getCACertificates } from "tls";
 
 export const agencies = {
 	getAll: async () => {
@@ -58,8 +57,9 @@ export const agencies = {
 						data: {
 							service_id: service.id,
 							agency_id: createdAgency.id,
-							agency_rate: 1.99,
-							forwarders_rate: 1.25,
+							agency_rate: 199,
+							forwarder_rate: 199,
+							public_rate: 199,
 						},
 					}),
 				),
@@ -91,14 +91,6 @@ export const agencies = {
 	},
 	getChildren: async (id: number) => {
 		const children = await prisma.agency.findMany({
-			include: {
-				services: {
-					include: {
-						rates: true,
-						provider: true,
-					},
-				},
-			},
 			where: { parent_agency_id: id },
 		});
 		return children;

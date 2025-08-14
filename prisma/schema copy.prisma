@@ -51,7 +51,6 @@ model Agency {
   phone            String
   email            String
   logo             String?
-  website          String?
   created_at       DateTime   @default(now())
   updated_at       DateTime   @updatedAt
   forwarder_id     Int
@@ -67,7 +66,6 @@ model Agency {
   invoices         Invoice[]
   items            Item[]
   counters         Counter[]
-  agency_type      AgencyType @default(AGENCY)
 }
 
 model Customer {
@@ -136,7 +134,17 @@ model City {
   carrier_rates CarrierRates[]
 }
 
-
+enum Roles {
+  ROOT
+  ADMINISTRATOR
+  FORWARDER_RESELLER
+  AGENCY_SALES
+  AGENCY_ADMIN
+  AGENCY_SUPERVISOR
+  FORWARDER_ADMIN
+  CARRIER_ADMIN
+  MESSENGER
+}
 
 model Provider {
   id         Int         @id @default(autoincrement())
@@ -198,10 +206,9 @@ model Rates {
   agency          Agency  @relation(fields: [agency_id], references: [id])
   carrier_rates_id Int?
   carrier_rates   CarrierRates? @relation(fields: [carrier_rates_id], references: [id])
-  forwarder_rate  Int   @default(0) // in cents
   agency_rate     Int   @default(0) // in cents
-  public_rate     Int   @default(0) // in cents
-  invoice         Invoice[]
+  sale_rate     Int   @default(0) // in cents
+  forwarders_rate Int   @default(125) // in cents
 }
 
 model Carrier {
@@ -227,6 +234,8 @@ model CarrierRates {
   updated_at DateTime   @updatedAt
   }
 
+
+
 model Invoice {
   id               Int              @id @default(autoincrement())
   user_id          String
@@ -240,12 +249,10 @@ model Invoice {
   service_id       Int
   service          Service          @relation(fields: [service_id], references: [id])
   items            Item[]
-  rate_id          Int
-  rate             Rates            @relation(fields: [rate_id], references: [id])
+  rate             Int              @default(0) // in cents
   total_amount     Int              @default(0) // in cents
   paid_amount      Int              @default(0) // in cents
-  charge_amount    Int              @default(0) // in cents
-  discount_amount  Int @default(0) // in cents
+  fee_amount       Int              @default(0) // in cents
   payment_status   PaymentStatus    @default(PENDING)
   payments         Payment[]
   discounts        Discount[]
@@ -253,6 +260,17 @@ model Invoice {
   created_at       DateTime         @default(now())
   updated_at       DateTime         @updatedAt
   invoice_history  InvoiceHistory[]
+}
+
+model InvoiceHistory {
+  id             Int      @id @default(autoincrement())
+  invoice_id     Int
+  invoice        Invoice  @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
+  user_id        String
+  user           User     @relation(fields: [user_id], references: [id])
+  changed_fields Json
+  comment        String?
+  created_at     DateTime @default(now())
 }
 
 model Item {
@@ -265,29 +283,18 @@ model Item {
   service_id       Int
   service          Service       @relation(fields: [service_id], references: [id])
   quantity         Int           @default(1)
-  rate             Int           @default(0)// in cents
+  sale_rate        Int           @default(0)// in cents
   agency_rate      Int           @default(0)// in cents
-  forwarder_rate   Int           @default(0)// in cents
-  customs_fee      Float         @default(0)
-  insurance_fee    Float?      @default(0)
-  delivery_fee     Float?      @default(0)
+  customs_fee      Int         @default(0)// in cents
+  insurance_fee    Int?      @default(0)// in cents
+  delivery_fee     Int?      @default(0)// in cents
+  charge_fee       Int?      @default(0)// in cents
   customs_rates_id Int?
   customs_rates    CustomsRates? @relation(fields: [customs_rates_id], references: [id])
   invoice_id       Int
   invoice          Invoice       @relation(fields: [invoice_id], references: [id], onDelete: Cascade, onUpdate: Cascade)
   agency_id        Int
   agency           Agency        @relation(fields: [agency_id], references: [id])
-}
-
-model InvoiceHistory {
-  id             Int      @id @default(autoincrement())
-  invoice_id     Int
-  invoice        Invoice  @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
-  user_id        String
-  user           User     @relation(fields: [user_id], references: [id])
-  changed_fields Json
-  comment        String?
-  created_at     DateTime @default(now())
 }
 
 
@@ -339,6 +346,44 @@ model Country {
   name          String
   code          String         @unique
   customs_rates CustomsRates[]
+}
+
+enum FeeType {
+  UNIT // Por unidad
+  WEIGHT // Por peso (libra, kg, etc.)
+  VALUE // Porcentaje o valor declarado (si aplica)
+}
+
+enum ServiceType {
+  MARITIME
+  AIR
+}
+
+
+enum PaymentMethod {
+  CASH
+  CREDIT_CARD
+  DEBIT_CARD
+  BANK_TRANSFER
+  PAYPAL
+  ZELLE
+  CHECK
+}
+
+enum DiscountType {
+  PERCENTAGE
+  CASH
+  RATE
+  FIXED
+  CUSTOM
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  PARTIALLY_PAID
+  REFUNDED
+  CANCELLED
 }
 
 model Session {
@@ -406,57 +451,4 @@ model Counter {
   updated_at DateTime @updatedAt
 
   @@unique([date, agency_id])
-}
-enum AgencyType {
-  AGENCY
-  RESELLER
-  FORWARDER
-}
-
-enum Roles {
-  ROOT
-  ADMINISTRATOR
-  FORWARDER_RESELLER
-  AGENCY_SALES
-  AGENCY_ADMIN
-  AGENCY_SUPERVISOR
-  FORWARDER_ADMIN
-  CARRIER_ADMIN
-  MESSENGER
-}
-enum PaymentStatus {
-  PENDING
-  PAID
-  PARTIALLY_PAID
-  REFUNDED
-  CANCELLED
-}
-enum PaymentMethod {
-  CASH
-  CREDIT_CARD
-  DEBIT_CARD
-  BANK_TRANSFER
-  PAYPAL
-  ZELLE
-  CHECK
-}
-
-enum DiscountType {
-  PERCENTAGE
-  CASH
-  RATE
-  FIXED
-  CUSTOM
-}
-
-enum ServiceType {
-  MARITIME
-  AIR
-}
-
-
-enum FeeType {
-  UNIT // Por unidad
-  WEIGHT // Por peso (libra, kg, etc.)
-  VALUE // Porcentaje o valor declarado (si aplica)
 }

@@ -63,7 +63,7 @@ async function generatePageHeader(
 	let currentY = 10;
 
 	// Try to add logo first
-	const logoPath = path.join(process.cwd(), "assets", "company-logo.png");
+	const logoPath = path.join(process.cwd(), "assets", invoice.agency.logo || "company-logo.png");
 	if (fs.existsSync(logoPath)) {
 		try {
 			doc.image(logoPath, 35, currentY, { width: 60, height: 40 });
@@ -74,7 +74,7 @@ async function generatePageHeader(
 	}
 
 	// Company name below logo
-	doc.fillColor("#000000").fontSize(12).font("Helvetica-Bold").text("CTEnvios", 40, currentY);
+	doc.fillColor("#000000").fontSize(12).font("Helvetica-Bold").text(invoice.agency.name, 40, currentY);
 
 	currentY += 16; // Space after company name
 
@@ -83,11 +83,11 @@ async function generatePageHeader(
 		.fillColor("#666666")
 		.fontSize(9)
 		.font("Helvetica")
-		.text("Address: 10230 NW 80th Ave. Miami, FL 33016", 40, currentY);
+		.text(`Address: ${invoice.agency.address}`, 40, currentY);
 
 	currentY += 12;
 
-	doc.text("Phone: 3058513004", 40, currentY);
+	doc.text(`Phone: ${invoice.agency.phone}`, 40, currentY);
 
 	// Invoice details (right side) - aligned to the right (reduced spacing)
 	doc
@@ -454,7 +454,7 @@ function addFooterToPage(
 		.fillColor("#4682B4")
 		.fontSize(10)
 		.font("Helvetica-Bold")
-		.text(`Tracking: https://ctenvios.com/tracking?search=${invoice.id}`, 40, footerY, {
+		.text(`Tracking: ${invoice.agency.website}`, 40, footerY, {
 			align: "center",
 			width: 532,
 		});

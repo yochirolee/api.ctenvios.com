@@ -32,6 +32,7 @@ rates_routes.get("/agency/:agency_id", async (req, res) => {
 			},
 			agency_id: true,
 			public_rate: true,
+			
 		},
 		orderBy: {
 			service_id: "asc",

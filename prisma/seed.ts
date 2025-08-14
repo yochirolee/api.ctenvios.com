@@ -1,5 +1,4 @@
-import { PrismaClient } from "@prisma/client";
-import { Roles } from "@prisma/client";
+import { AgencyType, PrismaClient, Roles } from "@prisma/client";
 import { auth } from "../src/lib/auth";
 
 const prisma = new PrismaClient();
@@ -337,6 +336,7 @@ async function main(): Promise<void> {
 			phone: "3058513004",
 			email: "gerente@ctenvios.com",
 			forwarder_id: forwarder.id,
+			agency_type: AgencyType.AGENCY,
 		},
 		update: {},
 	});
@@ -377,24 +377,25 @@ async function main(): Promise<void> {
 		console.log(`✅ Province created: ${createdProvince.name} (${provincia.cities.length} cities)`);
 	}
 
-	const user = await auth.api.signUpEmail({
+	const session = await auth.api.signUpEmail({
 		body: {
 			email: "yleecruz@gmail.com",
 			password: "Audioslave*84",
 			name: "Yochiro Lee Cruz",
 		},
 	});
+	console.log(session);
 
 	// Update the user with role and agency_id
-	await prisma.user.update({
-		where: { id: user.user.id },
+	/* await prisma.user.update({
+		where: { id: session.user.id },
 		data: {
 			role: Roles.ROOT,
 			agency_id: 1,
 		},
-	});
+	}); */
 
-	console.log(`✅ User created: ${user.user.name} with ROOT role`);
+	console.log(`✅ User created: ${session.user.name} with ROOT role`);
 	console.log("🎉 Database seed completed successfully!");
 }
 

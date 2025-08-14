@@ -1,7 +1,7 @@
 // This file is used to seed the database with initial data.
 
 //Categories and Chapters
-import { PrismaClient } from "@prisma/client";
+import { FeeType, PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -408,8 +408,8 @@ async function main() {
 	});
 
 	for (const tariff of customsTariffs) {
-		const customTariff = await prisma.customsTariff.create({
-			data: { ...tariff, country_id: cuba.id },
+		const customTariff = await prisma.customsRates.create({
+			data: { ...tariff, country_id: cuba.id, fee_type: tariff.fee_type as FeeType, fee: tariff.fee * 100 },
 		});
 		console.log(`Custom tariff created: ${customTariff.name}`);
 	}
