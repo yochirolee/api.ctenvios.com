@@ -16,6 +16,7 @@ export async function registerInvoiceChange(
 		"receipt_id",
 		"total_amount",
 		"paid_amount",
+		"rate_id",
 		"payment_status",
 		"status",
 	];

@@ -11,10 +11,10 @@ export const authMiddleware = async (req: any, res: Response, next: NextFunction
 			req.user = session.user;
 			next();
 		} else {
-			res.status(401).json({ message: "Unauthorized - Invalid token" });
+			res.status(401).json({ message: "Unauthorized" });
 		}
 	} catch (error) {
 		console.error("Auth middleware error:", error);
-		res.status(401).json({ message: "Unauthorized - Token verification failed" });
+		res.status(401).json({ message: "Unauthorized" });
 	}
 };

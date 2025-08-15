@@ -74,13 +74,17 @@ async function generatePageHeader(
 	}
 
 	// Company name below logo
-	doc.fillColor("#000000").fontSize(12).font("Helvetica-Bold").text(invoice.agency.name, 40, currentY);
+	doc
+		.fillColor("#000000")
+		.fontSize(12)
+		.font("Helvetica-Bold")
+		.text(invoice.agency.name, 40, currentY);
 
 	currentY += 16; // Space after company name
 
 	// Company details below name
 	doc
-		.fillColor("#666666")
+		.fillColor("#808080")
 		.fontSize(9)
 		.font("Helvetica")
 		.text(`Address: ${invoice.agency.address}`, 40, currentY);
@@ -110,7 +114,7 @@ async function generatePageHeader(
 			hour12: true,
 		});
 	doc
-		.fillColor("#000000")
+		.fillColor("#808080")
 		.fontSize(9)
 		.font("Helvetica")
 		.text(`Fecha: ${formattedDate}`, 450, 56, { align: "right", width: 122 });
@@ -261,13 +265,13 @@ async function generateItemsTableWithPagination(
 
 	const addTableHeaders = (y: number) => {
 		doc
-			.fillColor("#000000")
+			.fillColor("#808080")
 			.fontSize(9)
-			.font("Helvetica-Bold")
+			.font("Helvetica")
 			.text("HBL", 30, y, { width: 100, align: "left" })
 			.text("Descripción", 140, y)
 			.text("Seguro", 300, y, { width: 40, align: "right" })
-			.text("Delivery", 340, y, { width: 40, align: "right" })
+			.text("Cargo", 340, y, { width: 40, align: "right" })
 			.text("Arancel", 385, y, { width: 40, align: "right" })
 			.text("Precio", 430, y, { width: 40, align: "right" })
 			.text("Peso", 470, y, { width: 40, align: "right" })
@@ -275,7 +279,7 @@ async function generateItemsTableWithPagination(
 
 		// Add bottom border for headers
 		doc
-			.strokeColor("#D1D5DB")
+			.strokeColor("#808080")
 			.lineWidth(1)
 			.moveTo(25, y + 15)
 			.lineTo(572, y + 15)
@@ -378,14 +382,16 @@ async function generateItemsTableWithPagination(
 	currentY += 30;
 
 	// Totals section - right aligned
-	const subtotal = invoice.items.reduce((acc, item) => acc + (item.rate * item.weight) / 100, 0);
-
-	const total_customs_fee = invoice?.items.reduce(
-		(acc: number, item: any) => acc + item?.customs_fee,
+	const subtotal = invoice.items.reduce(
+		(acc, item) =>
+			acc +
+			(item.rate * item.weight + (item.delivery_fee || 0) + (item.insurance_fee || 0)) / 100 +
+			item.customs_fee,
 		0,
 	);
 
-	const shipping = 0;
+	const balance = (invoice.total_amount - invoice.paid_amount) / 100;
+
 	const tax = 0;
 	const discount = 0;
 
@@ -402,11 +408,11 @@ async function generateItemsTableWithPagination(
 
 	currentY += 15;
 
-	// Customs fee
+	// Balance
 	doc
 		.fillColor("#000000")
-		.text("Aranceles", 420, currentY)
-		.text(`$${total_customs_fee}`, 520, currentY, { width: 50, align: "right" });
+		.text("Cargo", 420, currentY)
+		.text(`$${invoice.charge_amount.toFixed(2)}`, 520, currentY, { width: 50, align: "right" });
 
 	currentY += 15;
 
@@ -436,6 +442,25 @@ async function generateItemsTableWithPagination(
 			width: 50,
 			align: "right",
 		});
+	currentY += 20;
+	//paid
+	doc
+		.fillColor("#000000")
+		.fontSize(9)
+		.font("Helvetica")
+		.text("Paid", 420, currentY)
+		.text(`$${((invoice.paid_amount || 0) / 100).toFixed(2)}`, 520, currentY, {
+			width: 50,
+			align: "right",
+		});
+	currentY += 15;
+	//balance
+	doc
+		.fillColor("#FF0000")
+		.fontSize(9)
+		.font("Helvetica")
+		.text("Balance", 420, currentY)
+		.text(`$${balance.toFixed(2)}`, 520, currentY, { width: 50, align: "right" });
 
 	return { totalPages: currentPage, total: invoice.total_amount };
 }

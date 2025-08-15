@@ -1,41 +1,88 @@
-import { Router } from "express";
+import { Router, Response } from "express";
 import { auth } from "../lib/auth";
 import { fromNodeHeaders } from "better-auth/node";
 import prisma from "../config/prisma_db";
 import { authMiddleware } from "../middlewares/auth-midleware";
-
+import { Roles } from "@prisma/client";
 
 const router = Router();
 
-router.get("/", async (req, res) => {
+router.get("/", authMiddleware, async (req: any, res: Response) => {
+	const user = req.user;
+	//if user is root or administrator, return all users
 	const { page = 1, limit = 25 } = req.query;
-	const total = await prisma.user.count();
-	const rows = await prisma.user.findMany({
-		select: {
-			id: true,
-			email: true,
-			name: true,
-			role: true,
-			createdAt: true,
-			updatedAt: true,
-			agency: {
-				select: {
-					id: true,
-					name: true,
+	if (user.role === Roles.ROOT || user.role === Roles.ADMINISTRATOR) {
+		const total = await prisma.user.count();
+		const rows = await prisma.user.findMany({
+			select: {
+				id: true,
+				email: true,
+				name: true,
+				role: true,
+				createdAt: true,
+				updatedAt: true,
+				agency: {
+					select: {
+						id: true,
+						name: true,
+						agency_type: true,
+					},
 				},
 			},
-		},
-		skip: (parseInt(page as string) - 1) * (parseInt(limit as string) || 25),
-		take: parseInt(limit as string) || 25,
-	});
-	res.status(200).json({ rows, total });
+		});
+		res.status(200).json({ rows, total });
+	} else {
+		//return all users in the agency and children agencies
+		const agency = await prisma.agency.findUnique({
+			where: {
+				id: user.agency_id,
+			},
+		});
+		const children = await prisma.agency.findMany({
+			where: {
+				parent_agency_id: user.agency_id,
+			},
+		});
+		const allAgencies = [agency, ...children];
+
+		const total = await prisma.user.count({
+			where: {
+				agency_id: user.agency_id,
+			},
+		});
+		const rows = await prisma.user.findMany({
+			select: {
+				id: true,
+				email: true,
+				name: true,
+				role: true,
+				createdAt: true,
+				updatedAt: true,
+				agency: {
+					select: {
+						id: true,
+						name: true,
+						agency_type: true,
+					},
+				},
+			},
+			where: {
+				agency_id: {
+					in: allAgencies.map((agency) => agency?.id || 0),
+				},
+			},
+			skip: (parseInt(page as string) - 1) * (parseInt(limit as string) || 25),
+			take: parseInt(limit as string) || 25,
+		});
+
+		res.status(200).json({ rows, total });
+	}
 });
 router.get("/search", async (req, res) => {
 	const { query } = req.query;
-	
+
 	const users = await auth.api.listUserAccounts({
 		headers: fromNodeHeaders(req.headers),
-		
 	});
 	res.status(200).json(users);
 });

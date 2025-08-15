@@ -3,7 +3,7 @@ import prisma from "../config/prisma_db";
 import receivers_db from "../repository/receivers.repository";
 import { generarTracking } from "../utils/generate_hbl";
 import { generateInvoicePDF } from "../utils/generate-invoice-pdf";
-import { PaymentMethod, PaymentStatus, Roles } from "@prisma/client";
+import { Roles } from "@prisma/client";
 // Removed unused imports for shipping labels
 import {
 	generateCTEnviosLabels,
@@ -320,6 +320,8 @@ router.post("/", async (req, res) => {
 			items,
 		} = newInvoiceSchema.parse(req.body);
 
+		console.log(req.body, "req.body");
+
 		const rate = await prisma.rates.findUnique({
 			where: { id: rate_id },
 		});
@@ -342,10 +344,11 @@ router.post("/", async (req, res) => {
 				return itemHbls.map((hbl) => ({
 					hbl,
 					description: item.description,
-					rate: Math.round(item.rate * 100),
+					rate: item.rate * 100,
 					agency_rate: rate?.agency_rate || 0,
 					forwarder_rate: rate?.forwarder_rate || 0,
 					customs_fee: item.customs_fee || 0,
+					customs_rates_id: item.customs_rates_id || null,
 					delivery_fee: item.delivery_fee || 0,
 					insurance_fee: item.insurance_fee || 0,
 					quantity: item.quantity || 1,
@@ -366,6 +369,7 @@ router.post("/", async (req, res) => {
 						customer_id: customer_id,
 						receiver_id: receiver_id,
 						service_id: service_id,
+
 						total_amount: Math.round(Number(total_amount) * 100),
 						rate_id: rate_id,
 						status: "CREATED",

@@ -326,8 +326,11 @@ model CustomsRates {
   country_id   Int
   country      Country  @relation(fields: [country_id], references: [id])
   chapter      String?
+  custom_value Float?
   fee_type     FeeType  @default(UNIT)
-  fee          Float
+  fee          Int      @default(0)// in cents
+  min_weight   Float?
+  max_weight   Float?
   max_quantity Int? // opcional, para limitar cantidad
   created_at   DateTime @default(now())
   updated_at   DateTime @updatedAt

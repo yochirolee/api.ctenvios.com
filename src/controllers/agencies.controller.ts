@@ -50,11 +50,7 @@ const agencies = {
 			return;
 		}
 		const user_agency = await repository.agencies.getById(user.agency_id);
-		console.log("User agency:", {
-			id: user_agency?.id,
-			type: user_agency?.agency_type,
-			name: user_agency?.name,
-		});
+
 		if (
 			user_agency?.agency_type !== AgencyType.FORWARDER &&
 			user_agency?.agency_type !== AgencyType.RESELLER
@@ -65,13 +61,11 @@ const agencies = {
 			return;
 		}
 
-		console.log(req.body);
 		const result = agencySchema.safeParse(req.body) as z.SafeParseReturnType<
 			typeof agencySchema,
 			Agency
 		>;
 		if (!result.success) {
-			console.log(result.error.flatten().fieldErrors);
 			throw new AppError("Invalid agency data", 400, result.error.flatten().fieldErrors, "zod");
 		}
 
@@ -93,16 +87,7 @@ const agencies = {
 		}
 
 		try {
-			console.log("Creating agency with data:", {
-				name: data.name,
-				type: data.agency_type,
-				parent_id: data.parent_agency_id,
-				forwarder_id: data.forwarder_id,
-			});
-
 			const agency = await repository.agencies.create(data as Partial<Prisma.AgencyCreateInput>);
-
-			console.log("Agency created successfully:", { id: agency.id, name: agency.name });
 
 			res.status(201).json({
 				message: "Agency created successfully",
