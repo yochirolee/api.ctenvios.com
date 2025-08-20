@@ -19,7 +19,7 @@ export function buildInvoiceTimeline(
                 id:payment.id,
 				date: payment.payment_date,
 				type: "PAYMENT",
-				description: `Pagado $${(payment.amount / 100).toFixed(2)}  ${
+				description: `Pagado $${((payment.amount + payment.payment_charge) / 100).toFixed(2)}  ${
 					payment.payment_method
 				}`,
 			});

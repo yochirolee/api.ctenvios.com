@@ -4,6 +4,7 @@ import prisma from "../config/prisma_db";
 import { authMiddleware } from "../middlewares/auth-midleware";
 import { Invoice, PaymentMethod, PaymentStatus, PrismaClient } from "@prisma/client";
 import { registerInvoiceChange } from "../utils/rename-invoice-changes";
+import { constructFromSymbol } from "date-fns/constants";
 
 const router = Router();
 
@@ -26,23 +27,42 @@ router.post("/invoice/:id", authMiddleware, async (req: any, res) => {
 		});
 		if (!invoice) return res.status(404).json({ message: "Invoice not found" });
 
-		const paymentCents = Math.round(amount * 100);
+		let amount_to_pay_in_cents = amount * 100;
+		let charge_amount = 0;
+
+		console.log(amount, payment_method, payment_reference, notes);
+
+		if (
+			payment_method === PaymentMethod.CREDIT_CARD ||
+			payment_method === PaymentMethod.DEBIT_CARD
+		) {
+			charge_amount = Math.round(amount * 0.03 * 100); //in cents
+			console.log(invoice);
+		}
+
 		const pending = invoice.total_amount - invoice.paid_amount;
 
-		if (paymentCents > pending) {
+		console.log(pending, "pending in cents");
+
+		if (amount_to_pay_in_cents > pending + charge_amount) {
 			return res.status(400).json({
 				message: `Payment exceeds pending amount. Pending: $${(pending / 100).toFixed(2)}`,
 			});
 		}
 
 		const payment_status =
-			paymentCents === pending ? PaymentStatus.PAID : PaymentStatus.PARTIALLY_PAID;
+			amount_to_pay_in_cents === pending ? PaymentStatus.PAID : PaymentStatus.PARTIALLY_PAID;
+
+		console.log(amount_to_pay_in_cents, "amount_to_pay_in_cents");
+		console.log(pending, "pending");
+		console.log(charge_amount, "charge_amount");
 
 		const result = await prisma.$transaction(async (tx) => {
 			const updatedInvoice = await tx.invoice.update({
 				where: { id: parseInt(id) },
 				data: {
-					paid_amount: { increment: paymentCents },
+					paid_amount: { increment: amount_to_pay_in_cents },
+					charge_amount: { increment: charge_amount },
 					payment_status,
 				},
 			});
@@ -50,7 +70,8 @@ router.post("/invoice/:id", authMiddleware, async (req: any, res) => {
 			await tx.payment.create({
 				data: {
 					invoice_id: parseInt(id),
-					amount: paymentCents,
+					amount: amount_to_pay_in_cents,
+					payment_charge: charge_amount,
 					payment_method,
 					payment_reference,
 					payment_date: new Date(),

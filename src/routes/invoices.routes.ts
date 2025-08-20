@@ -235,6 +235,16 @@ router.get("/search", authMiddleware, async (req: any, res) => {
 							second_last_name: true,
 							mobile: true,
 							ci: true,
+							province: {
+								select: {
+									name: true,
+								},
+							},
+							city: {
+								select: {
+									name: true,
+								},
+							},
 						},
 					},
 					items: true,
@@ -279,6 +289,16 @@ router.get("/search", authMiddleware, async (req: any, res) => {
 								second_last_name: true,
 								mobile: true,
 								ci: true,
+								province: {
+									select: {
+										name: true,
+									},
+								},
+								city: {
+									select: {
+										name: true,
+									},
+								},
 							},
 						},
 						items: true,

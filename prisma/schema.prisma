@@ -245,6 +245,7 @@ model Invoice {
   total_amount     Int              @default(0) // in cents
   paid_amount      Int              @default(0) // in cents
   charge_amount    Int              @default(0) // in cents
+  delivery_amount  Int              @default(0) // in cents
   discount_amount  Int @default(0) // in cents
   payment_status   PaymentStatus    @default(PENDING)
   payments         Payment[]
@@ -268,9 +269,10 @@ model Item {
   rate             Int           @default(0)// in cents
   agency_rate      Int           @default(0)// in cents
   forwarder_rate   Int           @default(0)// in cents
-  customs_fee      Float         @default(0)
-  insurance_fee    Float?      @default(0)
-  delivery_fee     Float?      @default(0)
+  customs_fee      Int         @default(0)
+  insurance_fee    Int?      @default(0)
+  delivery_fee     Int?      @default(0)
+  charge_fee       Int?      @default(0)
   customs_rates_id Int?
   customs_rates    CustomsRates? @relation(fields: [customs_rates_id], references: [id])
   invoice_id       Int
@@ -296,6 +298,7 @@ model Payment {
   invoice_id        Int
   invoice           Invoice       @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
   amount            Int           @default(0) // in cents
+  payment_charge    Int           @default(0) // in cents
   payment_method    PaymentMethod
   payment_reference String?
   payment_date      DateTime      @default(now())
