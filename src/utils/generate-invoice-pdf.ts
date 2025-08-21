@@ -66,8 +66,8 @@ async function generatePageHeader(
 	const logoPath = path.join(process.cwd(), "assets", invoice.agency.logo || "company-logo.png");
 	if (fs.existsSync(logoPath)) {
 		try {
-			doc.image(logoPath, 35, currentY, { width: 60, height: 40 });
-			currentY += 45; // Move down after logo
+			doc.image(logoPath, 35, currentY, { width: 60, height: 60 });
+			currentY += 60; // Move down after logo
 		} catch (error) {
 			console.log("Company logo could not be loaded:", error);
 		}
@@ -103,6 +103,18 @@ async function generatePageHeader(
 		.font("Helvetica")
 		.text(`Items: ${invoice.items.length}`, 450, 42, { align: "right", width: 122 });
 
+	//total weight
+	doc
+		.fillColor("#808080")
+		.fontSize(9)
+		.font("Helvetica")
+		.text(
+			`Total Weight: ${invoice.items.reduce((acc, item) => acc + item.weight, 0).toFixed(2)} lbs`,
+			450,
+			56,
+			{ align: "right", width: 122 },
+		);
+
 	// Date - aligned to the right, same style as phone/address (reduced spacing)
 	const date = new Date(invoice.created_at);
 	const formattedDate =
@@ -117,7 +129,7 @@ async function generatePageHeader(
 		.fillColor("#808080")
 		.fontSize(9)
 		.font("Helvetica")
-		.text(`Fecha: ${formattedDate}`, 450, 56, { align: "right", width: 122 });
+		.text(`Fecha: ${formattedDate}`, 450, 70, { align: "right", width: 122 });
 
 	// Generate barcode for invoice number
 	try {
@@ -147,7 +159,7 @@ async function generatePageHeader(
 }
 
 function generateSenderRecipientInfo(doc: PDFKit.PDFDocument, invoice: InvoiceWithRelations) {
-	let currentY = 110;
+	let currentY = 115;
 
 	// Left side - Sender information
 	const senderName = formatName(
@@ -159,13 +171,13 @@ function generateSenderRecipientInfo(doc: PDFKit.PDFDocument, invoice: InvoiceWi
 	);
 
 	// Sender name
-	doc.fillColor("#000000").fontSize(10).font("Helvetica-Bold").text(senderName, 40, currentY);
+	doc.fillColor("#080808").fontSize(10).font("Helvetica-Bold").text(senderName, 40, currentY);
 	currentY += 14;
 
 	// Sender phone (only number, no label)
 	if (invoice.customer.mobile) {
 		doc
-			.fillColor("#000000")
+			.fillColor("#080808")
 			.fontSize(9)
 			.font("Helvetica")
 			.text(`Tel: ${invoice.customer.mobile}`, 40, currentY, { width: 100, align: "left" });
@@ -175,7 +187,7 @@ function generateSenderRecipientInfo(doc: PDFKit.PDFDocument, invoice: InvoiceWi
 	// Sender address (no label)
 	if (invoice.customer.address) {
 		doc
-			.fillColor("#000000")
+			.fillColor("#080808")
 			.fontSize(9)
 			.font("Helvetica")
 			.text(`Dirección: ${invoice.customer.address}`, 40, currentY, {
@@ -184,7 +196,7 @@ function generateSenderRecipientInfo(doc: PDFKit.PDFDocument, invoice: InvoiceWi
 	}
 
 	// Right side - Recipient information
-	let recipientY = 110;
+	let recipientY = 117;
 
 	const recipientName = formatName(
 		invoice.receiver.first_name,
@@ -200,7 +212,7 @@ function generateSenderRecipientInfo(doc: PDFKit.PDFDocument, invoice: InvoiceWi
 
 	// Recipient name with proper width constraints
 	doc
-		.fillColor("#000000")
+		.fillColor("#080808")
 		.fontSize(recipientFontSize)
 		.font("Helvetica-Bold")
 		.text(recipientName, 320, recipientY, {
@@ -213,7 +225,7 @@ function generateSenderRecipientInfo(doc: PDFKit.PDFDocument, invoice: InvoiceWi
 	// Recipient phone (only number, no label)
 	if (invoice.receiver.mobile) {
 		doc
-			.fillColor("#000000")
+			.fillColor("#080808")
 			.fontSize(9)
 			.font("Helvetica")
 			.text(
@@ -229,7 +241,7 @@ function generateSenderRecipientInfo(doc: PDFKit.PDFDocument, invoice: InvoiceWi
 	//receiip ci
 	if (invoice.receiver.ci) {
 		doc
-			.fillColor("#000000")
+			.fillColor("#080808")
 			.fontSize(9)
 			.font("Helvetica")
 			.text(`CI: ${invoice.receiver.ci}`, 320, recipientY, { width: 100, align: "left" });
@@ -246,10 +258,10 @@ function generateSenderRecipientInfo(doc: PDFKit.PDFDocument, invoice: InvoiceWi
 		: invoice.receiver.address;
 
 	doc
-		.fillColor("#000000")
+		.fillColor("#080808")
 		.fontSize(9)
 		.font("Helvetica")
-		.text(`Dirección: ${fullAddress}`, 320, recipientY, {
+		.text(`Dir: ${fullAddress}`, 320, recipientY, {
 			width: 250,
 		});
 }
@@ -279,13 +291,13 @@ async function generateItemsTableWithPagination(
 
 		// Add bottom border for headers
 		doc
-			.strokeColor("#808080")
-			.lineWidth(1)
-			.moveTo(25, y + 15)
-			.lineTo(572, y + 15)
+			.strokeColor("#E5E7EB")
+			.lineWidth(0.3)
+			.moveTo(25, y + 10)
+			.lineTo(572, y + 10)
 			.stroke();
 
-		return y + 25;
+		return y + 10;
 	};
 
 	const checkPageBreak = async (currentY: number, spaceNeeded: number = 25) => {
@@ -322,17 +334,18 @@ async function generateItemsTableWithPagination(
 		// Row data
 
 		const row_subtotal =
-			(item.rate / 100) * item.weight +
-			item?.customs_fee +
-			(item?.delivery_fee || 0) +
-			(item?.insurance_fee || 0);
+			(item.rate * item.weight +
+				item?.customs_fee +
+				(item?.delivery_fee || 0) +
+				(item?.insurance_fee || 0)) /
+			100;
 
 		// Calculate vertical center position for single-line items
 		const verticalCenter = currentY + rowHeight / 2 - 4;
 
 		doc
-			.fillColor("#000000")
-			.fontSize(9)
+			.fillColor("#1b1c1c")
+			.fontSize(8.5)
 			.font("Helvetica")
 			.text(
 				item.hbl ||
@@ -346,13 +359,19 @@ async function generateItemsTableWithPagination(
 			.text(item.description, 140, currentY + 8, {
 				width: 150,
 			})
-			.text(`$${item.insurance_fee?.toFixed(2)}`, 300, verticalCenter, {
+			.text(`$${((item.insurance_fee || 0) / 100)?.toFixed(2)}`, 300, verticalCenter, {
 				width: 40,
 				align: "right",
 			})
-			.text(`$${item.delivery_fee?.toFixed(2)}`, 340, verticalCenter, { width: 40, align: "right" })
-			.text(`$${item.customs_fee?.toFixed(2)}`, 385, verticalCenter, { width: 40, align: "right" })
-			.text(`$${(item.rate / 100).toFixed(2)}`, 430, verticalCenter, {
+			.text(`$${((item.delivery_fee || 0) / 100)?.toFixed(2)}`, 340, verticalCenter, {
+				width: 40,
+				align: "right",
+			})
+			.text(`$${((item.customs_fee || 0) / 100)?.toFixed(2)}`, 385, verticalCenter, {
+				width: 40,
+				align: "right",
+			})
+			.text(`$${((item.rate || 0) / 100)?.toFixed(2)}`, 430, verticalCenter, {
 				width: 40,
 				align: "right",
 			})
@@ -362,15 +381,13 @@ async function generateItemsTableWithPagination(
 				align: "right",
 			});
 
-		// Row bottom border (dashed) - positioned at the bottom of the dynamic row
+		// Row bottom border (light solid line) - positioned at the bottom of the dynamic row
 		doc
-			.strokeColor("#D1D5DB")
-			.lineWidth(1)
-			.dash(2, { space: 1 })
+			.strokeColor("#F3F4F6")
+			.lineWidth(0.2)
 			.moveTo(25, currentY + rowHeight)
 			.lineTo(572, currentY + rowHeight)
-			.stroke()
-			.undash();
+			.stroke();
 
 		currentY += rowHeight;
 	}
@@ -385,8 +402,11 @@ async function generateItemsTableWithPagination(
 	const subtotal = invoice.items.reduce(
 		(acc, item) =>
 			acc +
-			(item.rate * item.weight + (item.delivery_fee || 0) + (item.insurance_fee || 0)) / 100 +
-			item.customs_fee,
+			(item.rate * item.weight +
+				(item.delivery_fee || 0) +
+				(item.insurance_fee || 0) +
+				item.customs_fee) /
+				100,
 		0,
 	);
 
@@ -398,9 +418,9 @@ async function generateItemsTableWithPagination(
 	// Subtotal
 	doc
 		.fillColor("#000000")
-		.fontSize(10)
+		.fontSize(8.5)
 		.font("Helvetica")
-		.text("Subtotal", 420, currentY)
+		.text("Subtotal:", 380, currentY, { width: 80, align: "right" })
 		.text(`$${subtotal.toFixed(2)}`, 520, currentY, {
 			width: 50,
 			align: "right",
@@ -408,37 +428,51 @@ async function generateItemsTableWithPagination(
 
 	currentY += 15;
 
-	// Balance
+	// Delivery/Cargo
 	doc
 		.fillColor("#000000")
-		.text("Cargo", 420, currentY)
-		.text(`$${invoice.charge_amount.toFixed(2)}`, 520, currentY, { width: 50, align: "right" });
+		.text("Delivery:", 380, currentY, { width: 80, align: "right" })
+		.text(`$0.00`, 520, currentY, {
+			width: 50,
+			align: "right",
+		});
 
 	currentY += 15;
 
-	// Tax
+	// Seguro
 	doc
 		.fillColor("#000000")
-		.text("Tax", 420, currentY)
-		.text(`$${tax}`, 520, currentY, { width: 50, align: "right" });
+		.text("Seguro:", 380, currentY, { width: 80, align: "right" })
+		.text(`$${tax.toFixed(2)}`, 520, currentY, { width: 50, align: "right" });
 
 	currentY += 15;
 
-	// Discount
+	// Cargo Extra
 	doc
 		.fillColor("#000000")
-		.text("Discount", 420, currentY)
-		.text(`$${discount}`, 520, currentY, { width: 50, align: "right" });
+		.text("Cargo:", 380, currentY, { width: 80, align: "right" })
+		.text(`$${(invoice.charge_amount / 100 || 0).toFixed(2)}`, 520, currentY, {
+			width: 50,
+			align: "right",
+		});
+
+	currentY += 15;
+
+	// Descuento
+	doc
+		.fillColor("#000000")
+		.text("Descuento:", 380, currentY, { width: 80, align: "right" })
+		.text(`$${(discount / 100).toFixed(2)}`, 520, currentY, { width: 50, align: "right" });
 
 	currentY += 15;
 
 	// Total
 	doc
 		.fillColor("#000000")
-		.fontSize(12)
+		.fontSize(10.5)
 		.font("Helvetica-Bold")
-		.text("Total", 420, currentY)
-		.text(`$${((invoice.total_amount || 0) / 100).toFixed(2)}`, 520, currentY, {
+		.text("Total:", 380, currentY, { width: 80, align: "right" })
+		.text(`$${((invoice.total_amount + invoice.charge_amount) / 100).toFixed(2)}`, 520, currentY, {
 			width: 50,
 			align: "right",
 		});
@@ -448,8 +482,8 @@ async function generateItemsTableWithPagination(
 		.fillColor("#000000")
 		.fontSize(9)
 		.font("Helvetica")
-		.text("Paid", 420, currentY)
-		.text(`$${((invoice.paid_amount || 0) / 100).toFixed(2)}`, 520, currentY, {
+		.text("Paid:", 380, currentY, { width: 80, align: "right" })
+		.text(`$${((invoice.paid_amount + invoice.charge_amount) / 100).toFixed(2)}`, 520, currentY, {
 			width: 50,
 			align: "right",
 		});
@@ -459,8 +493,8 @@ async function generateItemsTableWithPagination(
 		.fillColor("#FF0000")
 		.fontSize(9)
 		.font("Helvetica")
-		.text("Balance", 420, currentY)
-		.text(`$${balance.toFixed(2)}`, 520, currentY, { width: 50, align: "right" });
+		.text("Balance:", 380, currentY, { width: 80, align: "right" })
+		.text(`$${(balance || 0).toFixed(2)}`, 520, currentY, { width: 50, align: "right" });
 
 	return { totalPages: currentPage, total: invoice.total_amount };
 }
