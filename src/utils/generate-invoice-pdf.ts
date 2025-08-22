@@ -1,6 +1,6 @@
 import PDFKit from "pdfkit";
 import * as bwipjs from "bwip-js";
-import * as fs from "fs";
+import { promises as fs } from "fs";
 import * as path from "path";
 import { Invoice, Customer, Receiver, Agency, Service, Item } from "@prisma/client";
 import { formatName } from "./capitalize";
@@ -17,388 +17,134 @@ interface InvoiceWithRelations extends Omit<Invoice, "total"> {
 	items: Item[];
 }
 
-export const generateInvoicePDF = (invoice: InvoiceWithRelations): Promise<PDFKit.PDFDocument> => {
-	return new Promise(async (resolve, reject) => {
-		try {
-			const doc = new PDFKit({ margin: 10, size: "letter" });
+// Cache for logos and barcodes to avoid regeneration
+const logoCache = new Map<string, Buffer>();
+const barcodeCache = new Map<string, Buffer>();
 
-			// Generate the clean modern invoice with proper pagination
-			await generateCleanModernInvoiceWithPagination(doc, invoice);
+// Font and color constants to avoid repeated calls
+const FONTS = {
+	BOLD: "Helvetica-Bold",
+	NORMAL: "Helvetica",
+} as const;
 
-			resolve(doc);
-		} catch (error) {
-			reject(error);
-		}
-	});
+const COLORS = {
+	BLACK: "#000000",
+	GRAY: "#808080",
+	DARK_GRAY: "#1b1c1c",
+	LIGHT_GRAY: "#F3F4F6",
+	BORDER_GRAY: "#E5E7EB",
+	BLUE: "#4682B4",
+	RED: "#FF0000",
+	WHITE: "#FFFFFF",
+} as const;
+
+const LAYOUT = {
+	PAGE_HEIGHT: 792,
+	BOTTOM_MARGIN: 100,
+	LEFT_MARGIN: 20,
+	RIGHT_MARGIN: 572,
+	FOOTER_Y: 710,
+} as const;
+
+export const generateInvoicePDF = async (
+	invoice: InvoiceWithRelations,
+): Promise<PDFKit.PDFDocument> => {
+	try {
+		const doc = new PDFKit({ margin: 10, size: "letter" });
+		await generateOptimizedInvoice(doc, invoice);
+		return doc;
+	} catch (error) {
+		throw new Error(`Invoice generation failed: ${error}`);
+	}
 };
 
-async function generateCleanModernInvoiceWithPagination(
-	doc: PDFKit.PDFDocument,
-	invoice: InvoiceWithRelations,
-) {
+async function generateOptimizedInvoice(doc: PDFKit.PDFDocument, invoice: InvoiceWithRelations) {
+	// Pre-load assets
+	const [logoBuffer, barcodeBuffer] = await Promise.all([
+		loadLogo(invoice.agency.logo ?? undefined),
+		generateBarcode(invoice.id),
+	]);
+
+	// Pre-calculate values
+	const calculations = calculateInvoiceTotals(invoice);
+	const formattedData = formatInvoiceData(invoice);
+
 	let currentPage = 1;
 
-	// Generate first page header
-	await generatePageHeader(doc, invoice, true);
+	// Generate first page with header and footer
+	await generatePageHeader(
+		doc,
+		invoice,
+		logoBuffer,
+		barcodeBuffer,
+		formattedData,
+		calculations,
+		true,
+	);
+	addFooterToPage(doc, invoice, currentPage, 1); // Temporary total pages, will be updated later
+	generateSenderRecipientInfo(doc, invoice, formattedData);
 
-	// Add footer to first page
-	addFooterToPage(doc, invoice, currentPage);
-
-	// Generate sender/recipient info (only on first page)
-	generateSenderRecipientInfo(doc, invoice);
-
-	// Generate items table with pagination
-	const result = await generateItemsTableWithPagination(doc, invoice);
+	// Generate items table with pagination (headers and footers will be added to new pages)
+	const result = await generateItemsTableOptimized(
+		doc,
+		invoice,
+		calculations,
+		logoBuffer,
+		barcodeBuffer,
+		formattedData,
+	);
 	const totalPages = result.totalPages;
 
-	// Update page numbers on all pages now that we know the total
-	updatePageNumbers(doc, totalPages);
+	// Update all page numbers with correct total
+	updateAllPageNumbers(doc, totalPages);
 }
 
-async function generatePageHeader(
-	doc: PDFKit.PDFDocument,
-	invoice: InvoiceWithRelations,
-	isFirstPage: boolean = false,
-) {
-	let currentY = 10;
+// Optimized asset loading with caching
+async function loadLogo(logoFileName?: string): Promise<Buffer | null> {
+	if (!logoFileName) return null;
 
-	// Try to add logo first
-	const logoPath = path.join(process.cwd(), "assets", invoice.agency.logo || "company-logo.png");
-	if (fs.existsSync(logoPath)) {
-		try {
-			doc.image(logoPath, 35, currentY, { width: 60, height: 60 });
-			currentY += 60; // Move down after logo
-		} catch (error) {
-			console.log("Company logo could not be loaded:", error);
-		}
+	const cacheKey = logoFileName;
+	if (logoCache.has(cacheKey)) {
+		return logoCache.get(cacheKey)!;
 	}
 
-	// Company name below logo
-	doc
-		.fillColor("#000000")
-		.fontSize(12)
-		.font("Helvetica-Bold")
-		.text(invoice.agency.name, 40, currentY);
+	try {
+		const logoPath = path.join(process.cwd(), "assets", logoFileName);
+		const logoBuffer = await fs.readFile(logoPath);
+		logoCache.set(cacheKey, logoBuffer);
+		return logoBuffer;
+	} catch (error) {
+		console.log(`Logo ${logoFileName} could not be loaded:`, error);
+		return null;
+	}
+}
 
-	currentY += 16; // Space after company name
+async function generateBarcode(invoiceId: number): Promise<Buffer | null> {
+	const cacheKey = String(invoiceId);
+	if (barcodeCache.has(cacheKey)) {
+		return barcodeCache.get(cacheKey)!;
+	}
 
-	// Company details below name
-	doc
-		.fillColor("#808080")
-		.fontSize(9)
-		.font("Helvetica")
-		.text(`Address: ${invoice.agency.address}`, 40, currentY);
-
-	currentY += 12;
-
-	doc.text(`Phone: ${invoice.agency.phone}`, 40, currentY);
-
-	// Invoice details (right side) - aligned to the right (reduced spacing)
-	doc
-		.fillColor("#000000")
-		.fontSize(16)
-		.font("Helvetica-Bold")
-		.text(`Invoice ${invoice.id}`, 450, 25, { align: "right", width: 122 })
-		.fontSize(12)
-		.font("Helvetica")
-		.text(`Items: ${invoice.items.length}`, 450, 42, { align: "right", width: 122 });
-
-	//total weight
-	doc
-		.fillColor("#808080")
-		.fontSize(9)
-		.font("Helvetica")
-		.text(
-			`Total Weight: ${invoice.items.reduce((acc, item) => acc + item.weight, 0).toFixed(2)} lbs`,
-			450,
-			56,
-			{ align: "right", width: 122 },
-		);
-
-	// Date - aligned to the right, same style as phone/address (reduced spacing)
-	const date = new Date(invoice.created_at);
-	const formattedDate =
-		date.toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit", year: "numeric" }) +
-		" " +
-		date.toLocaleTimeString("es-ES", {
-			hour: "2-digit",
-			minute: "2-digit",
-			hour12: true,
-		});
-	doc
-		.fillColor("#808080")
-		.fontSize(9)
-		.font("Helvetica")
-		.text(`Fecha: ${formattedDate}`, 450, 70, { align: "right", width: 122 });
-
-	// Generate barcode for invoice number
 	try {
 		const barcodeBuffer = await bwipjs.toBuffer({
 			bcid: "code128",
-			text: String(invoice.id).padStart(6, "0"),
+			text: cacheKey.padStart(6, "0"),
 			scale: 3,
 			height: 8,
 			includetext: false,
 			textxalign: "center",
 		});
 
-		// Add barcode to the right side
-		doc.image(barcodeBuffer, 320, 25, { width: 80, height: 20 });
-
-		// Invoice number below barcode
-		doc
-			.fillColor("#000000")
-			.fontSize(8)
-			.font("Helvetica")
-			.text(String(invoice.id).padStart(6, "0"), 320, 50, { align: "center", width: 80 });
+		barcodeCache.set(cacheKey, barcodeBuffer);
+		return barcodeBuffer;
 	} catch (error) {
 		console.log("Barcode generation failed:", error);
+		return null;
 	}
-
-	return isFirstPage ? 105 : 95; // Return Y position where content should start (reduced)
 }
 
-function generateSenderRecipientInfo(doc: PDFKit.PDFDocument, invoice: InvoiceWithRelations) {
-	let currentY = 115;
-
-	// Left side - Sender information
-	const senderName = formatName(
-		invoice.customer.first_name,
-		invoice.customer.middle_name,
-		invoice.customer.last_name,
-		invoice.customer.second_last_name,
-		30, // Max length for invoice display
-	);
-
-	// Sender name
-	doc.fillColor("#080808").fontSize(10).font("Helvetica-Bold").text(senderName, 40, currentY);
-	currentY += 14;
-
-	// Sender phone (only number, no label)
-	if (invoice.customer.mobile) {
-		doc
-			.fillColor("#080808")
-			.fontSize(9)
-			.font("Helvetica")
-			.text(`Tel: ${invoice.customer.mobile}`, 40, currentY, { width: 100, align: "left" });
-		currentY += 14;
-	}
-
-	// Sender address (no label)
-	if (invoice.customer.address) {
-		doc
-			.fillColor("#080808")
-			.fontSize(9)
-			.font("Helvetica")
-			.text(`Dirección: ${invoice.customer.address}`, 40, currentY, {
-				width: 250,
-			});
-	}
-
-	// Right side - Recipient information
-	let recipientY = 117;
-
-	const recipientName = formatName(
-		invoice.receiver.first_name,
-		invoice.receiver.middle_name,
-		invoice.receiver.last_name,
-		invoice.receiver.second_last_name,
-		30, // Max length for invoice display
-	);
-
-	// Smart recipient name formatting with width constraints
-	const maxRecipientWidth = 250;
-	const recipientFontSize = recipientName.length > 25 ? 9 : 10;
-
-	// Recipient name with proper width constraints
-	doc
-		.fillColor("#080808")
-		.fontSize(recipientFontSize)
-		.font("Helvetica-Bold")
-		.text(recipientName, 320, recipientY, {
-			width: maxRecipientWidth,
-			height: 16,
-			ellipsis: true,
-		});
-	recipientY += 14;
-
-	// Recipient phone (only number, no label)
-	if (invoice.receiver.mobile) {
-		doc
-			.fillColor("#080808")
-			.fontSize(9)
-			.font("Helvetica")
-			.text(
-				`Tel: ${invoice.receiver.mobile || ""}${
-					invoice.receiver.mobile && invoice.receiver.phone ? " - " : ""
-				}${invoice.receiver.phone || ""}`,
-				320,
-				recipientY,
-				{ width: 250, align: "left" },
-			);
-		recipientY += 14;
-	}
-	//receiip ci
-	if (invoice.receiver.ci) {
-		doc
-			.fillColor("#080808")
-			.fontSize(9)
-			.font("Helvetica")
-			.text(`CI: ${invoice.receiver.ci}`, 320, recipientY, { width: 100, align: "left" });
-		recipientY += 14;
-	}
-
-	// Recipient address with location
-	const location = `${invoice.receiver.city?.name || ""} ${
-		invoice.receiver.province?.name || ""
-	}`.trim();
-
-	const fullAddress = location
-		? `${invoice.receiver.address}, ${location}`
-		: invoice.receiver.address;
-
-	doc
-		.fillColor("#080808")
-		.fontSize(9)
-		.font("Helvetica")
-		.text(`Dir: ${fullAddress}`, 320, recipientY, {
-			width: 250,
-		});
-}
-
-async function generateItemsTableWithPagination(
-	doc: PDFKit.PDFDocument,
-	invoice: InvoiceWithRelations,
-) {
-	const pageHeight = 792; // Letter size height
-	const bottomMargin = 120; // Increased space for footer (was 30)
-	let currentY = 200;
-	let currentPage = 1;
-
-	const addTableHeaders = (y: number) => {
-		doc
-			.fillColor("#808080")
-			.fontSize(9)
-			.font("Helvetica")
-			.text("HBL", 30, y, { width: 100, align: "left" })
-			.text("Descripción", 140, y)
-			.text("Seguro", 300, y, { width: 40, align: "right" })
-			.text("Cargo", 340, y, { width: 40, align: "right" })
-			.text("Arancel", 385, y, { width: 40, align: "right" })
-			.text("Precio", 430, y, { width: 40, align: "right" })
-			.text("Peso", 470, y, { width: 40, align: "right" })
-			.text("Subtotal", 520, y, { width: 40, align: "right" });
-
-		// Add bottom border for headers
-		doc
-			.strokeColor("#E5E7EB")
-			.lineWidth(0.3)
-			.moveTo(25, y + 10)
-			.lineTo(572, y + 10)
-			.stroke();
-
-		return y + 10;
-	};
-
-	const checkPageBreak = async (currentY: number, spaceNeeded: number = 25) => {
-		if (currentY + spaceNeeded > pageHeight - bottomMargin) {
-			doc.addPage();
-			currentPage++;
-
-			// Add footer to new page
-			addFooterToPage(doc, invoice, currentPage);
-
-			// Add header to new page
-			await generatePageHeader(doc, invoice, false);
-
-			// Add table headers
-			return addTableHeaders(130);
-		}
-		return currentY;
-	};
-
-	// Add initial table headers
-	currentY = addTableHeaders(currentY);
-
-	// Generate table rows
-	for (let index = 0; index < invoice.items.length; index++) {
-		const item = invoice.items[index];
-
-		// Calculate row height based on description length
-		const descriptionHeight = doc.heightOfString(item.description, { width: 150 });
-		const rowHeight = Math.max(25, descriptionHeight + 16); // Minimum 25px, add padding
-
-		// Check if we need a new page
-		currentY = await checkPageBreak(currentY, rowHeight);
-
-		// Row data
-
-		const row_subtotal =
-			(item.rate * item.weight +
-				item?.customs_fee +
-				(item?.delivery_fee || 0) +
-				(item?.insurance_fee || 0)) /
-			100;
-
-		// Calculate vertical center position for single-line items
-		const verticalCenter = currentY + rowHeight / 2 - 4;
-
-		doc
-			.fillColor("#1b1c1c")
-			.fontSize(8.5)
-			.font("Helvetica")
-			.text(
-				item.hbl ||
-					`CTE${String(invoice.id).padStart(6, "0")}${String(index + 1).padStart(6, "0")}`,
-				30,
-				verticalCenter,
-				{
-					width: 100,
-				},
-			)
-			.text(item.description, 140, currentY + 8, {
-				width: 150,
-			})
-			.text(`$${((item.insurance_fee || 0) / 100)?.toFixed(2)}`, 300, verticalCenter, {
-				width: 40,
-				align: "right",
-			})
-			.text(`$${((item.delivery_fee || 0) / 100)?.toFixed(2)}`, 340, verticalCenter, {
-				width: 40,
-				align: "right",
-			})
-			.text(`$${((item.customs_fee || 0) / 100)?.toFixed(2)}`, 385, verticalCenter, {
-				width: 40,
-				align: "right",
-			})
-			.text(`$${((item.rate || 0) / 100)?.toFixed(2)}`, 430, verticalCenter, {
-				width: 40,
-				align: "right",
-			})
-			.text(`${item.weight.toFixed(2)}`, 470, verticalCenter, { width: 40, align: "right" })
-			.text(`$${row_subtotal.toFixed(2)}`, 520, verticalCenter, {
-				width: 40,
-				align: "right",
-			});
-
-		// Row bottom border (light solid line) - positioned at the bottom of the dynamic row
-		doc
-			.strokeColor("#F3F4F6")
-			.lineWidth(0.2)
-			.moveTo(25, currentY + rowHeight)
-			.lineTo(572, currentY + rowHeight)
-			.stroke();
-
-		currentY += rowHeight;
-	}
-
-	// Check if we need space for totals (reserve about 250 points)
-	currentY = await checkPageBreak(currentY, 250);
-
-	// Add spacing before totals
-	currentY += 30;
-
-	// Totals section - right aligned
+// Pre-calculate all financial totals
+function calculateInvoiceTotals(invoice: InvoiceWithRelations) {
 	const subtotal = invoice.items.reduce(
 		(acc, item) =>
 			acc +
@@ -410,93 +156,466 @@ async function generateItemsTableWithPagination(
 		0,
 	);
 
+	const totalWeight = invoice.items.reduce((acc, item) => acc + item.weight, 0);
+	const chargeAmount = invoice.charge_amount / 100;
+	const paidAmount = (invoice.paid_amount + invoice.charge_amount) / 100;
+	const totalAmount = (invoice.total_amount + invoice.charge_amount) / 100;
 	const balance = (invoice.total_amount - invoice.paid_amount) / 100;
 
-	const tax = 0;
-	const discount = 0;
+	return {
+		subtotal,
+		totalWeight,
+		chargeAmount,
+		paidAmount,
+		totalAmount,
+		balance,
+	};
+}
 
-	// Subtotal
-	doc
-		.fillColor("#000000")
-		.fontSize(8.5)
-		.font("Helvetica")
-		.text("Subtotal:", 380, currentY, { width: 80, align: "right" })
-		.text(`$${subtotal.toFixed(2)}`, 520, currentY, {
+// Pre-format all string data
+function formatInvoiceData(invoice: InvoiceWithRelations) {
+	const senderName = formatName(
+		invoice.customer.first_name,
+		invoice.customer.middle_name,
+		invoice.customer.last_name,
+		invoice.customer.second_last_name,
+		30,
+	);
+
+	const recipientName = formatName(
+		invoice.receiver.first_name,
+		invoice.receiver.middle_name,
+		invoice.receiver.last_name,
+		invoice.receiver.second_last_name,
+		30,
+	);
+
+	const date = new Date(invoice.created_at);
+	const formattedDate = `${date.toLocaleDateString("es-ES", {
+		day: "2-digit",
+		month: "2-digit",
+		year: "numeric",
+	})} ${date.toLocaleTimeString("es-ES", {
+		hour: "2-digit",
+		minute: "2-digit",
+		hour12: true,
+	})}`;
+
+	const location = `${invoice.receiver.city?.name || ""} ${
+		invoice.receiver.province?.name || ""
+	}`.trim();
+
+	const fullAddress = location
+		? `${invoice.receiver.address}, ${location}`
+		: invoice.receiver.address;
+
+	return {
+		senderName,
+		recipientName,
+		formattedDate,
+		fullAddress,
+	};
+}
+
+async function generatePageHeader(
+	doc: PDFKit.PDFDocument,
+	invoice: InvoiceWithRelations,
+	logoBuffer: Buffer | null,
+	barcodeBuffer: Buffer | null,
+	formattedData: ReturnType<typeof formatInvoiceData>,
+	calculations: ReturnType<typeof calculateInvoiceTotals>,
+	isFirstPage: boolean = false,
+) {
+	let currentY = 10;
+
+	// Use optimized text rendering
+	const textStyle = new TextStyler(doc);
+
+	// Add logo or placeholder
+	if (logoBuffer) {
+		doc.image(logoBuffer, 30, currentY, { width: 50, height: 50 });
+	} else {
+		// Draw placeholder box with company name initial or generic logo placeholder
+		const companyInitial = invoice.agency.name.charAt(0).toUpperCase();
+
+		// Draw rounded rectangle placeholder
+		doc
+			.fillColor("#F3F4F6")
+			.roundedRect(30, currentY, 50, 50, 5)
+			.fill()
+			.strokeColor("#E5E7EB")
+			.lineWidth(1)
+			.roundedRect(30, currentY, 50, 50, 5)
+			.stroke();
+
+		// Add company initial or generic text in the center
+		textStyle.style(FONTS.BOLD, 24, "#9CA3AF").text(companyInitial, 30, currentY + 15, {
 			width: 50,
+			align: "center",
+		});
+	}
+	currentY += 60;
+
+	// Company information
+	textStyle.style(FONTS.BOLD, 12, COLORS.BLACK).text(invoice.agency.name, 30, currentY);
+
+	currentY += 16;
+
+	textStyle
+		.style(FONTS.NORMAL, 9, COLORS.GRAY)
+		.text(`Address: ${invoice.agency.address}`, 30, currentY)
+		.text(`Phone: ${invoice.agency.phone}`, 30, currentY + 12);
+
+	// Right side information
+	textStyle
+		.style(FONTS.BOLD, 16, COLORS.BLACK)
+		.text(`Invoice ${invoice.id}`, 450, 20, { align: "right", width: 122 });
+
+	textStyle
+		.style(FONTS.NORMAL, 12, COLORS.BLACK)
+		.text(`Items: ${invoice.items.length}`, 450, 37, { align: "right", width: 122 });
+
+	// Total weight
+	textStyle
+		.style(FONTS.NORMAL, 9, COLORS.GRAY)
+		.text(`Total Weight: ${calculations.totalWeight.toFixed(2)} lbs`, 450, 51, {
 			align: "right",
+			width: 122,
 		});
 
-	currentY += 15;
-
-	// Delivery/Cargo
-	doc
-		.fillColor("#000000")
-		.text("Delivery:", 380, currentY, { width: 80, align: "right" })
-		.text(`$0.00`, 520, currentY, {
-			width: 50,
+	// Date - aligned to the right
+	textStyle
+		.style(FONTS.NORMAL, 9, COLORS.GRAY)
+		.text(`Fecha: ${formattedData.formattedDate}`, 450, 65, {
 			align: "right",
+			width: 122,
 		});
 
-	currentY += 15;
+	// Add barcode if available
+	if (barcodeBuffer) {
+		doc.image(barcodeBuffer, 320, 25, { width: 80, height: 20 });
+		textStyle
+			.style(FONTS.NORMAL, 8, COLORS.BLACK)
+			.text(String(invoice.id).padStart(6, "0"), 320, 50, { align: "center", width: 80 });
+	}
 
-	// Seguro
-	doc
-		.fillColor("#000000")
-		.text("Seguro:", 380, currentY, { width: 80, align: "right" })
-		.text(`$${tax.toFixed(2)}`, 520, currentY, { width: 50, align: "right" });
+	return isFirstPage ? 120 : 110;
+}
 
-	currentY += 15;
+// Optimized text styling helper
+class TextStyler {
+	private doc: PDFKit.PDFDocument;
+	private lastFont?: string;
+	private lastSize?: number;
+	private lastColor?: string;
 
-	// Cargo Extra
-	doc
-		.fillColor("#000000")
-		.text("Cargo:", 380, currentY, { width: 80, align: "right" })
-		.text(`$${(invoice.charge_amount / 100 || 0).toFixed(2)}`, 520, currentY, {
-			width: 50,
-			align: "right",
+	constructor(doc: PDFKit.PDFDocument) {
+		this.doc = doc;
+	}
+
+	style(font: string, size: number, color: string) {
+		if (this.lastFont !== font) {
+			this.doc.font(font);
+			this.lastFont = font;
+		}
+		if (this.lastSize !== size) {
+			this.doc.fontSize(size);
+			this.lastSize = size;
+		}
+		if (this.lastColor !== color) {
+			this.doc.fillColor(color);
+			this.lastColor = color;
+		}
+		return this;
+	}
+
+	text(text: string, x: number, y: number, options?: any) {
+		this.doc.text(text, x, y, options);
+		return this;
+	}
+}
+
+function generateSenderRecipientInfo(
+	doc: PDFKit.PDFDocument,
+	invoice: InvoiceWithRelations,
+	formattedData: ReturnType<typeof formatInvoiceData>,
+) {
+	const textStyle = new TextStyler(doc);
+	let currentY = 115;
+
+	// Left side - Sender information
+	textStyle.style(FONTS.BOLD, 10, COLORS.DARK_GRAY).text(formattedData.senderName, 40, currentY);
+
+	currentY += 14;
+
+	// Sender phone
+	if (invoice.customer.mobile) {
+		textStyle
+			.style(FONTS.NORMAL, 9, COLORS.DARK_GRAY)
+			.text(`Tel: ${invoice.customer.mobile}`, 40, currentY, { width: 100, align: "left" });
+		currentY += 14;
+	}
+
+	// Sender address
+	if (invoice.customer.address) {
+		textStyle
+			.style(FONTS.NORMAL, 9, COLORS.DARK_GRAY)
+			.text(`Dirección: ${invoice.customer.address}`, 40, currentY, { width: 250 });
+	}
+
+	// Right side - Recipient information
+	let recipientY = 117;
+	const recipientFontSize = formattedData.recipientName.length > 25 ? 9 : 10;
+
+	textStyle
+		.style(FONTS.BOLD, recipientFontSize, COLORS.DARK_GRAY)
+		.text(formattedData.recipientName, 320, recipientY, {
+			width: 250,
+			height: 16,
+			ellipsis: true,
 		});
 
-	currentY += 15;
+	recipientY += 14;
 
-	// Descuento
-	doc
-		.fillColor("#000000")
-		.text("Descuento:", 380, currentY, { width: 80, align: "right" })
-		.text(`$${(discount / 100).toFixed(2)}`, 520, currentY, { width: 50, align: "right" });
+	// Recipient phone
+	if (invoice.receiver.mobile || invoice.receiver.phone) {
+		const phoneText = `Tel: ${invoice.receiver.mobile || ""}${
+			invoice.receiver.mobile && invoice.receiver.phone ? " - " : ""
+		}${invoice.receiver.phone || ""}`;
 
-	currentY += 15;
+		textStyle
+			.style(FONTS.NORMAL, 9, COLORS.DARK_GRAY)
+			.text(phoneText, 320, recipientY, { width: 250, align: "left" });
+		recipientY += 14;
+	}
 
-	// Total
-	doc
-		.fillColor("#000000")
-		.fontSize(10.5)
-		.font("Helvetica-Bold")
-		.text("Total:", 380, currentY, { width: 80, align: "right" })
-		.text(`$${((invoice.total_amount + invoice.charge_amount) / 100).toFixed(2)}`, 520, currentY, {
-			width: 50,
-			align: "right",
+	// Recipient CI
+	if (invoice.receiver.ci) {
+		textStyle
+			.style(FONTS.NORMAL, 9, COLORS.DARK_GRAY)
+			.text(`CI: ${invoice.receiver.ci}`, 320, recipientY, { width: 100, align: "left" });
+		recipientY += 14;
+	}
+
+	// Recipient address with location
+	textStyle
+		.style(FONTS.NORMAL, 9, COLORS.DARK_GRAY)
+		.text(`Dir: ${formattedData.fullAddress}`, 320, recipientY, { width: 250 });
+}
+
+async function generateItemsTableOptimized(
+	doc: PDFKit.PDFDocument,
+	invoice: InvoiceWithRelations,
+	calculations: ReturnType<typeof calculateInvoiceTotals>,
+	logoBuffer: Buffer | null,
+	barcodeBuffer: Buffer | null,
+	formattedData: ReturnType<typeof formatInvoiceData>,
+) {
+	let currentY = 200;
+	let currentPage = 1;
+	const textStyle = new TextStyler(doc);
+
+	// Batch process items for better performance
+	const processedItems = invoice.items.map((item, index) => ({
+		...item,
+		hbl:
+			item.hbl || `CTE${String(invoice.id).padStart(6, "0")}${String(index + 1).padStart(6, "0")}`,
+		subtotal:
+			(item.rate * item.weight +
+				item?.customs_fee +
+				(item?.delivery_fee || 0) +
+				(item?.insurance_fee || 0)) /
+			100,
+	}));
+
+	const addNewPageWithHeaderFooter = async () => {
+		doc.addPage();
+		currentPage++;
+
+		// Add header to new page
+		await generatePageHeader(
+			doc,
+			invoice,
+			logoBuffer,
+			barcodeBuffer,
+			formattedData,
+			calculations,
+			false,
+		);
+
+		// Add footer to new page
+		addFooterToPage(doc, invoice, currentPage, currentPage); // We'll update total pages later
+
+		return addOptimizedTableHeaders(doc, 130, textStyle);
+	};
+
+	// Add table headers
+	currentY = addOptimizedTableHeaders(doc, currentY, textStyle);
+
+	// Process items in batches to avoid memory issues with large invoices
+	const BATCH_SIZE = 50;
+	for (let i = 0; i < processedItems.length; i += BATCH_SIZE) {
+		const batch = processedItems.slice(i, i + BATCH_SIZE);
+
+		for (const item of batch) {
+			const descriptionHeight = doc.heightOfString(item.description, { width: 150 });
+			const rowHeight = Math.max(25, descriptionHeight + 16);
+
+			// Check page break
+			if (currentY + rowHeight > LAYOUT.PAGE_HEIGHT - LAYOUT.BOTTOM_MARGIN) {
+				currentY = await addNewPageWithHeaderFooter();
+			}
+
+			// Render row efficiently
+			renderTableRow(doc, item, currentY, rowHeight, textStyle);
+			currentY += rowHeight;
+		}
+	}
+
+	// Check if we need space for totals (reserve about 250 points)
+	if (currentY + 250 > LAYOUT.PAGE_HEIGHT - LAYOUT.BOTTOM_MARGIN) {
+		currentY = await addNewPageWithHeaderFooter();
+	}
+
+	// Add totals section
+	renderTotalsSection(doc, calculations, currentY + 30, textStyle);
+
+	return { totalPages: currentPage };
+}
+
+function addOptimizedTableHeaders(
+	doc: PDFKit.PDFDocument,
+	y: number,
+	textStyle: TextStyler,
+): number {
+	const headers = [
+		{ text: "HBL", x: 30, width: 100, align: "left" },
+		{ text: "Descripción", x: 140, width: 150, align: "left" },
+		{ text: "Seguro", x: 300, width: 40, align: "right" },
+		{ text: "Cargo", x: 340, width: 40, align: "right" },
+		{ text: "Arancel", x: 385, width: 40, align: "right" },
+		{ text: "Precio", x: 430, width: 40, align: "right" },
+		{ text: "Peso", x: 470, width: 40, align: "right" },
+		{ text: "Subtotal", x: 520, width: 40, align: "right" },
+	];
+
+	textStyle.style(FONTS.NORMAL, 9, COLORS.GRAY);
+
+	headers.forEach((header) => {
+		textStyle.text(header.text, header.x, y, {
+			width: header.width,
+			align: header.align as any,
 		});
-	currentY += 20;
-	//paid
-	doc
-		.fillColor("#000000")
-		.fontSize(9)
-		.font("Helvetica")
-		.text("Paid:", 380, currentY, { width: 80, align: "right" })
-		.text(`$${((invoice.paid_amount + invoice.charge_amount) / 100).toFixed(2)}`, 520, currentY, {
-			width: 50,
-			align: "right",
-		});
-	currentY += 15;
-	//balance
-	doc
-		.fillColor("#FF0000")
-		.fontSize(9)
-		.font("Helvetica")
-		.text("Balance:", 380, currentY, { width: 80, align: "right" })
-		.text(`$${(balance || 0).toFixed(2)}`, 520, currentY, { width: 50, align: "right" });
+	});
 
-	return { totalPages: currentPage, total: invoice.total_amount };
+	// Add border
+	doc
+		.strokeColor(COLORS.BORDER_GRAY)
+		.lineWidth(0.3)
+		.moveTo(25, y + 10)
+		.lineTo(572, y + 10)
+		.stroke();
+
+	return y + 10;
+}
+
+function renderTableRow(
+	doc: PDFKit.PDFDocument,
+	item: any,
+	currentY: number,
+	rowHeight: number,
+	textStyle: TextStyler,
+) {
+	const verticalCenter = currentY + rowHeight / 2 - 4;
+
+	textStyle.style(FONTS.NORMAL, 8.5, COLORS.DARK_GRAY);
+
+	const rowData = [
+		{ text: item.hbl, x: 30, y: verticalCenter, width: 100 },
+		{ text: item.description, x: 140, y: currentY + 8, width: 150 },
+		{
+			text: `$${((item.insurance_fee || 0) / 100)?.toFixed(2)}`,
+			x: 300,
+			y: verticalCenter,
+			width: 40,
+			align: "right",
+		},
+		{
+			text: `$${((item.delivery_fee || 0) / 100)?.toFixed(2)}`,
+			x: 340,
+			y: verticalCenter,
+			width: 40,
+			align: "right",
+		},
+		{
+			text: `$${((item.customs_fee || 0) / 100)?.toFixed(2)}`,
+			x: 385,
+			y: verticalCenter,
+			width: 40,
+			align: "right",
+		},
+		{
+			text: `$${((item.rate || 0) / 100)?.toFixed(2)}`,
+			x: 430,
+			y: verticalCenter,
+			width: 40,
+			align: "right",
+		},
+		{ text: `${item.weight.toFixed(2)}`, x: 470, y: verticalCenter, width: 40, align: "right" },
+		{ text: `$${item.subtotal.toFixed(2)}`, x: 520, y: verticalCenter, width: 40, align: "right" },
+	];
+
+	rowData.forEach((data) => {
+		textStyle.text(data.text, data.x, data.y, {
+			width: data.width,
+			align: data.align as any,
+		});
+	});
+
+	// Row border
+	doc
+		.strokeColor(COLORS.LIGHT_GRAY)
+		.lineWidth(0.2)
+		.moveTo(25, currentY + rowHeight)
+		.lineTo(572, currentY + rowHeight)
+		.stroke();
+}
+
+function renderTotalsSection(
+	doc: PDFKit.PDFDocument,
+	calculations: ReturnType<typeof calculateInvoiceTotals>,
+	startY: number,
+	textStyle: TextStyler,
+) {
+	let currentY = startY;
+
+	const totals = [
+		{ label: "Subtotal:", value: `$${calculations.subtotal.toFixed(2)}`, color: COLORS.BLACK },
+		{ label: "Delivery:", value: "$0.00", color: COLORS.BLACK },
+		{ label: "Seguro:", value: "$0.00", color: COLORS.BLACK },
+		{ label: "Cargo:", value: `$${calculations.chargeAmount.toFixed(2)}`, color: COLORS.BLACK },
+		{ label: "Descuento:", value: "$0.00", color: COLORS.BLACK },
+		{
+			label: "Total:",
+			value: `$${calculations.totalAmount.toFixed(2)}`,
+			color: COLORS.BLACK,
+			bold: true,
+		},
+		{ label: "Paid:", value: `$${calculations.paidAmount.toFixed(2)}`, color: COLORS.BLACK },
+		{ label: "Balance:", value: `$${calculations.balance.toFixed(2)}`, color: COLORS.RED },
+	];
+
+	totals.forEach((total, index) => {
+		const font = total.bold ? FONTS.BOLD : FONTS.NORMAL;
+		const size = total.bold ? 10.5 : index >= totals.length - 2 ? 9 : 8.5;
+
+		textStyle
+			.style(font, size, total.color)
+			.text(total.label, 380, currentY, { width: 80, align: "right" })
+			.text(total.value, 520, currentY, { width: 50, align: "right" });
+
+		currentY += 15;
+	});
 }
 
 function addFooterToPage(
@@ -505,83 +624,71 @@ function addFooterToPage(
 	currentPage: number,
 	totalPages: number = 1,
 ) {
-	// Position footer at the bottom of the page
-	const footerY = 680; // Near bottom of page (792 - 112 = 680)
+	const textStyle = new TextStyler(doc);
 
-	// Tracking information (blue, bold, centered)
-	doc
-		.fillColor("#4682B4")
-		.fontSize(10)
-		.font("Helvetica-Bold")
-		.text(`Tracking: ${invoice.agency.website}`, 40, footerY, {
+	// Tracking info
+	textStyle
+		.style(FONTS.BOLD, 10, COLORS.BLUE)
+		.text(`Tracking: ${invoice.agency.website}`, 40, LAYOUT.FOOTER_Y, {
 			align: "center",
 			width: 532,
 		});
 
-	// Legal disclaimer (gray, smaller font, justified)
-	doc
-		.fillColor("#808080")
-		.fontSize(7)
-		.font("Helvetica")
+	// Legal disclaimer
+	textStyle
+		.style(FONTS.NORMAL, 7, COLORS.GRAY)
 		.text(
 			"Al realizar este envío, declaro que soy responsable de toda la información proporcionada y que el contenido enviado no infringe las leyes de los Estados Unidos ni las regulaciones aduanales de la República de Cuba. También declaro estar de acuerdo con los términos y condiciones de la empresa.",
 			40,
-			footerY + 15,
-			{
-				width: 532,
-				align: "justify",
-				lineGap: 1,
-			},
+			LAYOUT.FOOTER_Y + 15,
+			{ width: 532, align: "justify", lineGap: 1 },
 		);
 
-	// Terms link (underlined, centered)
-	doc
-		.fillColor("#000000")
-		.fontSize(8)
-		.font("Helvetica")
+	// Terms link
+	textStyle
+		.style(FONTS.NORMAL, 8, COLORS.BLACK)
 		.text(
 			"Para términos y condiciones completos visite: https://ctenvios.com/terms",
 			40,
-			footerY + 35,
-			{
-				align: "center",
-				width: 532,
-				underline: true,
-			},
+			LAYOUT.FOOTER_Y + 35,
+			{ align: "center", width: 532, underline: true },
 		);
 
-	// Page number (gray, right-aligned) - will be updated later
-	doc
-		.fillColor("#808080")
-		.fontSize(8)
-		.font("Helvetica")
-		.text(`Página ${currentPage} de ${totalPages}`, 40, footerY + 50, {
+	// Page number
+	textStyle
+		.style(FONTS.NORMAL, 8, COLORS.GRAY)
+		.text(`Página ${currentPage} de ${totalPages}`, 40, LAYOUT.FOOTER_Y + 50, {
 			align: "right",
 			width: 532,
 		});
 }
 
-function updatePageNumbers(doc: PDFKit.PDFDocument, totalPages: number) {
-	// Update page numbers on all pages
+// Optimized page number updates
+function updateAllPageNumbers(doc: PDFKit.PDFDocument, totalPages: number) {
 	const range = doc.bufferedPageRange();
+	const textStyle = new TextStyler(doc);
+
 	for (let i = range.start; i < range.start + range.count; i++) {
 		doc.switchToPage(i);
-		const footerY = 680;
 
-		// Clear the old page number area
+		// Clear old page number
 		doc
-			.fillColor("#FFFFFF")
-			.rect(450, footerY + 50, 122, 10)
+			.fillColor(COLORS.WHITE)
+			.rect(450, LAYOUT.FOOTER_Y + 50, 122, 10)
 			.fill();
 
-		// Add updated page number
-		doc
-			.fillColor("#808080")
-			.fontSize(8)
-			.font("Helvetica")
-			.text(`Página ${i + 1} de ${totalPages}`, 40, footerY + 50, {
+		// Add new page number
+		textStyle
+			.style(FONTS.NORMAL, 8, COLORS.GRAY)
+			.text(`Página ${i + 1} de ${totalPages}`, 40, LAYOUT.FOOTER_Y + 50, {
 				align: "right",
 				width: 532,
 			});
 	}
+}
+
+// Utility function to clear caches periodically
+export function clearInvoiceCaches() {
+	logoCache.clear();
+	barcodeCache.clear();
 }
