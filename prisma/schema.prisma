@@ -135,9 +135,6 @@ model City {
   receivers    Receiver[]
   carrier_rates CarrierRates[]
 }
-
-
-
 model Provider {
   id         Int         @id @default(autoincrement())
   name       String      @unique
@@ -326,12 +323,12 @@ model CustomsRates {
   id           Int      @id @default(autoincrement())
   name         String
   description  String?
-  country_id   Int
+  country_id   Int @default(1)
   country      Country  @relation(fields: [country_id], references: [id])
   chapter      String?
   custom_value Float?
   fee_type     FeeType  @default(UNIT)
-  fee          Int      @default(0)// in cents
+  fee_in_cents          Int      @default(0)
   min_weight   Float?
   max_weight   Float?
   max_quantity Int? // opcional, para limitar cantidad

@@ -367,7 +367,7 @@ router.post("/", async (req, res) => {
 					rate: item.rate * 100,
 					agency_rate: rate?.agency_rate || 0,
 					forwarder_rate: rate?.forwarder_rate || 0,
-					customs_fee: item.customs_fee || 0,
+					customs_fee: item.customs_fee_in_cents || 0,
 					customs_rates_id: item.customs_id || null,
 					delivery_fee: item.delivery_fee || 0,
 					insurance_fee: item.insurance_fee || 0,

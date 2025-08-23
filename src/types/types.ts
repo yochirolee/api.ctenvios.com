@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Request } from "express";
-import { AgencyType, Roles } from "@prisma/client";
+import { AgencyType, FeeType, Roles } from "@prisma/client";
 
 // Role hierarchy types
 export interface RoleResponse {
@@ -71,4 +71,23 @@ export const agencySchema = z.object({
 	services: z.array(z.number()).optional(),
 	website: z.string().optional(),
 	agency_type: z.nativeEnum(AgencyType).optional().default(AgencyType.AGENCY),
+});
+
+export const customsRatesSchema = z.object({
+	country_id: z.number().min(1, "Country ID is required"),
+	name: z.string().min(1, "Name is required"),
+	description: z.string().optional(),
+	chapter: z.string().optional(),
+	fee_type: z.nativeEnum(FeeType).optional().default(FeeType.UNIT),
+	fee_in_cents: z.number().min(0, "Fee must be greater than 0"),
+	min_weight: z.number().optional().default(0),
+	max_weight: z.number().optional().default(0),
+	max_quantity: z.number().optional().default(0),
+
+	name: z.string().min(1, "Name is required"),
+	description: z.string().optional(),
+	weight: z.number().optional(),
+	volume: z.number().optional(),
+	quantity: z.number().optional(),
+	unit_price: z.number().optional(),
 });
