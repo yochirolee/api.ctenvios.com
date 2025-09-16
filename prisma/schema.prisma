@@ -379,11 +379,11 @@ model Payment {
   id                Int           @id @default(autoincrement())
   invoice_id        Int
   invoice           Invoice       @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
-  amount            Int           @default(0) // in cents
-  payment_charge    Int           @default(0) // in cents
-  payment_method    PaymentMethod
-  payment_reference String?
-  payment_date      DateTime      @default(now())
+  amount_in_cents           Int           @default(0) // in cents
+  charge_in_cents    Int           @default(0) // in cents
+  method    PaymentMethod
+  reference String?
+  date      DateTime      @default(now())
   status            PaymentStatus @default(PENDING)
   notes             String?
   created_at        DateTime      @default(now())
@@ -401,7 +401,7 @@ model Discount {
   user        User         @relation(fields: [user_id], references: [id], onDelete: Cascade)
   type        DiscountType
   description String?
-  discount    Int          @default(0) // in cents
+  discount_in_cents    Int          @default(0) // in cents
   created_at  DateTime     @default(now())
 }
 

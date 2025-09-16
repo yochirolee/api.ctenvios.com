@@ -83,9 +83,6 @@ export const customsRatesSchema = z.object({
 	min_weight: z.number().optional().default(0),
 	max_weight: z.number().optional().default(0),
 	max_quantity: z.number().optional().default(0),
-
-	name: z.string().min(1, "Name is required"),
-	description: z.string().optional(),
 	weight: z.number().optional(),
 	volume: z.number().optional(),
 	quantity: z.number().optional(),

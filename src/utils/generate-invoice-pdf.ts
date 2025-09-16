@@ -148,19 +148,19 @@ function calculateInvoiceTotals(invoice: InvoiceWithRelations) {
 	const subtotal = invoice.items.reduce(
 		(acc, item) =>
 			acc +
-			(item.rate * item.weight +
-				(item.delivery_fee || 0) +
-				(item.insurance_fee || 0) +
-				item.customs_fee) /
+			(item.rate_in_cents * item.weight +
+				(item.delivery_fee_in_cents || 0) +
+				(item.insurance_fee_in_cents || 0) +
+				item.customs_fee_in_cents) /
 				100,
 		0,
 	);
 
 	const totalWeight = invoice.items.reduce((acc, item) => acc + item.weight, 0);
-	const chargeAmount = invoice.charge_amount / 100;
-	const paidAmount = (invoice.paid_amount + invoice.charge_amount) / 100;
-	const totalAmount = (invoice.total_amount + invoice.charge_amount) / 100;
-	const balance = (invoice.total_amount - invoice.paid_amount) / 100;
+	const chargeAmount = invoice.charge_in_cents / 100;
+	const paidAmount = (invoice.paid_in_cents + invoice.charge_in_cents) / 100;
+	const totalAmount = (invoice.total_in_cents + invoice.charge_in_cents) / 100;
+	const balance = (invoice.total_in_cents - invoice.paid_in_cents) / 100;
 
 	return {
 		subtotal,
@@ -421,11 +421,12 @@ async function generateItemsTableOptimized(
 		hbl:
 			item.hbl || `CTE${String(invoice.id).padStart(6, "0")}${String(index + 1).padStart(6, "0")}`,
 		subtotal:
-			(item.rate * item.weight +
-				item?.customs_fee +
-				(item?.delivery_fee || 0) +
-				(item?.insurance_fee || 0)) /
-			100,
+			(item.rate_in_cents * item.weight +
+				item?.customs_fee_in_cents || 0 +
+				(item?.delivery_fee_in_cents || 0) +
+				(item?.insurance_fee_in_cents || 0) +
+				(item?.charge_fee_in_cents || 0)) /
+				100,
 	}));
 
 	const addNewPageWithHeaderFooter = async () => {
@@ -534,28 +535,28 @@ function renderTableRow(
 		{ text: item.hbl, x: 30, y: verticalCenter, width: 100 },
 		{ text: item.description, x: 140, y: currentY + 8, width: 150 },
 		{
-			text: `$${((item.insurance_fee || 0) / 100)?.toFixed(2)}`,
+			text: `$${((item.insurance_fee_in_cents || 0) / 100)?.toFixed(2)}`,
 			x: 300,
 			y: verticalCenter,
 			width: 40,
 			align: "right",
 		},
 		{
-			text: `$${((item.delivery_fee || 0) / 100)?.toFixed(2)}`,
+			text: `$${((item.delivery_fee_in_cents || 0) / 100)?.toFixed(2)}`,
 			x: 340,
 			y: verticalCenter,
 			width: 40,
 			align: "right",
 		},
 		{
-			text: `$${((item.customs_fee || 0) / 100)?.toFixed(2)}`,
+			text: `$${((item.customs_fee_in_cents || 0) / 100)?.toFixed(2)}`,
 			x: 385,
 			y: verticalCenter,
 			width: 40,
 			align: "right",
 		},
 		{
-			text: `$${((item.rate || 0) / 100)?.toFixed(2)}`,
+			text: `$${((item.rate_in_cents || 0) / 100)?.toFixed(2)}`,
 			x: 430,
 			y: verticalCenter,
 			width: 40,
