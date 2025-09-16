@@ -20,6 +20,7 @@ model User {
   name            String
   email           String           @unique
   emailVerified   Boolean          @default(false)
+  phone           String?
   image           String?
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
@@ -28,17 +29,18 @@ model User {
   forwarder_id    Int?
   forwarder       Forwarder?       @relation(fields: [forwarder_id], references: [id])
   agency_id       Int?
-  agency          Agency?          @relation(fields: [agency_id], references: [id])
-  is_active       Boolean          @default(true)
-  is_root         Boolean          @default(false)
+  agency          Agency?          @relation(fields: [agency_id], references: [id], onDelete: Cascade)
   role            Roles            @default(AGENCY_SALES)
   invoices        Invoice[]
+  payments        Payment[]
+  discounts       Discount[]
+  invoice_history InvoiceHistory[]
   // Better Auth relations
   sessions        Session[]
   accounts        Account[]
-  invoice_history InvoiceHistory[]
-  payments        Payment[]
-  discounts       Discount[]
+  banned          Boolean?
+  banReason       String?
+  banExpires      DateTime?
 
   @@map("user")
 }
@@ -49,45 +51,57 @@ model Agency {
   address          String
   contact          String
   phone            String
-  email            String
+  email            String     @unique
   logo             String?
   website          String?
   created_at       DateTime   @default(now())
   updated_at       DateTime   @updatedAt
   forwarder_id     Int
   forwarder        Forwarder  @relation(fields: [forwarder_id], references: [id])
-  parent_agency_id Int? // Clave foránea opcional
-  parent_agency    Agency?    @relation("AgencyHierarchy", fields: [parent_agency_id], references: [id])
-  child_agencies   Agency[]   @relation("AgencyHierarchy") // Hijas
-  services         Service[] // Servicios que ofrece
-  users            User[] // Usuarios que pertenecen a esta agencia
-  rates            Rates[] // Tarifas personalizadas
+  parent_agency_id Int?
+  parent_agency    Agency?    @relation("AgencyHierarchy", fields: [parent_agency_id], references: [id], onDelete: SetNull)
+  child_agencies   Agency[]   @relation("AgencyHierarchy")
+  services         Service[]
+  users            User[]
+  shipping_rates            ShippingRate[]
   customers        Customer[]
   receivers        Receiver[]
   invoices         Invoice[]
   items            Item[]
+  products         Product[]
   counters         Counter[]
   agency_type      AgencyType @default(AGENCY)
+  is_active        Boolean    @default(false)
+  commission_rate  Float?     @default(0.0) // Commission percentage for hierarchy
+  
+  // Performance indexes
+  @@index([forwarder_id, is_active])
+  @@index([parent_agency_id])
+  @@index([agency_type, is_active])
 }
 
 model Customer {
-  id                Int       @id @default(autoincrement())
+  id                Int        @id @default(autoincrement())
   first_name        String
   middle_name       String?
   last_name         String
   second_last_name  String?
-  identity_document String?   @unique
-  email             String?   @unique
+  identity_document String?    @unique
+  email             String?    @unique
   mobile            String
   address           String?
-  created_at        DateTime  @default(now())
-  updated_at        DateTime  @updatedAt
+  created_at        DateTime   @default(now())
+  updated_at        DateTime   @updatedAt
   receivers         Receiver[]
   agency_id         Int?
-  agency            Agency?   @relation(fields: [agency_id], references: [id])
+  agency            Agency?    @relation(fields: [agency_id], references: [id], onDelete: Cascade)
   invoices          Invoice[]
+  is_active         Boolean    @default(true)
 
   @@unique([mobile, first_name, last_name])
+  @@index([agency_id, is_active])
+  @@index([email])
+  @@index([identity_document])
 }
 
 model Receiver {
@@ -106,7 +120,7 @@ model Receiver {
   updated_at       DateTime   @updatedAt
   customers        Customer[]
   agency_id        Int?
-  agency           Agency?    @relation(fields: [agency_id], references: [id])
+  agency           Agency?    @relation(fields: [agency_id], references: [id], onDelete: Cascade)
   province_id      Int
   province         Province   @relation(fields: [province_id], references: [id])
   city_id          Int
@@ -117,24 +131,25 @@ model Receiver {
 }
 
 model Province {
-  id         Int       @id @default(autoincrement())
+  id         Int        @id @default(autoincrement())
   name       String
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
+  created_at DateTime   @default(now())
+  updated_at DateTime   @updatedAt
   cities     City[]
-  receivers   Receiver[]
+  receivers  Receiver[]
 }
 
 model City {
-  id          Int       @id @default(autoincrement())
-  name        String
-  created_at  DateTime  @default(now())
-  updated_at  DateTime  @updatedAt
-  province_id Int
-  province    Province  @relation(fields: [province_id], references: [id])
-  receivers    Receiver[]
+  id            Int            @id @default(autoincrement())
+  name          String
+  created_at    DateTime       @default(now())
+  updated_at    DateTime       @updatedAt
+  province_id   Int
+  province      Province       @relation(fields: [province_id], references: [id])
+  receivers     Receiver[]
   carrier_rates CarrierRates[]
 }
+
 model Provider {
   id         Int         @id @default(autoincrement())
   name       String      @unique
@@ -147,6 +162,7 @@ model Provider {
   updated_at DateTime    @updatedAt
   services   Service[]
   forwarders Forwarder[]
+ 
 }
 
 model Forwarder {
@@ -175,108 +191,178 @@ model Service {
   service_type ServiceType
   forwarder_id Int
   forwarder    Forwarder   @relation(fields: [forwarder_id], references: [id])
-  rates        Rates[]
   provider_id  Int
   provider     Provider    @relation(fields: [provider_id], references: [id])
   agencies     Agency[]
   is_active    Boolean     @default(true)
   invoices     Invoice[]
   items        Item[]
-  carrier_id   Int?
-  carrier      Carrier?     @relation(fields: [carrier_id], references: [id])
-}
-
-model Rates {
-  id              Int     @id @default(autoincrement())
-  name            String  @default("Nueva Tarifa")
-  service_id      Int
-  service         Service @relation(fields: [service_id], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  agency_id       Int
-  agency          Agency  @relation(fields: [agency_id], references: [id])
-  carrier_rates_id Int?
-  carrier_rates   CarrierRates? @relation(fields: [carrier_rates_id], references: [id])
-  forwarder_rate  Int   @default(0) // in cents
-  agency_rate     Int   @default(0) // in cents
-  public_rate     Int   @default(0) // in cents
-  invoice         Invoice[]
+  shipping_rates        ShippingRate[]
+  carriers Carrier[]
 }
 
 model Carrier {
-  id         Int        @id @default(autoincrement())
-  name       String     @unique
-  created_at DateTime   @default(now())
-  updated_at DateTime   @updatedAt
-  services    Service[]
+  id            Int            @id @default(autoincrement())
+  name          String         @unique
+  created_at    DateTime       @default(now())
+  updated_at    DateTime       @updatedAt
+  services      Service[]
   carrier_rates CarrierRates[]
-  forwarder_id Int
-  forwarder    Forwarder @relation(fields: [forwarder_id], references: [id])
+
+  forwarder_id  Int
+  forwarder     Forwarder      @relation(fields: [forwarder_id], references: [id])
 }
 
 model CarrierRates {
-  id         Int        @id @default(autoincrement())
+  id         Int      @id @default(autoincrement())
   carrier_id Int
-  carrier    Carrier    @relation(fields: [carrier_id], references: [id])
-  rate       Int        @default(0) // in cents
+  carrier    Carrier  @relation(fields: [carrier_id], references: [id])
+  carrier_rate_in_cents       Int      @default(0) // in cents
   city_id    Int
-  rates      Rates[]
-  city       City       @relation(fields: [city_id], references: [id])
-  created_at DateTime   @default(now())
-  updated_at DateTime   @updatedAt
-  }
+  city       City     @relation(fields: [city_id], references: [id])
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+ 
+}
 
 model Invoice {
-  id               Int              @id @default(autoincrement())
-  user_id          String
-  user             User             @relation(fields: [user_id], references: [id])
-  agency_id        Int
-  agency           Agency           @relation(fields: [agency_id], references: [id])
-  customer_id      Int
-  customer         Customer         @relation(fields: [customer_id], references: [id])
-  receiver_id       Int
-  receiver          Receiver          @relation(fields: [receiver_id], references: [id])
-  service_id       Int
-  service          Service          @relation(fields: [service_id], references: [id])
-  items            Item[]
-  rate_id          Int
-  rate             Rates            @relation(fields: [rate_id], references: [id])
-  total_amount     Int              @default(0) // in cents
-  paid_amount      Int              @default(0) // in cents
-  charge_amount    Int              @default(0) // in cents
-  delivery_amount  Int              @default(0) // in cents
-  discount_amount  Int @default(0) // in cents
-  payment_status   PaymentStatus    @default(PENDING)
-  payments         Payment[]
-  discounts        Discount[]
-  status           String
-  created_at       DateTime         @default(now())
-  updated_at       DateTime         @updatedAt
-  invoice_history  InvoiceHistory[]
+  id              Int              @id @default(autoincrement())
+  user_id         String
+  user            User             @relation(fields: [user_id], references: [id])
+  agency_id       Int
+  agency          Agency           @relation(fields: [agency_id], references: [id], onDelete: Cascade)
+  customer_id     Int
+  customer        Customer         @relation(fields: [customer_id], references: [id])
+  receiver_id     Int
+  receiver        Receiver         @relation(fields: [receiver_id], references: [id])
+  service_id      Int
+  service         Service          @relation(fields: [service_id], references: [id])
+  items           Item[]
+  total_in_cents    Int              @default(0) // in cents
+  paid_in_cents     Int              @default(0) // in cents
+  charge_in_cents   Int              @default(0) // in cents
+  payment_status  PaymentStatus    @default(PENDING)
+  payments        Payment[]
+  discounts       Discount[]
+  status          InvoiceStatus    @default(PENDING)
+  created_at      DateTime         @default(now())
+  updated_at      DateTime         @updatedAt
+  invoice_history InvoiceHistory[]
+  
+  // Performance indexes
+  @@index([agency_id, created_at])
+  @@index([customer_id])
+  @@index([status, payment_status])
+  @@index([user_id, created_at])
 }
 
 model Item {
-  hbl              String        @id
-  description      String
+  hbl                         String        @id //tracking number
+  description                 String
+  created_at                  DateTime      @default(now())
+  updated_at                  DateTime      @updatedAt
+  weight                      Float
+  volume                      Float         @default(0)
+  product_id                  Int?
+  product                     Product?      @relation(fields: [product_id], references: [id])
+  service_id                  Int
+  service                     Service       @relation(fields: [service_id], references: [id])
+  quantity                    Int           @default(1)
+  // --- CAMPOS DE SNAPSHOT (PERFECTO) ---
+  base_rate_in_cents          Int           @default(0) // Precio del Forwarder
+  rate_in_cents               Int           @default(0) // Precio final de venta por unidad
+  cost_in_cents               Int                @default(0) // Costo para la agencia que vende (era agency_parent_rate)
+  
+  customs_fee_in_cents        Int           @default(0)
+  insurance_fee_in_cents      Int?          @default(0)
+  delivery_fee_in_cents       Int?          @default(0)
+  charge_fee_in_cents         Int?          @default(0)
+  customs_rates_id            Int?
+  customs_rates               CustomsRates? @relation(fields: [customs_rates_id], references: [id])
+  
+  invoice_id                  Int
+  invoice                     Invoice       @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
+  agency_id                   Int
+  agency                      Agency        @relation(fields: [agency_id], references: [id], onDelete: Cascade)
+  status                      String        @default("PENDING")
+  
+  // El eslabón de oro: la tarifa que se usó.
+  rate_id                     Int
+  rate                        ShippingRate         @relation(fields: [rate_id], references: [id])
+ 
+  @@index([invoice_id])
+  @@index([agency_id, created_at])
+  @@index([service_id, status])
+  @@index([hbl])
+}
+
+model ShippingRate {
+  id            Int      @id @default(autoincrement())
+  name          String   @default("Base Rate")
+  service_id    Int?
+  service       Service? @relation(fields: [service_id], references: [id], onDelete: Cascade)
+  agency_id     Int
+  agency        Agency   @relation(fields: [agency_id], references: [id], onDelete: Cascade)
+  cost_in_cents Int      @default(0) // Costo para la agencia
+  
+  // Para RateType.WEIGHT, este es el precio por libra (o la unidad de peso que uses).
+  // Para RateType.FIXED, este es el precio total y único.
+  rate_in_cents Int      @default(0)
+
+  // Estos rangos aplican principalmente para RateType.WEIGHT
+  min_weight    Float?
+  max_weight    Float?
+
+  is_active     Boolean  @default(true)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+  items         Item[]
+  products      Product[]
+  rate_type     RateType @default(WEIGHT)
+  is_base_rate       Boolean  @default(false)
+
+  // --- NUEVOS CAMPOS ---
+  // Campos opcionales para describir tarifas de tipo FIXED, ej: "Caja Mediana"
+  length        Float? // en pulgadas o cm
+  width         Float?
+  height        Float?
+}
+
+
+
+enum RateType {
+ 
+  FIXED
+  WEIGHT
+}
+//Modifications to Test
+model Product {
+  id               Int           @id @default(autoincrement())
+  name             String
+  description      String?
+  sku              String?
+  image_url        String?
   created_at       DateTime      @default(now())
   updated_at       DateTime      @updatedAt
-  weight           Float
-  volume           Float         @default(0)
-  service_id       Int
-  service          Service       @relation(fields: [service_id], references: [id])
-  quantity         Int           @default(1)
-  rate             Int           @default(0)// in cents
-  agency_rate      Int           @default(0)// in cents
-  forwarder_rate   Int           @default(0)// in cents
-  customs_fee      Int         @default(0)
-  insurance_fee    Int?      @default(0)
-  delivery_fee     Int?      @default(0)
-  charge_fee       Int?      @default(0)
-  customs_rates_id Int?
-  customs_rates    CustomsRates? @relation(fields: [customs_rates_id], references: [id])
-  invoice_id       Int
-  invoice          Invoice       @relation(fields: [invoice_id], references: [id], onDelete: Cascade, onUpdate: Cascade)
   agency_id        Int
   agency           Agency        @relation(fields: [agency_id], references: [id])
+  stock            Int           @default(0)
+  weight           Float         @default(0) // Peso en libras
+  volume           Float         @default(0)
+  cost_in_cents    Int           @default(0)
+  sale_in_cents    Int           @default(0) // Puede servir como un precio de venta sugerido o base
+  customs_rates_id Int?
+  customs_rates    CustomsRates? @relation(fields: [customs_rates_id], references: [id])
+  is_active        Boolean       @default(true)
+  items            Item[]
+
+  // --- CAMBIO IMPORTANTE ---
+  // Esta relación es clave. Si se establece, usualmente apuntará a una tarifa FIXED.
+  // Si es null, el producto se cobra por peso usando una tarifa WEIGHT genérica.
+  shipping_rate_id Int?
+  shipping_rate    ShippingRate? @relation(fields: [shipping_rate_id], references: [id])
 }
+
 
 model InvoiceHistory {
   id             Int      @id @default(autoincrement())
@@ -288,7 +374,6 @@ model InvoiceHistory {
   comment        String?
   created_at     DateTime @default(now())
 }
-
 
 model Payment {
   id                Int           @id @default(autoincrement())
@@ -306,35 +391,37 @@ model Payment {
   user_id           String
   user              User          @relation(fields: [user_id], references: [id])
 }
+
 model Discount {
-  id         Int        @id @default(autoincrement())
-  name       String
-  invoice_id Int
-  invoice    Invoice    @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
-  user_id    String
-  user       User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  type       DiscountType
+  id          Int          @id @default(autoincrement())
+  name        String
+  invoice_id  Int
+  invoice     Invoice      @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
+  user_id     String
+  user        User         @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  type        DiscountType
   description String?
-  discount   Int @default(0)// in cents
-  created_at DateTime   @default(now())
+  discount    Int          @default(0) // in cents
+  created_at  DateTime     @default(now())
 }
 
 model CustomsRates {
   id           Int      @id @default(autoincrement())
   name         String
   description  String?
-  country_id   Int @default(1)
+  country_id   Int      @default(1)
   country      Country  @relation(fields: [country_id], references: [id])
   chapter      String?
   custom_value Float?
   fee_type     FeeType  @default(UNIT)
-  fee_in_cents          Int      @default(0)
+  fee_in_cents Int      @default(0)
   min_weight   Float?
   max_weight   Float?
   max_quantity Int? // opcional, para limitar cantidad
   created_at   DateTime @default(now())
   updated_at   DateTime @updatedAt
   items        Item[]
+  products     Product[]
 }
 
 model Country {
@@ -354,7 +441,9 @@ model Session {
   userAgent String?
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
+  impersonatedBy String?
+
   @@map("session")
 }
 
@@ -403,13 +492,14 @@ model Counter {
   id         Int      @id @default(autoincrement())
   date       String
   agency_id  Int
-  agency     Agency   @relation(fields: [agency_id], references: [id])
+  agency     Agency   @relation(fields: [agency_id], references: [id], onDelete: Cascade)
   counter    Int
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
   @@unique([date, agency_id])
 }
+
 enum AgencyType {
   AGENCY
   RESELLER
@@ -426,7 +516,9 @@ enum Roles {
   FORWARDER_ADMIN
   CARRIER_ADMIN
   MESSENGER
+  USER
 }
+
 enum PaymentStatus {
   PENDING
   PAID
@@ -434,6 +526,7 @@ enum PaymentStatus {
   REFUNDED
   CANCELLED
 }
+
 enum PaymentMethod {
   CASH
   CREDIT_CARD
@@ -457,9 +550,17 @@ enum ServiceType {
   AIR
 }
 
-
 enum FeeType {
   UNIT // Por unidad
   WEIGHT // Por peso (libra, kg, etc.)
   VALUE // Porcentaje o valor declarado (si aplica)
+}
+
+enum InvoiceStatus {
+  PENDING
+  PROCESSING
+  IN_TRANSIT
+  DELIVERED
+  CANCELLED
+  RETURNED
 }

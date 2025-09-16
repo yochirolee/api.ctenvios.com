@@ -1,6 +1,6 @@
 // utils/trackInvoiceChanges.ts
 
-import { Invoice, PrismaClient } from "@prisma/client";
+import { Invoice, Item, PrismaClient } from "@prisma/client";
 
 export async function registerInvoiceChange(
 	prisma: PrismaClient,
@@ -68,4 +68,12 @@ export async function registerInvoiceChange(
 			},
 		});
 	}
+}
+
+export function calculateInvoiceTotal(items: Item[]) {
+	const total = items.reduce(
+		(sum: number, item: Item) => sum + item.rate_in_cents * item.quantity * item.weight || 0,
+		0,
+	);
+	return total;
 }

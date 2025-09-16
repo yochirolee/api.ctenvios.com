@@ -14,6 +14,8 @@ export const customsRates = {
 		const rate = await prisma.customsRates.findUnique({ where: { id } });
 		return rate;
 	},
+
+	
 	create: async (rate: Prisma.CustomsRatesCreateInput) => {
 		const newRate = await prisma.customsRates.create({ data: rate });
 		return newRate;

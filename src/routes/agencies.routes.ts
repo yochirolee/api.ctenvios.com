@@ -4,7 +4,7 @@ import { authMiddleware } from "../middlewares/auth-midleware";
 const agencies_routes = Router();
 
 agencies_routes.get("/", authMiddleware, controllers.agencies.getAll);
-agencies_routes.get("/:id", authMiddleware, controllers.agencies.getById);
+agencies_routes.get("/:id", controllers.agencies.getById);
 agencies_routes.get("/:id/users", authMiddleware, controllers.agencies.getUsers);
 agencies_routes.post("/", authMiddleware, controllers.agencies.create);
 agencies_routes.put("/:id", controllers.agencies.update);

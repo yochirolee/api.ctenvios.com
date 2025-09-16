@@ -52,6 +52,14 @@ export const services_controller = {
 		const service = await repository.services.getById(Number(id));
 		res.status(200).json(service);
 	},
+	getByAgencyId: async (req: Request, res: Response) => {
+		const { agency_id } = req.params;
+		if (!agency_id || isNaN(Number(agency_id))) {
+			return res.status(400).json({ error: "Agency ID is required" });
+		}
+		const service = await repository.services.getByAgencyId(Number(agency_id));
+		res.status(200).json(service);
+	},
 	update: async (req: Request, res: Response) => {
 		const { id } = req.params;
 		const service = await repository.services.update(Number(id), req.body);
@@ -60,7 +68,7 @@ export const services_controller = {
 	delete: async (req: Request, res: Response) => {
 		const { id } = req.params;
 		const service = await repository.services.delete(Number(id));
-		res.status(200).json(service); 
+		res.status(200).json(service);
 	},
 };
 

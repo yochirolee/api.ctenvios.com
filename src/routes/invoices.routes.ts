@@ -14,14 +14,16 @@ import AppError from "../utils/app.error";
 import { invoiceHistoryMiddleware } from "../middlewares/invoice-middleware";
 import { authMiddleware } from "../middlewares/auth-midleware";
 import { buildInvoiceTimeline } from "../utils/build-invoice-timeline";
+import { calculateInvoiceTotal } from "../utils/rename-invoice-changes";
 
 const invoiceItemSchema = z.object({
 	description: z.string().min(1, "Description is required"),
-	rate: z.number().min(1, "Rate is required"),
+	rate_id: z.number().min(1, "rate id is required"),
 	weight: z.number().min(0, "Weight is required"),
-	customs_fee: z.number().min(0, "Fees is required"),
-	delivery_fee: z.number().optional(),
-	insurance_fee: z.number().optional(),
+	rate_in_cents: z.number().min(0, "Rate is required"),
+	customs_fee_in_cents: z.number().min(0, "Fees is required"),
+	delivery_fee_in_cents: z.number().optional(),
+	insurance_fee_in_cents: z.number().optional(),
 	quantity: z.number().optional(),
 });
 
@@ -32,8 +34,6 @@ const newInvoiceSchema = z.object({
 	receiver_id: z.number().min(1, "Receiver ID is required"),
 	service_id: z.number().min(1, "Service ID is required"),
 	items: z.array(invoiceItemSchema),
-	rate_id: z.number().min(1, "Rate ID is required"),
-	total_amount: z.number().min(1, "Total amount is required"),
 });
 
 const bulkLabelsSchema = z.object({
@@ -329,48 +329,32 @@ router.get("/search", authMiddleware, async (req: any, res) => {
 
 router.post("/", async (req, res) => {
 	try {
-		const {
-			agency_id,
-			user_id,
-			customer_id,
-			receiver_id,
-			rate_id,
-			total_amount,
-			service_id,
-			items,
-		} = newInvoiceSchema.parse(req.body);
+		const { agency_id, user_id, customer_id, receiver_id, service_id, items } =
+			newInvoiceSchema.parse(req.body);
 
-		console.log(req.body, "req.body");
-
-		const rate = await prisma.rates.findUnique({
-			where: { id: rate_id },
-		});
-
-		if (!rate) {
-			return res.status(400).json({ message: "Rate not found" });
-		}
-
+		
 		// Generate all HBL codes first (outside transaction for bulk efficiency)
 		const totalQuantity = items.reduce((sum: number, item: any) => sum + (item.quantity || 1), 0);
 		const allHblCodes = await generarTracking(agency_id, service_id, totalQuantity);
 
 		// Map items with their respective HBL codes
 		let hblIndex = 0;
+
 		const items_hbl = items
 			.map((item: any) => {
+				//every item can use a diferent rate id
+
 				const itemHbls = allHblCodes.slice(hblIndex, hblIndex + 1);
 				hblIndex += 1;
-
+		
 				return itemHbls.map((hbl) => ({
 					hbl,
 					description: item.description,
-					rate: item.rate * 100,
-					agency_rate: rate?.agency_rate || 0,
-					forwarder_rate: rate?.forwarder_rate || 0,
-					customs_fee: item.customs_fee_in_cents || 0,
-					customs_rates_id: item.customs_id || null,
-					delivery_fee: item.delivery_fee || 0,
-					insurance_fee: item.insurance_fee || 0,
+					rate_in_cents: item.rate_in_cents,
+					cost_in_cents: item?.cost_in_cents || 0,
+					rate_id: item.rate_id,
+					insurance_fee_in_cents: item.insurance_fee_in_cents || 0,
+					customs_fee_in_cents: item.customs_fee_in_cents || 0,
 					quantity: item.quantity || 1,
 					// Each HBL represents 1 unit
 					weight: item.weight || 0, // Distribute weight evenly
@@ -379,6 +363,9 @@ router.post("/", async (req, res) => {
 				}));
 			})
 			.flat();
+
+		console.log(items_hbl, "items_hbl");
+		const total_in_cents = calculateInvoiceTotal(items_hbl as any);
 
 		const transaction = await prisma.$transaction(
 			async (tx) => {
@@ -389,10 +376,7 @@ router.post("/", async (req, res) => {
 						customer_id: customer_id,
 						receiver_id: receiver_id,
 						service_id: service_id,
-
-						total_amount: Math.round(Number(total_amount) * 100),
-						rate_id: rate_id,
-						status: "CREATED",
+						total_in_cents: total_in_cents,
 						items: {
 							create: [...items_hbl],
 						},
@@ -412,6 +396,7 @@ router.post("/", async (req, res) => {
 		);
 		res.status(200).json(transaction);
 	} catch (error) {
+		console.log(error);
 		// Handle Zod validation errors specifically
 		if (error instanceof z.ZodError) {
 			console.log("Validation errors with paths:");
@@ -451,8 +436,6 @@ router.post("/", async (req, res) => {
 
 router.get("/:id", authMiddleware, async (req: any, res) => {
 	const { id } = req.params;
-	const user = req.user;
-	console.log(user, "user");
 	const rows = await prisma.invoice.findUnique({
 		where: { id: parseInt(id) },
 		include: {
@@ -554,7 +537,7 @@ router.put("/:id", async (req, res) => {
 			customer_id: customer_id,
 			receiver_id: receiver_id,
 			service_id: service_id,
-			total_amount: total_amount,
+			total_in_cents: calculateInvoiceTotal(items),
 			items: {
 				upsert: items.map((item: any) => ({
 					where: { hbl: item.hbl || "non-existent-hbl" },
@@ -610,7 +593,7 @@ router.get("/:id/pdf", async (req, res) => {
 		// Convert Decimal fields to numbers for PDF generation
 		const invoiceForPDF = {
 			...invoice,
-			total: Number(invoice.total_amount),
+			total: Number(invoice.total_in_cents),
 		};
 
 		// Generate PDF

@@ -3,45 +3,27 @@ import prisma from "../config/prisma_db";
 
 const services = {
 	create: async (service: Prisma.ServiceCreateInput) => {
-		// Using Prisma transaction to ensure atomicity
-		const newService = await prisma.$transaction(async (tx) => {
-			// Step 1: Create the service
-			const createdService = await tx.service.create({
-				data: service,
-			});
-
-			// Step 2: Get all existing agencies
-			const agencies = await tx.agency.findMany({
-				select: { id: true },
-			});
-
-			// Step 3: Create base rates for each agency
-			await Promise.all(
-				agencies.map((agency) =>
-					tx.rates.create({
-						data: {
-							service_id: createdService.id,
-							agency_id: agency.id,
-							agency_rate: 1.99, // Default base rate
-							forwarders_rate: 1.25, // Default forwarder rate
-						},
-					}),
-				),
-			);
-
-			return createdService;
-		});
-
-		return newService;
+		return await prisma.service.create({ data: service });
 	},
 	getAll: async () => {
 		try {
-			return await prisma.service.findMany({
+			const services = await prisma.service.findMany({
 				include: {
 					provider: true,
 					forwarder: true,
-					rates: true,
 				},
+				where: {
+					is_active: true,
+				},
+			});
+			return services.map((service) => {
+				return {
+					id: service.id,
+					name: service.name,
+					provider: service.provider.name,
+					service_type: service.service_type,
+					is_active: service.is_active,
+				};
 			});
 		} catch (error) {
 			console.error("Error getting all services:", error);
@@ -55,6 +37,19 @@ const services = {
 			console.error("Error getting service by id:", error);
 			throw error;
 		}
+	},
+	getByAgencyId: async (agency_id: number) => {
+		const services = await prisma.service.findMany({
+			include: {
+				provider: { select: { id: true, name: true } },
+				forwarder: { select: { id: true, name: true } },
+			},
+			where: { agencies: { some: { id: agency_id } } },
+			orderBy: {
+				id: "asc",
+			},
+		});
+		return services;
 	},
 
 	update: async (id: number, service: Service) => {

@@ -395,7 +395,7 @@ async function main(): Promise<void> {
 		},
 	}); */
 
-	console.log(`✅ User created: ${session.user.name} with ROOT role`);
+	console.log(`✅ User created:  with ROOT role`);
 	console.log("🎉 Database seed completed successfully!");
 }
 

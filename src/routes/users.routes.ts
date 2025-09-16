@@ -4,6 +4,7 @@ import { fromNodeHeaders } from "better-auth/node";
 import prisma from "../config/prisma_db";
 import { authMiddleware } from "../middlewares/auth-midleware";
 import { Roles } from "@prisma/client";
+import { resend } from "../services/resend";
 
 const router = Router();
 
@@ -124,9 +125,6 @@ router.post("/sign-up/email", authMiddleware, async (req, res) => {
 
 router.post("/sign-in/email", async (req, res) => {
 	const { email, password } = req.body;
-	console.log(req.headers, "headers");
-
-	console.log({ email, password });
 
 	try {
 		const { token } = await auth.api.signInEmail({
@@ -147,7 +145,6 @@ router.post("/sign-in/email", async (req, res) => {
 
 		res.status(200).json(session);
 	} catch (error) {
-		console.log(error);
 		res.status(500).json({ error: "Login failed" });
 	}
 });
@@ -159,14 +156,45 @@ router.get("/get-session", async (req, res) => {
 	res.status(200).json(session);
 });
 
-router.post("/reset-password", async (req, res) => {
-	const { email, password, token } = req.body;
-	const response = await auth.api.resetPassword({
-		body: { newPassword: password, token },
+router.post("/forgot-password", async (req, res) => {
+	const { email } = req.body;
+	const response = await auth.api.forgetPassword({
 		headers: fromNodeHeaders(req.headers),
+		body: { email },
 	});
 	res.status(200).json(response);
 });
+
+router.post("/reset-password", async (req, res) => {
+	const { password, token } = req.body;
+	const response = await auth.api.resetPassword({
+		headers: fromNodeHeaders(req.headers),
+		body: { newPassword: password, token },
+	});
+	res.status(200).json(response);
+});
+
+/* router.post("/admin/change-password", async (req, res) => {
+	const { email, password } = req.body;
+	const user = await prisma.user.findUnique({
+		where: {
+			email,
+		},
+	});
+	const userId = user?.id;
+	if (!userId) {
+		return res.status(400).json({ message: "User not found" });
+	}
+	const data = await auth.api..setUserPassword({
+		body: {
+			newPassword: password,
+
+			userId: userId || "",
+		},
+		headers: fromNodeHeaders(req.headers),
+	});
+	res.status(200).json(data);
+}); */
 
 router.post("/sign-out", async (req, res) => {
 	const user = await auth.api.signOut({
