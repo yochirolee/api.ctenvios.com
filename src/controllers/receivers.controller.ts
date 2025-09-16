@@ -63,7 +63,6 @@ export const receivers = {
 		const customer_id = parseInt(req.query.customerId as string);
 
 		const receiver = await repository.receivers.create(req.body as Prisma.ReceiverCreateInput);
-		
 
 		if (customer_id && customer_id > 0) {
 			await repository.receivers.connect(receiver.id, customer_id);
@@ -74,19 +73,15 @@ export const receivers = {
 	edit: async (req: Request, res: Response) => {
 		const { id } = req.params;
 		if (!id) {
-			return res.status(400).json({ message: "Customer ID is required" });
+			return res.status(400).json({ message: "Receiver ID is required" });
 		}
 		const { error } = receiverSchema.safeParse(req.body);
 		if (error) {
 			return res.status(400).json({ message: error.message });
 		}
 		const receiver = await repository.receivers.edit(parseInt(id), req.body);
-		const flat_receiver = {
-			...receiver,
-			province: receiver.province?.name,
-			city: receiver.city?.name,
-		};
-		res.status(200).json(flat_receiver);
+
+		res.status(200).json(receiver);
 	},
 };
 

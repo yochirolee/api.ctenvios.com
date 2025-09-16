@@ -11,7 +11,7 @@ import {
 } from "../utils/generate-shipping-labels-ctenvios";
 import { z } from "zod";
 import AppError from "../utils/app.error";
-import { invoiceHistoryMiddleware } from "../middlewares/invoice-middleware";
+import { createInvoiceHistoryExtension } from "../middlewares/invoice-middleware";
 import { authMiddleware } from "../middlewares/auth-midleware";
 import { buildInvoiceTimeline } from "../utils/build-invoice-timeline";
 import { calculateInvoiceTotal } from "../utils/rename-invoice-changes";
@@ -332,7 +332,6 @@ router.post("/", async (req, res) => {
 		const { agency_id, user_id, customer_id, receiver_id, service_id, items } =
 			newInvoiceSchema.parse(req.body);
 
-		
 		// Generate all HBL codes first (outside transaction for bulk efficiency)
 		const totalQuantity = items.reduce((sum: number, item: any) => sum + (item.quantity || 1), 0);
 		const allHblCodes = await generarTracking(agency_id, service_id, totalQuantity);
@@ -346,7 +345,7 @@ router.post("/", async (req, res) => {
 
 				const itemHbls = allHblCodes.slice(hblIndex, hblIndex + 1);
 				hblIndex += 1;
-		
+
 				return itemHbls.map((hbl) => ({
 					hbl,
 					description: item.description,
@@ -517,18 +516,7 @@ router.put("/:id", async (req, res) => {
 	const newHblCodes = newItemsCount > 0 ? await generarTracking(agency_id, newItemsCount) : [];
 	let hblIndex = 0;
 
-	const extendedPrisma = prisma.$extends({
-		query: {
-			invoice: {
-				async update({ args, query }) {
-					return invoiceHistoryMiddleware(user_id, prisma)(
-						{ model: "Invoice", action: "update", args } as any,
-						async () => query(args),
-					);
-				},
-			},
-		},
-	});
+	const extendedPrisma = prisma.$extends(createInvoiceHistoryExtension(user_id, prisma));
 	const invoice = await extendedPrisma.invoice.update({
 		where: { id: parseInt(id) },
 		data: {

@@ -17,10 +17,10 @@ export function buildInvoiceTimeline(
 		invoice.payments.forEach((payment: Payment) => {
 			events.push({
                 id:payment.id,
-				date: payment.payment_date,
+				date: payment.date,
 				type: "PAYMENT",
-				description: `Pagado $${((payment.amount + payment.payment_charge) / 100).toFixed(2)}  ${
-					payment.payment_method
+				description: `Pagado $${((payment.amount_in_cents + payment.charge_in_cents) / 100).toFixed(2)}  ${
+					payment.method
 				}`,
 			});
 		});
