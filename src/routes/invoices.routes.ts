@@ -16,6 +16,17 @@ import { authMiddleware } from "../middlewares/auth-midleware";
 import { buildInvoiceTimeline } from "../utils/build-invoice-timeline";
 import { calculateInvoiceTotal } from "../utils/rename-invoice-changes";
 
+
+// Define un esquema de validación para los query params
+const searchSchema = z.object({
+	page: z.string().optional().default("1"),
+	limit: z.string().optional().default("25"),
+	search: z.string().optional().default(""),
+	startDate: z.string().optional(),
+	endDate: z.string().optional(),
+});
+
+
 const invoiceItemSchema = z.object({
 	description: z.string().min(1, "Description is required"),
 	rate_id: z.number().min(1, "rate id is required"),
@@ -146,8 +157,116 @@ function buildNameSearchFilter(words: string[]) {
 		})),
 	};
 }
-
 router.get("/search", authMiddleware, async (req: any, res) => {
+	try {
+		const user = req.user;
+
+		// 1. Validación de entradas con Zod
+		const validation = searchSchema.safeParse(req.query);
+		if (!validation.success) {
+			return res
+				.status(400)
+				.json({ message: "Parámetros de consulta inválidos", errors: validation.error.issues });
+		}
+		const { page, limit, search, startDate, endDate } = validation.data;
+
+		const pageNum = parseInt(page);
+		const limitNum = parseInt(limit);
+
+		const searchTerm = search.trim().toLowerCase();
+		const words = searchTerm.split(/\s+/).filter(Boolean);
+		const isNumeric = /^\d+$/.test(searchTerm);
+
+		// 2. Construcción de Cláusula WHERE unificada
+		let whereClause: any = {};
+		const filters: any[] = [];
+
+		// Filtro de fecha
+		if (startDate || endDate) {
+			const dateFilter: any = { created_at: {} };
+			if (startDate) {
+				const start = parseDateFlexible(startDate);
+				if (!start) return res.status(400).json({ message: "startDate inválida" });
+				dateFilter.created_at.gte = start;
+			}
+			if (endDate) {
+				const end = parseDateFlexible(endDate);
+				if (!end) return res.status(400).json({ message: "endDate inválida" });
+				end.setHours(23, 59, 59, 999);
+				dateFilter.created_at.lte = end;
+			}
+			filters.push(dateFilter);
+		}
+
+		// Filtro principal de búsqueda
+		if (searchTerm) {
+			if (isNumeric) {
+				// Lógica numérica combinada con OR para evitar el fallback
+				const numericConditions = [];
+				if (searchTerm.length <= 5) {
+					numericConditions.push({ id: parseInt(searchTerm) });
+				}
+				if (searchTerm.length === 10) {
+					numericConditions.push({ customer: { mobile: { contains: searchTerm } } });
+					numericConditions.push({ receiver: { mobile: { contains: searchTerm } } }); // fallback incluido aquí
+				}
+				if (searchTerm.length === 11) {
+					numericConditions.push({ receiver: { ci: { contains: searchTerm } } });
+				}
+
+				if (numericConditions.length > 0) {
+					filters.push({ OR: numericConditions });
+				} else {
+					// Si es numérico pero no cumple ninguna longitud, no devolver nada.
+					// Esto evita que una búsqueda de 6 dígitos devuelva todos los resultados.
+					filters.push({ id: -1 }); // Condición para no encontrar resultados
+				}
+			} else {
+				// Lógica de búsqueda por nombre
+				const nameFilters = buildNameSearchFilter(words);
+				filters.push({ OR: [{ customer: nameFilters }, { receiver: nameFilters }] });
+			}
+		}
+
+		// Filtro de Rol (RBAC)
+		const allowedRoles = [Roles.ROOT, Roles.ADMINISTRATOR];
+		if (!allowedRoles.includes(user.role)) {
+			filters.push({ agency_id: user.agency_id });
+		}
+
+		// Combinar todos los filtros con AND
+		if (filters.length > 0) {
+			whereClause.AND = filters;
+		}
+
+		// 3. Ejecutar consultas en una sola transacción
+		const [count, rows] = await prisma.$transaction([
+			prisma.invoice.count({ where: whereClause }),
+			prisma.invoice.findMany({
+				include: {
+					service: { select: { id: true, name: true } },
+					agency: { select: { id: true, name: true } },
+					customer: { select: { id: true, first_name: true, last_name: true, mobile: true } }, // Traer solo lo necesario
+					receiver: {
+						select: { id: true, first_name: true, last_name: true, mobile: true, ci: true },
+					},
+					user: { select: { id: true, name: true } },
+					_count: { select: { items: true } },
+				},
+				where: whereClause,
+				orderBy: { created_at: "desc" },
+				take: limitNum,
+				skip: (pageNum - 1) * limitNum,
+			}),
+		]);
+
+		res.status(200).json({ rows, total: count });
+	} catch (error) {
+		console.error("Search error:", error);
+		res.status(500).json({ message: "Error searching invoices", error });
+	}
+});
+/* router.get("/search", authMiddleware, async (req: any, res) => {
 	try {
 		const user = req.user;
 		const { page, limit, search, startDate, endDate } = req.query;
@@ -325,7 +444,7 @@ router.get("/search", authMiddleware, async (req: any, res) => {
 		console.error("Search error:", error);
 		res.status(500).json({ message: "Error searching invoices", error });
 	}
-});
+}); */
 
 router.post("/", async (req, res) => {
 	try {
