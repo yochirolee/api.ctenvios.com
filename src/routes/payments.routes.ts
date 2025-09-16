@@ -4,22 +4,17 @@ import prisma from "../config/prisma_db";
 import { authMiddleware } from "../middlewares/auth-midleware";
 import { Invoice, PaymentMethod, PaymentStatus, PrismaClient } from "@prisma/client";
 import { registerInvoiceChange } from "../utils/rename-invoice-changes";
+import { paymentSchema } from "../types/types";
 
 const router = Router();
 
-const paymentSchema = z.object({
-	amount_in_cents: z.number().min(0.01),
-	payment_method: z.nativeEnum(PaymentMethod),
-	payment_reference: z.string().optional(),
-	notes: z.string().optional(),
-});
 
 router.post("/invoice/:id", authMiddleware, async (req: any, res) => {
 	try {
 		const { id } = req.params;
 
 		if (!id) return res.status(400).json({ message: "Invoice ID is required" });
-		const { amount_in_cents, payment_method, payment_reference, notes } = paymentSchema.parse(req.body);
+		const { amount_in_cents, method, reference, notes } = paymentSchema.parse(req.body);
 		const user = req.user;
 		const invoice = await prisma.invoice.findUnique({
 			where: { id: parseInt(id) },
@@ -29,11 +24,11 @@ router.post("/invoice/:id", authMiddleware, async (req: any, res) => {
 		let amount_to_pay_in_cents = amount_in_cents * 100;
 		let charge_amount = 0;
 
-		console.log(amount_in_cents, payment_method, payment_reference, notes);
+		console.log(amount_in_cents, method, reference, notes);
 
 		if (
-			payment_method === PaymentMethod.CREDIT_CARD ||
-			payment_method === PaymentMethod.DEBIT_CARD
+			method === PaymentMethod.CREDIT_CARD ||
+			method === PaymentMethod.DEBIT_CARD
 		) {
 			charge_amount = Math.round(amount_in_cents * 0.03 * 100); //in cents
 			console.log(invoice);
@@ -71,8 +66,8 @@ router.post("/invoice/:id", authMiddleware, async (req: any, res) => {
 					invoice_id: parseInt(id),
 					amount_in_cents: amount_to_pay_in_cents,
 					charge_in_cents: charge_amount,
-					method: payment_method,
-					reference: payment_reference || "",
+					method: method,
+					reference: reference || "",
 					date: new Date(),
 					notes,
 					status: payment_status,
@@ -85,6 +80,7 @@ router.post("/invoice/:id", authMiddleware, async (req: any, res) => {
 				updatedInvoice as Invoice,
 				user.id,
 				`Payment of $${(amount_in_cents / 100).toFixed(2)} added to invoice ${id}`,
+				
 			);
 
 			return updatedInvoice;

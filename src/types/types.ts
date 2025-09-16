@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Request } from "express";
-import { AgencyType, FeeType, Roles } from "@prisma/client";
+import { AgencyType, FeeType, PaymentMethod, Roles } from "@prisma/client";
 
 // Role hierarchy types
 export interface RoleResponse {
@@ -19,6 +19,13 @@ export interface AuthenticatedRequest extends Request {
 		[key: string]: any;
 	};
 }
+
+export const paymentSchema = z.object({
+	amount_in_cents: z.number().min(0.01),
+	method: z.nativeEnum(PaymentMethod),
+	reference: z.string().optional(),
+	notes: z.string().optional(),
+});
 
 export const customerSchema = z
 	.object({
