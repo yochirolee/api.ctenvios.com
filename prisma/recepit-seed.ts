@@ -642,7 +642,7 @@ async function main(): Promise<void> {
 	console.log("🚀 Starting receipt import process...");
 
 	const oldDb = await mysql.createConnection({
-		host: "srv827.hstgr.io",
+		host: "auth-db1444.hstgr.io",
 		user: "u373067935_caeenvio_mysgc",
 		password: "CaribeAgencia*2022",
 		database: "u373067935_cte",

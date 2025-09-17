@@ -246,9 +246,10 @@ router.get("/search", authMiddleware, async (req: any, res) => {
 				include: {
 					service: { select: { id: true, name: true } },
 					agency: { select: { id: true, name: true } },
-					customer: { select: { id: true, first_name: true, last_name: true, mobile: true } }, // Traer solo lo necesario
+					customer: { select: { id: true, first_name: true, last_name: true, second_last_name: true, mobile: true } }, // Traer solo lo necesario
 					receiver: {
-						select: { id: true, first_name: true, last_name: true, mobile: true, ci: true },
+						select: { id: true, first_name: true, last_name: true, second_last_name: true, mobile: true, province: { select: { name: true } }, city: { select: { name: true } } },
+						
 					},
 					user: { select: { id: true, name: true } },
 					_count: { select: { items: true } },

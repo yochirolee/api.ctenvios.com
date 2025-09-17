@@ -2,28 +2,72 @@ config:
   target: "http://localhost:3000" # Adjust to your server URL
   phases:
     - duration: 30
-      arrivalRate: 10 # 10 users per second
+      arrivalRate: 5 # 5 users per second
       name: "Warm up"
     - duration: 60
-      arrivalRate: 20 # 20 users per second
+      arrivalRate: 15 # 15 users per second
       name: "Sustained load"
     - duration: 30
-      arrivalRate: 50 # 50 users per second
+      arrivalRate: 25 # 25 users per second
       name: "Peak load"
+    - duration: 60
+      arrivalRate: 40 # 40 users per second
+      name: "Maximum stress"
+  processor: "./artillery-processor.js"
+  payload:
+    path: "./test-data.csv"
+    fields:
+      - "agency_id"
+      - "user_id"
+      - "customer_id"
+      - "receiver_id"
+      - "service_id"
 
 scenarios:
-  - name: "Generate tracking codes concurrently"
-    weight: 100
+  - name: "Invoice Creation Stress Test"
+    weight: 80
     flow:
+      - function: "generateInvoiceData"
       - post:
-          url: "/api/test/concurrent-tracking"
+          url: "/api/v1/invoices"
           headers:
             Content-Type: "application/json"
           json:
-            agency_id: 1
-            concurrent_users: 3
-            codes_per_user: 2
+            agency_id: "{{ agency_id }}"
+            user_id: "{{ user_id }}"
+            customer_id: "{{ customer_id }}"
+            receiver_id: "{{ receiver_id }}"
+            service_id: "{{ service_id }}"
+            items: "{{ items }}"
+            paid_in_cents: "{{ paid_in_cents }}"
+            total_in_cents: "{{ total_in_cents }}"
           expect:
-            - statusCode: 200
-            - hasProperty: "test_summary"
-            - hasProperty: "code_analysis"
+            - statusCode: [200, 201]
+            - hasProperty: "id"
+          capture:
+            - json: "$.id"
+              as: "invoice_id"
+      - think: 1 # 1 second pause between requests
+
+  - name: "Complex Invoice Creation"
+    weight: 20
+    flow:
+      - function: "generateComplexInvoiceData"
+      - post:
+          url: "/api/v1/invoices"
+          headers:
+            Content-Type: "application/json"
+          json:
+            agency_id: "{{ agency_id }}"
+            user_id: "{{ user_id }}"
+            customer_id: "{{ customer_id }}"
+            receiver_id: "{{ receiver_id }}"
+            service_id: "{{ service_id }}"
+            items: "{{ complex_items }}"
+          expect:
+            - statusCode: [200, 201]
+            - hasProperty: "id"
+          capture:
+            - json: "$.id"
+              as: "complex_invoice_id"
+      - think: 2 # 2 second pause for complex invoices

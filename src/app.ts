@@ -37,3 +37,4 @@ app.use("/api/v1/", router);
 //all other router redirect to api/v1
 
 export default app;
+export { app };
