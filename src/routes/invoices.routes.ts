@@ -3,7 +3,7 @@ import prisma from "../config/prisma_db";
 import receivers_db from "../repository/receivers.repository";
 import { generarTracking } from "../utils/generate_hbl";
 import { generateInvoicePDF } from "../utils/generate-invoice-pdf";
-import { Roles } from "@prisma/client";
+import { RateType, Roles } from "@prisma/client";
 // Removed unused imports for shipping labels
 import {
 	generateCTEnviosLabels,
@@ -16,7 +16,6 @@ import { authMiddleware } from "../middlewares/auth-midleware";
 import { buildInvoiceTimeline } from "../utils/build-invoice-timeline";
 import { calculateInvoiceTotal } from "../utils/rename-invoice-changes";
 
-
 // Define un esquema de validación para los query params
 const searchSchema = z.object({
 	page: z.string().optional().default("1"),
@@ -26,25 +25,27 @@ const searchSchema = z.object({
 	endDate: z.string().optional(),
 });
 
-
 const invoiceItemSchema = z.object({
-	description: z.string().min(1, "Description is required"),
-	rate_id: z.number().min(1, "rate id is required"),
-	weight: z.number().min(0, "Weight is required"),
-	rate_in_cents: z.number().min(0, "Rate is required"),
-	customs_fee_in_cents: z.number().min(0, "Fees is required"),
-	delivery_fee_in_cents: z.number().optional(),
-	insurance_fee_in_cents: z.number().optional(),
-	quantity: z.number().optional(),
+	description: z.string().min(1),
+	rate_id: z.number().positive(),
+	customs_id: z.number().optional(),
+	product_id: z.number().positive().optional(),
+
+	weight: z.number().positive(),
+	rate_in_cents: z.number().min(0),
+	customs_fee_in_cents: z.number().min(0).optional().default(0),
+	insurance_fee_in_cents: z.number().min(0).optional().default(0),
+	rate_type: z.nativeEnum(RateType).optional(),
 });
 
 const newInvoiceSchema = z.object({
-	user_id: z.string().min(1, "User ID is required"),
-	agency_id: z.number().min(1, "Agency ID is required"),
-	customer_id: z.number().min(1, "Customer ID is required"),
-	receiver_id: z.number().min(1, "Receiver ID is required"),
-	service_id: z.number().min(1, "Service ID is required"),
-	items: z.array(invoiceItemSchema),
+	user_id: z.string().min(1),
+	agency_id: z.number().positive(),
+	customer_id: z.number().positive(),
+	receiver_id: z.number().positive(),
+	service_id: z.number().positive(),
+	items: z.array(invoiceItemSchema).min(1),
+	total_in_cents: z.number().min(0).optional(), // 🚀 Frontend puede calcular esto
 });
 
 const bulkLabelsSchema = z.object({
@@ -246,10 +247,25 @@ router.get("/search", authMiddleware, async (req: any, res) => {
 				include: {
 					service: { select: { id: true, name: true } },
 					agency: { select: { id: true, name: true } },
-					customer: { select: { id: true, first_name: true, last_name: true, second_last_name: true, mobile: true } }, // Traer solo lo necesario
+					customer: {
+						select: {
+							id: true,
+							first_name: true,
+							last_name: true,
+							second_last_name: true,
+							mobile: true,
+						},
+					}, // Traer solo lo necesario
 					receiver: {
-						select: { id: true, first_name: true, last_name: true, second_last_name: true, mobile: true, province: { select: { name: true } }, city: { select: { name: true } } },
-						
+						select: {
+							id: true,
+							first_name: true,
+							last_name: true,
+							second_last_name: true,
+							mobile: true,
+							province: { select: { name: true } },
+							city: { select: { name: true } },
+						},
 					},
 					user: { select: { id: true, name: true } },
 					_count: { select: { items: true } },
@@ -447,7 +463,7 @@ router.get("/search", authMiddleware, async (req: any, res) => {
 	}
 }); */
 
-router.post("/", async (req, res) => {
+/* router.post("/", async (req, res) => {
 	try {
 		const { agency_id, user_id, customer_id, receiver_id, service_id, items } =
 			newInvoiceSchema.parse(req.body);
@@ -551,6 +567,177 @@ router.post("/", async (req, res) => {
 
 		res.status(500).json({ message: "Error creating invoice", error: error });
 	}
+}); */
+
+function calculateTotalFast(items: any[]): number {
+	let total = 0;
+	for (let i = 0; i < items.length; i++) {
+		const item = items[i];
+		switch (item.rate_type) {
+			case RateType.WEIGHT:
+				total += (item.rate_in_cents * item.weight) + (item.customs_fee_in_cents || 0) + (item.insurance_fee_in_cents || 0);
+				break;
+			case RateType.FIXED:
+				total += item.rate_in_cents;
+				break;
+		}
+		total += item.customs_fee_in_cents || 0;
+		total += item.insurance_fee_in_cents || 0;
+	}
+	return total;
+}
+// 🚀 OPTIMIZACIÓN 3: Generación HBL optimizada (sin retries innecesarios)
+async function generateHBLFast(
+	agencyId: number,
+	serviceId: number,
+	cantidad: number,
+): Promise<string[]> {
+	const today = new Date();
+	const todayOnlyDate = today.toISOString().slice(2, 10).replace(/-/g, "");
+
+	// Una sola transacción, sin retries
+	const result = await prisma.$transaction(
+		async (tx) => {
+			const updatedCounter = await tx.counter.upsert({
+				where: {
+					date_agency_id: {
+						agency_id: agencyId,
+						date: todayOnlyDate,
+					},
+				},
+				create: {
+					agency_id: agencyId,
+					date: todayOnlyDate,
+					counter: cantidad,
+				},
+				update: {
+					counter: { increment: cantidad },
+				},
+				select: { counter: true },
+			});
+
+			const newSequence = updatedCounter.counter;
+			const start = newSequence - cantidad + 1;
+			const fecha = todayOnlyDate;
+			const agencia = agencyId.toString().padStart(2, "0");
+			const servicio = serviceId.toString().padStart(1, "0");
+
+			// Generación inline (más rápida que Array.from)
+			const codigos: string[] = [];
+			for (let i = 0; i < cantidad; i++) {
+				const secuencia = (start + i).toString().padStart(4, "0");
+				codigos.push(`CTE${fecha}${servicio}${agencia}${secuencia}`);
+			}
+
+			return codigos;
+		},
+		{ timeout: 10000 },
+	); // Timeout más corto
+
+	return result;
+}
+
+// 🚀 OPTIMIZACIÓN 4: Endpoint principal optimizado
+router.post("/", async (req, res) => {
+	try {
+		// Validación rápida
+		const { agency_id, user_id, customer_id, receiver_id, service_id, items, total_in_cents } =
+			newInvoiceSchema.parse(req.body);
+
+		//search rate for each item (get unique rate_ids to avoid duplicate queries)
+		const uniqueRateIds = [...new Set(items.map((item: any) => item.rate_id))];
+		const rates = await prisma.shippingRate.findMany({
+			select: { id: true, rate_in_cents: true, cost_in_cents: true, rate_type: true, is_base_rate: true },
+			where: {
+				id: { in: uniqueRateIds },
+			},
+		});
+
+		//map rates to items
+		const items_with_rates = items.map((item: any) => {
+			const rate = rates.find((rate: any) => rate.id === item.rate_id);
+			return { ...item, rate };
+		});
+
+		console.log(items_with_rates, "items_with_rates");
+
+		// 🚀 Usar total del frontend si existe, sino calcular rápido
+		const finalTotal = total_in_cents || calculateTotalFast(items);
+
+		// 🚀 Generación HBL optimizada
+		const totalItems = items_with_rates.length; // Cada item = 1 HBL (simplificado)
+		const allHblCodes = await generateHBLFast(agency_id, service_id, totalItems);
+
+		// 🚀 Mapeo optimizado (sin .flat(), sin reduce)
+		const items_hbl: any[] = [];
+		for (let i = 0; i < items_with_rates.length; i++) {
+			const item = items_with_rates[i];
+			items_hbl.push({
+				hbl: allHblCodes[i],
+				description: item.description,
+				base_rate_in_cents: item.rate.rate_in_cents || 0,
+				rate_in_cents: item.rate.rate_in_cents || 0,
+				cost_in_cents: item.rate.cost_in_cents,
+				rate_id: item.rate_id,
+				insurance_fee_in_cents: item.insurance_fee_in_cents || 0,
+				customs_fee_in_cents: item.customs_fee_in_cents || 0,
+				quantity: 1,
+				weight: item.weight,
+				service_id,
+				agency_id,
+			});
+		}
+
+		// 🚀 Transacción optimizada (sin timeout largo)
+		const transaction = await prisma.$transaction(
+			async (tx) => {
+				const invoice = await tx.invoice.create({
+					data: {
+						user_id,
+						agency_id,
+						customer_id,
+						receiver_id,
+						service_id,
+						total_in_cents: finalTotal,
+						items: {
+							create: items_hbl,
+						},
+					},
+					include: {
+						items: {
+							orderBy: { hbl: "asc" },
+						},
+					},
+				});
+
+				return invoice;
+			},
+			{ timeout: 15000 },
+		); // Timeout reducido
+
+		// 🚀 Receiver connection FUERA de la transacción (async)
+		receivers_db
+			.connect(receiver_id, customer_id)
+			.catch((err) => console.error("Receiver connection failed (non-critical):", err));
+		res.status(200).json(transaction);
+	} catch (error: any) {
+		console.error("Fast invoice creation error:", error);
+
+		if (error instanceof z.ZodError) {
+			return res.status(400).json({
+				message: "Validation failed",
+				errors: error.issues.map((issue) => ({
+					path: issue.path.join("."),
+					message: issue.message,
+				})),
+			});
+		}
+
+		res.status(500).json({
+			message: "Error creating invoice",
+			error: error.message || error,
+		});
+	}
 });
 
 router.get("/:id", authMiddleware, async (req: any, res) => {
@@ -583,7 +770,17 @@ router.get("/:id", authMiddleware, async (req: any, res) => {
 					},
 				},
 			},
-			items: true,
+
+			items: {
+				include: {
+					rate: {
+						select: {
+							rate_type: true,
+						},
+					},
+					customs_rates: true,
+				},
+			},
 			user: {
 				select: { name: true },
 			},

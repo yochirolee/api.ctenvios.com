@@ -14,6 +14,9 @@ config:
       arrivalRate: 40 # 40 users per second
       name: "Maximum stress"
   processor: "./artillery-processor.js"
+  plugins:
+    metrics-by-endpoint:
+      useOnlyRequestNames: true
   payload:
     path: "./test-data.csv"
     fields:

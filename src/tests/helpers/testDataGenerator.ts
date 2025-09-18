@@ -45,9 +45,10 @@ export class TestDataGenerator {
 			console.log("🔄 Initializing test data from database...");
 
 			// Use smaller batches and simpler queries to avoid timeouts
+			// Get both agencies (ID 1 and 2) for random selection in tests
 			const agencies = await prisma.agency.findMany({
-				where: { id: 1 },
-				take: 1,
+				where: { id: { in: [1, 2] } },
+				take: 2,
 			});
 
 			const customers = await prisma.customer.findMany({
@@ -65,11 +66,12 @@ export class TestDataGenerator {
 				take: 1,
 			});
 
+			// Get users from both agencies for variety in tests
 			const users = await prisma.user.findMany({
 				where: {
-					OR: [{ id: "R5KTYKBbQhiSSoA8iT7KD3BnGSwJ376Q" }, { agency_id: 1 }],
+					agency_id: { in: [1, 2] },
 				},
-				take: 5,
+				take: 20, // Get more users from both agencies for variety
 			});
 
 			// We don't need customsRates since we're using fixed rate_id = 1
@@ -91,7 +93,7 @@ export class TestDataGenerator {
 			console.log(`   - Users: ${this.users.length}`);
 
 			if (this.agencies.length === 0) {
-				throw new Error("Agency with ID 1 not found in database. Please check your data.");
+				throw new Error("Agencies with ID 1 or 2 not found in database. Please check your data.");
 			}
 
 			if (this.customers.length === 0) {
@@ -102,12 +104,17 @@ export class TestDataGenerator {
 				throw new Error("No receivers found in database. Please seed receiver data first.");
 			}
 
-			// Verify your specific user exists
-			const yourUser = this.users.find((u) => u.id === "R5KTYKBbQhiSSoA8iT7KD3BnGSwJ376Q");
-			if (yourUser) {
-				console.log(`✅ Found your user: ${yourUser.name || yourUser.id}`);
-			} else {
-				console.log(`⚠️  Your specific user ID not found, using available users`);
+			// Show distribution of users by agency
+			const agency1Users = this.users.filter((u) => u.agency_id === 1);
+			const agency2Users = this.users.filter((u) => u.agency_id === 2);
+			console.log(
+				`✅ Found users - Agency 1: ${agency1Users.length}, Agency 2: ${agency2Users.length}`,
+			);
+
+			if (this.users.length === 0) {
+				throw new Error(
+					"No users found from agencies 1 or 2. Please check users exist in database.",
+				);
 			}
 		} catch (error) {
 			console.error("❌ Failed to initialize test data:", error);
@@ -124,16 +131,23 @@ export class TestDataGenerator {
 			throw new Error("Test data not initialized. Call TestDataGenerator.initialize() first.");
 		}
 
-		// Always use agency ID 1 (your main agency)
-		const agency = this.agencies[0]; // Agency ID 1
+		// Randomly select between agency ID 1 or 2
+		const agency = faker.helpers.arrayElement(this.agencies);
 		const customer = faker.helpers.arrayElement(this.customers);
 		const receiver = faker.helpers.arrayElement(this.receivers);
 		// Use service ID 1 which we know exists
 		const service = this.services.find((s) => s.id === 1) || this.services[0];
 
-		// Prefer your specific user ID, fallback to others if needed
-		const yourUser = this.users.find((u) => u.id === "R5KTYKBbQhiSSoA8iT7KD3BnGSwJ376Q");
-		const user = yourUser || faker.helpers.arrayElement(this.users);
+		// Select a user that belongs to the same agency as selected
+		const agencyUsers = this.users.filter((u) => u.agency_id === agency.id);
+		// If no users from this agency, select randomly from all available users
+		const user =
+			agencyUsers.length > 0
+				? faker.helpers.arrayElement(agencyUsers)
+				: faker.helpers.arrayElement(this.users);
+
+		// Debug logging to see which agency is being selected
+		console.log(`🔍 Generated invoice for Agency ID: ${agency.id}, User ID: ${user.id}`);
 
 		const itemCount = faker.number.int({ min: 3, max: 10 });
 		const items: TestItemData[] = [];
@@ -154,7 +168,7 @@ export class TestDataGenerator {
 		const total_in_cents = 0;
 
 		return {
-			agency_id: agency.id, // Always 1
+			agency_id: agency.id, // Randomly 1 or 2
 			user_id: user.id, // Your user ID preferentially
 			customer_id: customer.id, // Real customer from your DB
 			receiver_id: receiver.id, // Real receiver from your DB
@@ -179,13 +193,101 @@ export class TestDataGenerator {
 	}
 
 	/**
+	 * Generate balanced test data across both agencies (ID 1 and 2)
+	 * Useful for testing load distribution between agencies
+	 */
+	static generateBalancedInvoiceData(count: number): TestInvoiceData[] {
+		const invoices: TestInvoiceData[] = [];
+
+		console.log(`🎯 Generating ${count} balanced invoices across both agencies...`);
+
+		for (let i = 0; i < count; i++) {
+			// Alternate between agency 1 and 2 for balanced distribution
+			const agencyId = (i % 2) + 1;
+			console.log(`📋 Invoice ${i + 1}: Using Agency ${agencyId}`);
+			invoices.push(this.generateInvoiceDataForAgency(agencyId));
+		}
+
+		// Count distribution for verification
+		const agency1Count = invoices.filter((inv) => inv.agency_id === 1).length;
+		const agency2Count = invoices.filter((inv) => inv.agency_id === 2).length;
+		console.log(`✅ Final distribution - Agency 1: ${agency1Count}, Agency 2: ${agency2Count}`);
+
+		return invoices;
+	}
+
+	/**
+	 * Generate test data specifically for Agency 2 to ensure it gets tested
+	 */
+	static generateAgency2InvoiceData(count: number): TestInvoiceData[] {
+		const invoices: TestInvoiceData[] = [];
+
+		console.log(`🏢 Generating ${count} invoices specifically for Agency 2...`);
+
+		for (let i = 0; i < count; i++) {
+			invoices.push(this.generateInvoiceDataForAgency(2));
+		}
+
+		console.log(`✅ Generated ${invoices.length} invoices for Agency 2`);
+		return invoices;
+	}
+
+	/**
 	 * Generate test data with specific agency to test agency-specific load
+	 * Supports agency IDs 1 and 2
 	 */
 	static generateInvoiceDataForAgency(agencyId: number): TestInvoiceData {
-		const baseData = this.generateInvoiceData();
+		if (![1, 2].includes(agencyId)) {
+			throw new Error(`Invalid agency ID: ${agencyId}. Only agencies 1 and 2 are supported.`);
+		}
+
+		if (this.agencies.length === 0) {
+			throw new Error("Test data not initialized. Call TestDataGenerator.initialize() first.");
+		}
+
+		// Find the specific agency
+		const agency = this.agencies.find((a) => a.id === agencyId);
+		if (!agency) {
+			throw new Error(`Agency with ID ${agencyId} not found in initialized data.`);
+		}
+
+		const customer = faker.helpers.arrayElement(this.customers);
+		const receiver = faker.helpers.arrayElement(this.receivers);
+		const service = this.services.find((s) => s.id === 1) || this.services[0];
+
+		// Select a user that belongs to the specified agency
+		const agencyUsers = this.users.filter((u) => u.agency_id === agencyId);
+		const user =
+			agencyUsers.length > 0
+				? faker.helpers.arrayElement(agencyUsers)
+				: faker.helpers.arrayElement(this.users);
+
+		const itemCount = faker.number.int({ min: 3, max: 10 });
+		const items: TestItemData[] = [];
+
+		for (let i = 0; i < itemCount; i++) {
+			items.push({
+				description: faker.commerce.productName(),
+				rate_in_cents: faker.number.int({ min: 100, max: 5000 }),
+				rate_id: 1,
+				customs_id: 1,
+				insurance_fee_in_cents: faker.number.int({ min: 0, max: 500 }),
+				customs_fee_in_cents: 0,
+				weight: faker.number.int({ min: 1, max: 20 }),
+			});
+		}
+
+		const total_in_cents = 0;
+
 		return {
-			...baseData,
 			agency_id: agencyId,
+			user_id: user.id,
+			customer_id: customer.id,
+			receiver_id: receiver.id,
+			service_id: service.id,
+			items,
+			paid_in_cents: 0,
+			total_in_cents: total_in_cents,
 		};
 	}
 
