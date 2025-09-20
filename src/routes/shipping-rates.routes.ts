@@ -41,6 +41,13 @@ shipping_rates_routes.get("/agency/:agency_id", async (req, res) => {
 shipping_rates_routes.get("/base_rate/agency/:agency_id/service/:service_id", async (req, res) => {
 	const { agency_id, service_id } = req.params;
 	const rate = await prisma.shippingRate.findFirst({
+		select: {
+			id: true,
+			rate_in_cents: true,
+			rate_type: true,
+			min_weight: true,
+			max_weight: true,
+		},
 		where: {
 			agency_id: parseInt(agency_id),
 			service_id: parseInt(service_id),
@@ -61,18 +68,40 @@ shipping_rates_routes.get("/agency/:agency_id/service/:service_id", async (req, 
 			min_weight: true,
 			max_weight: true,
 			service_id: true,
-			products: {
-				include: {
-					customs_rates: true,
-				},
-			},
-		},
+			is_base_rate: true,
+			
+			
+			
+
+			
+
+					},
 		where: { agency_id: parseInt(agency_id), service_id: parseInt(service_id), is_active: true },
 		orderBy: {
 			id: "asc",
 		},
 	});
 	res.status(200).json(rates);
+});
+
+shipping_rates_routes.get("/agency/:agency_id/service/:service_id/products-rates", async (req, res) => {
+	const { agency_id, service_id } = req.params;
+
+	const products = await prisma.shippingRate.findMany({
+		select: {
+			id: true,
+			rate_in_cents: true,
+			rate_type: true,
+			
+			
+		},	
+		where: { agency_id: parseInt(agency_id), is_active: true },
+	});
+	
+
+
+
+	res.status(200).json(products);
 });
 
 shipping_rates_routes.post("/", async (req, res) => {

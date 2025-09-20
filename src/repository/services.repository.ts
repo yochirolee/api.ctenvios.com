@@ -40,13 +40,12 @@ const services = {
 	},
 	getByAgencyId: async (agency_id: number) => {
 		const services = await prisma.service.findMany({
-			include: {
+			select: {
+				id: true,
+				name: true,
+				service_type: true,
 				provider: { select: { id: true, name: true } },
 				forwarder: { select: { id: true, name: true } },
-			},
-			where: { agencies: { some: { id: agency_id } } },
-			orderBy: {
-				id: "asc",
 			},
 		});
 		return services;

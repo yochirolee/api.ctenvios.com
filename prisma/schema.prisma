@@ -180,6 +180,7 @@ model Forwarder {
   users      User[]
   providers  Provider[]
   carriers   Carrier[]
+  shipping_rates ShippingRate[]
 }
 
 model Service {
@@ -296,6 +297,10 @@ model Item {
   @@index([hbl])
 }
 
+enum RateType {
+  FIXED
+  WEIGHT
+}
 model ShippingRate {
   id            Int      @id @default(autoincrement())
   name          String   @default("Base Rate")
@@ -304,11 +309,11 @@ model ShippingRate {
   agency_id     Int
   agency        Agency   @relation(fields: [agency_id], references: [id], onDelete: Cascade)
   cost_in_cents Int      @default(0) // Costo para la agencia
-  
+  forwarder_id  Int?   //created by forwarder
+  forwarder     Forwarder? @relation(fields: [forwarder_id], references: [id], onDelete: Cascade)
   // Para RateType.WEIGHT, este es el precio por libra (o la unidad de peso que uses).
   // Para RateType.FIXED, este es el precio total y único.
   rate_in_cents Int      @default(0)
-
   // Estos rangos aplican principalmente para RateType.WEIGHT
   min_weight    Float?
   max_weight    Float?
@@ -320,7 +325,6 @@ model ShippingRate {
   products      Product[]
   rate_type     RateType @default(WEIGHT)
   is_base_rate       Boolean  @default(false)
-
   // --- NUEVOS CAMPOS ---
   // Campos opcionales para describir tarifas de tipo FIXED, ej: "Caja Mediana"
   length        Float? // en pulgadas o cm
@@ -330,11 +334,6 @@ model ShippingRate {
 
 
 
-enum RateType {
- 
-  FIXED
-  WEIGHT
-}
 //Modifications to Test
 model Product {
   id               Int           @id @default(autoincrement())
@@ -359,8 +358,7 @@ model Product {
   // --- CAMBIO IMPORTANTE ---
   // Esta relación es clave. Si se establece, usualmente apuntará a una tarifa FIXED.
   // Si es null, el producto se cobra por peso usando una tarifa WEIGHT genérica.
-  shipping_rate_id Int?
-  shipping_rate    ShippingRate? @relation(fields: [shipping_rate_id], references: [id])
+  shipping_rates    ShippingRate[]
 }
 
 

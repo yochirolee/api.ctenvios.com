@@ -143,7 +143,12 @@ const receivers = {
 				city: true,
 			},
 		});
-		return updatedReceiver;
+		const flat_receiver = {
+			...updatedReceiver,
+			province: updatedReceiver.province.name,
+			city: updatedReceiver.city.name,
+		};
+		return flat_receiver;
 	},
 };
 
