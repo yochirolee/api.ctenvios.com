@@ -15,6 +15,7 @@ import { createInvoiceHistoryExtension } from "../middlewares/invoice-middleware
 import { authMiddleware } from "../middlewares/auth-midleware";
 import { buildInvoiceTimeline } from "../utils/build-invoice-timeline";
 import { calculateInvoiceTotal } from "../utils/rename-invoice-changes";
+import { calculate_row_subtotal } from "../utils/utils";
 
 // Define un esquema de validación para los query params
 const searchSchema = z.object({
@@ -569,21 +570,12 @@ router.get("/search", authMiddleware, async (req: any, res) => {
 	}
 }); */
 
-function calculateTotalFast(items: any[]): number {
+function calculate_subtotal(items: any[]): number {
 	let total = 0;
-	for (let i = 0; i < items.length; i++) {
-		const item = items[i];
-		switch (item.rate_type) {
-			case RateType.WEIGHT:
-				total += (item.rate_in_cents * item.weight) + (item.customs_fee_in_cents || 0) + (item.insurance_fee_in_cents || 0);
-				break;
-			case RateType.FIXED:
-				total += item.rate_in_cents;
-				break;
-		}
-		total += item.customs_fee_in_cents || 0;
-		total += item.insurance_fee_in_cents || 0;
-	}
+	items.forEach((item) => {
+		total += calculate_row_subtotal(item.rate_in_cents, item.weight, item.customs_fee_in_cents, item.rate_type, item.insurance_fee_in_cents);	
+		return total;
+	});
 	return total;
 }
 // 🚀 OPTIMIZACIÓN 3: Generación HBL optimizada (sin retries innecesarios)
@@ -647,7 +639,7 @@ router.post("/", async (req, res) => {
 		//search rate for each item (get unique rate_ids to avoid duplicate queries)
 		const uniqueRateIds = [...new Set(items.map((item: any) => item.rate_id))];
 		const rates = await prisma.shippingRate.findMany({
-			select: { id: true, rate_in_cents: true, cost_in_cents: true, rate_type: true, is_base_rate: true },
+			select: { id: true,  cost_in_cents: true, rate_type: true, is_base_rate: true },
 			where: {
 				id: { in: uniqueRateIds },
 			},
@@ -662,7 +654,7 @@ router.post("/", async (req, res) => {
 		console.log(items_with_rates, "items_with_rates");
 
 		// 🚀 Usar total del frontend si existe, sino calcular rápido
-		const finalTotal = total_in_cents || calculateTotalFast(items);
+		const finalTotal = total_in_cents || calculate_subtotal(items);
 
 		// 🚀 Generación HBL optimizada
 		const totalItems = items_with_rates.length; // Cada item = 1 HBL (simplificado)
@@ -676,7 +668,7 @@ router.post("/", async (req, res) => {
 				hbl: allHblCodes[i],
 				description: item.description,
 				base_rate_in_cents: item.rate.rate_in_cents || 0,
-				rate_in_cents: item.rate.rate_in_cents || 0,
+				rate_in_cents: item.rate_in_cents || 0,
 				cost_in_cents: item.rate.cost_in_cents,
 				rate_id: item.rate_id,
 				insurance_fee_in_cents: item.insurance_fee_in_cents || 0,
