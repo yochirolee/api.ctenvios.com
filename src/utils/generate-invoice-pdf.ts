@@ -520,7 +520,6 @@ function addOptimizedTableHeaders(
 			align: header.align as any,
 		});
 	});
-
 	// Add border
 	doc
 		.strokeColor(COLORS.BORDER_GRAY)
