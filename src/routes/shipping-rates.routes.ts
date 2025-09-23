@@ -1,5 +1,6 @@
 import { Router } from "express";
 import prisma from "../config/prisma_db";
+import { RateType } from "@prisma/client";
 
 const shipping_rates_routes = Router();
 
@@ -57,55 +58,22 @@ shipping_rates_routes.get("/base_rate/agency/:agency_id/service/:service_id", as
 	});
 	res.status(200).json(rate);
 });
-
-shipping_rates_routes.get("/agency/:agency_id/service/:service_id", async (req, res) => {
+shipping_rates_routes.get("/agency/:agency_id/service/:service_id/fixed", async (req, res) => {
 	const { agency_id, service_id } = req.params;
 	const rates = await prisma.shippingRate.findMany({
-		select: {
-			id: true,
-			rate_in_cents: true,
-			rate_type: true,
-			min_weight: true,
-			max_weight: true,
-			service_id: true,
-			is_base_rate: true,
-			
-			
-			
-
-			
-
-					},
-		where: { agency_id: parseInt(agency_id), service_id: parseInt(service_id), is_active: true },
-		orderBy: {
-			id: "asc",
+		where: {
+			agency_id: parseInt(agency_id),
+			service_id: parseInt(service_id),
+			is_active: true,
+			rate_type: RateType.FIXED,
 		},
 	});
 	res.status(200).json(rates);
 });
 
-shipping_rates_routes.get("/agency/:agency_id/service/:service_id/products-rates", async (req, res) => {
-	const { agency_id, service_id } = req.params;
-
-	const products = await prisma.shippingRate.findMany({
-		select: {
-			id: true,
-			rate_in_cents: true,
-			rate_type: true,
-			
-			
-		},	
-		where: { agency_id: parseInt(agency_id), is_active: true },
-	});
-	
-
-
-
-	res.status(200).json(products);
-});
-
 shipping_rates_routes.post("/", async (req, res) => {
-	const { agency_id, name, service_id, cost_in_cents, rate_in_cents, rate_type } = req.body;
+	const { agency_id, name, service_id, cost_in_cents, rate_in_cents, rate_type, is_base_rate } =
+		req.body;
 	//convert to cents
 
 	const rate = await prisma.shippingRate.create({
@@ -113,6 +81,7 @@ shipping_rates_routes.post("/", async (req, res) => {
 			agency_id,
 			name,
 			service_id,
+			is_base_rate: is_base_rate,
 			cost_in_cents: cost_in_cents,
 			rate_in_cents: rate_in_cents,
 			rate_type: rate_type,
@@ -124,12 +93,17 @@ shipping_rates_routes.post("/", async (req, res) => {
 shipping_rates_routes.put("/:id", async (req, res) => {
 	const { id } = req.params;
 
-	const { name, cost_in_cents, rate_in_cents } = req.body;
+	const { name, cost_in_cents, rate_in_cents, is_base_rate } = req.body;
 	//convert to cents
 
 	const rate = await prisma.shippingRate.update({
 		where: { id: parseInt(id) },
-		data: { name, cost_in_cents: cost_in_cents, rate_in_cents: rate_in_cents },
+		data: {
+			name,
+			cost_in_cents: cost_in_cents,
+			rate_in_cents: rate_in_cents,
+			is_base_rate: is_base_rate,
+		},
 	});
 	res.status(200).json(rate);
 });

@@ -171,6 +171,11 @@ const agencies = {
 						max_weight: shipping_rate.max_weight,
 						product_id: shipping_rate.product_id,
 						carrier_rates_id: shipping_rate.carrier_rates_id,
+						is_base_rate: shipping_rate.is_base_rate,
+						length: shipping_rate.length,
+						width: shipping_rate.width,
+						height: shipping_rate.height,
+						forwarder_id: shipping_rate.forwarder_id,
 						agency_id: created_agency.id,
 					})),
 				});
