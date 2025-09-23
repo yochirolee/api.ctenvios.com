@@ -2,19 +2,27 @@ import PDFKit from "pdfkit";
 import * as bwipjs from "bwip-js";
 import { promises as fs } from "fs";
 import * as path from "path";
-import { Invoice, Customer, Receiver, Agency, Service, Item } from "@prisma/client";
+import { Invoice, Customer, Receiver, Agency, Service, Item, RateType } from "@prisma/client";
 import { formatName } from "./capitalize";
+import { calculate_row_subtotal, centsToDollars } from "./utils";
 
-interface InvoiceWithRelations extends Omit<Invoice, "total"> {
+interface InvoiceWithRelations extends Invoice {
 	customer: Customer;
 	receiver: Receiver & {
 		province?: { name: string };
 		city?: { name: string };
 	};
-	total: number;
+	total_in_cents: number;
+	paid_in_cents: number;
+	charge_in_cents: number;
+
 	agency: Agency;
 	service: Service;
-	items: Item[];
+	items: (Item & {
+		rate: {
+			rate_type: string;
+		};
+	})[];
 }
 
 // Cache for logos and barcodes to avoid regeneration
@@ -148,11 +156,15 @@ function calculateInvoiceTotals(invoice: InvoiceWithRelations) {
 	const subtotal = invoice.items.reduce(
 		(acc, item) =>
 			acc +
-			(item.rate_in_cents * item.weight +
-				(item.delivery_fee_in_cents || 0) +
-				(item.insurance_fee_in_cents || 0) +
-				item.customs_fee_in_cents) /
-				100,
+			calculate_row_subtotal(
+				item.rate_in_cents,
+				item.weight,
+				item.customs_fee_in_cents,
+				item.rate.rate_type as RateType,
+				item.charge_fee_in_cents || 0,
+			) /
+				100 +
+			((item.delivery_fee_in_cents || 0) + (item.insurance_fee_in_cents || 0)) / 100,
 		0,
 	);
 
@@ -420,13 +432,13 @@ async function generateItemsTableOptimized(
 		...item,
 		hbl:
 			item.hbl || `CTE${String(invoice.id).padStart(6, "0")}${String(index + 1).padStart(6, "0")}`,
-		subtotal:
-			(item.rate_in_cents * item.weight +
-				item?.customs_fee_in_cents || 0 +
-				(item?.delivery_fee_in_cents || 0) +
-				(item?.insurance_fee_in_cents || 0) +
-				(item?.charge_fee_in_cents || 0)) /
-				100,
+		subtotal: calculate_row_subtotal(
+			item.rate_in_cents,
+			item.weight,
+			item.customs_fee_in_cents,
+			item.rate.rate_type as RateType,
+			item.charge_fee_in_cents || 0,
+		),
 	}));
 
 	const addNewPageWithHeaderFooter = async () => {
@@ -535,35 +547,49 @@ function renderTableRow(
 		{ text: item.hbl, x: 30, y: verticalCenter, width: 100 },
 		{ text: item.description, x: 140, y: currentY + 8, width: 150 },
 		{
-			text: `$${((item.insurance_fee_in_cents || 0) / 100)?.toFixed(2)}`,
+			text: `$${centsToDollars(item.insurance_fee_in_cents || 0).toFixed(2)}`,
 			x: 300,
 			y: verticalCenter,
 			width: 40,
 			align: "right",
 		},
 		{
-			text: `$${((item.delivery_fee_in_cents || 0) / 100)?.toFixed(2)}`,
+			text: `$${centsToDollars(item.delivery_fee_in_cents || 0).toFixed(2)}`,
 			x: 340,
 			y: verticalCenter,
 			width: 40,
 			align: "right",
 		},
 		{
-			text: `$${((item.customs_fee_in_cents || 0) / 100)?.toFixed(2)}`,
+			text: `$${centsToDollars(item.customs_fee_in_cents || 0).toFixed(2)}`,
 			x: 385,
 			y: verticalCenter,
 			width: 40,
 			align: "right",
 		},
 		{
-			text: `$${((item.rate_in_cents || 0) / 100)?.toFixed(2)}`,
+			text: `$${centsToDollars(item.rate_in_cents || 0).toFixed(2)}`,
 			x: 430,
 			y: verticalCenter,
 			width: 40,
 			align: "right",
 		},
 		{ text: `${item.weight.toFixed(2)}`, x: 470, y: verticalCenter, width: 40, align: "right" },
-		{ text: `$${item.subtotal.toFixed(2)}`, x: 520, y: verticalCenter, width: 40, align: "right" },
+		{
+			text: `$${centsToDollars(
+				calculate_row_subtotal(
+					item.rate_in_cents,
+					item.weight,
+					item.customs_fee_in_cents,
+					item.rate.rate_type as RateType,
+					item.charge_fee_in_cents || 0,
+				),
+			).toFixed(2)}`,
+			x: 520,
+			y: verticalCenter,
+			width: 40,
+			align: "right",
+		},
 	];
 
 	rowData.forEach((data) => {

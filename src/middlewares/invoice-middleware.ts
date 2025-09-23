@@ -34,7 +34,7 @@ export function createInvoiceHistoryExtension(userId: string, prisma: PrismaClie
 					const fieldsToTrack = [
 						"service_id",
 						"customer_id",
-						"receipt_id",
+						"receiver_id", // Fixed: was receipt_id, should be receiver_id
 						"total_in_cents",
 						"paid_in_cents",
 						"payment_status",
@@ -87,14 +87,7 @@ export function createInvoiceHistoryExtension(userId: string, prisma: PrismaClie
 						} else {
 							// Comparar campo por campo
 							const itemDiff: any = { hbl, changes: {} };
-							const itemFields = [
-								"weight",
-								"rate_in_cents",
-								"quantity",
-								"description",
-								"volume",
-								"customs_fee_in_cents",
-							];
+							const itemFields = ["weight", "rate_in_cents", "quantity", "description"];
 
 							for (const field of itemFields) {
 								const prevValue = normalizeValue(prev[field]);

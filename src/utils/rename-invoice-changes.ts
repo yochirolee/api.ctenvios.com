@@ -1,6 +1,6 @@
 // utils/trackInvoiceChanges.ts
 
-import { Invoice, Item, PrismaClient } from "@prisma/client";
+import { Invoice, Item, PrismaClient, PaymentStatus } from "@prisma/client";
 
 export async function registerInvoiceChange(
 	prisma: PrismaClient,
@@ -70,10 +70,56 @@ export async function registerInvoiceChange(
 	}
 }
 
+/**
+ * Legacy function - consider using calculate_subtotal from utils instead for proper rate type handling
+ * This function assumes WEIGHT-based pricing and may not be accurate for FIXED rates
+ */
 export function calculateInvoiceTotal(items: Item[]) {
-	const total = items.reduce(
-		(sum: number, item: Item) => sum + item.rate_in_cents * item.quantity * item.weight || 0,
-		0,
-	);
+	const total = items.reduce((sum: number, item: Item) => {
+		// Basic calculation: rate * quantity * weight + fees
+		const baseAmount = (item.rate_in_cents || 0) * (item.quantity || 1) * (item.weight || 0);
+		const fees =
+			(item.customs_fee_in_cents || 0) +
+			(item.insurance_fee_in_cents || 0) +
+			(item.delivery_fee_in_cents || 0) +
+			(item.charge_fee_in_cents || 0);
+		return sum + baseAmount + fees;
+	}, 0);
 	return total;
+}
+
+export interface PaymentStatusResult {
+	paymentStatus: PaymentStatus;
+	warnings: string[];
+}
+
+/**
+ * Calculates the appropriate payment status based on paid amount vs total amount
+ * @param paidInCents - Amount already paid in cents
+ * @param totalInCents - New total amount in cents
+ * @returns PaymentStatusResult with status and any warnings
+ */
+export function calculatePaymentStatus(
+	paidInCents: number,
+	totalInCents: number,
+): PaymentStatusResult {
+	const warnings: string[] = [];
+	let paymentStatus: PaymentStatus;
+
+	if (paidInCents <= 0) {
+		paymentStatus = PaymentStatus.PENDING;
+	} else if (paidInCents >= totalInCents) {
+		paymentStatus = PaymentStatus.PAID;
+		if (paidInCents > totalInCents) {
+			warnings.push(
+				`Invoice has been overpaid. Paid: $${(paidInCents / 100).toFixed(2)}, Total: $${(
+					totalInCents / 100
+				).toFixed(2)}`,
+			);
+		}
+	} else {
+		paymentStatus = PaymentStatus.PARTIALLY_PAID;
+	}
+
+	return { paymentStatus, warnings };
 }

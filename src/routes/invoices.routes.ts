@@ -3,7 +3,7 @@ import prisma from "../config/prisma_db";
 import receivers_db from "../repository/receivers.repository";
 import { generarTracking } from "../utils/generate_hbl";
 import { generateInvoicePDF } from "../utils/generate-invoice-pdf";
-import { RateType, Roles } from "@prisma/client";
+import { RateType, Roles, PaymentStatus } from "@prisma/client";
 // Removed unused imports for shipping labels
 import {
 	generateCTEnviosLabels,
@@ -14,7 +14,7 @@ import AppError from "../utils/app.error";
 import { createInvoiceHistoryExtension } from "../middlewares/invoice-middleware";
 import { authMiddleware } from "../middlewares/auth-midleware";
 import { buildInvoiceTimeline } from "../utils/build-invoice-timeline";
-import { calculateInvoiceTotal } from "../utils/rename-invoice-changes";
+import { calculateInvoiceTotal, calculatePaymentStatus } from "../utils/rename-invoice-changes";
 import { calculate_row_subtotal } from "../utils/utils";
 
 // Define un esquema de validación para los query params
@@ -28,7 +28,7 @@ const searchSchema = z.object({
 
 const invoiceItemSchema = z.object({
 	description: z.string().min(1),
-	rate_id: z.number().positive(),
+	rate_id: z.number().positive().optional(),
 	customs_id: z.number().optional(),
 	product_id: z.number().positive().optional(),
 
@@ -47,6 +47,15 @@ const newInvoiceSchema = z.object({
 	service_id: z.number().positive(),
 	items: z.array(invoiceItemSchema).min(1),
 	total_in_cents: z.number().min(0).optional(), // 🚀 Frontend puede calcular esto
+});
+
+const updateInvoiceSchema = z.object({
+	user_id: z.string().min(1),
+	agency_id: z.number().positive(),
+	customer_id: z.number().positive(),
+	receiver_id: z.number().positive(),
+	service_id: z.number().positive(),
+	items: z.array(invoiceItemSchema).min(1, "Invoice must have at least one item"),
 });
 
 const bulkLabelsSchema = z.object({
@@ -573,8 +582,16 @@ router.get("/search", authMiddleware, async (req: any, res) => {
 function calculate_subtotal(items: any[]): number {
 	let total = 0;
 	items.forEach((item) => {
-		total += calculate_row_subtotal(item.rate_in_cents, item.weight, item.customs_fee_in_cents, item.rate_type, item.insurance_fee_in_cents);	
-		return total;
+		const itemSubtotal = calculate_row_subtotal(
+			item.rate_in_cents || 0,
+			item.weight || 0,
+			item.customs_fee_in_cents || 0,
+			item.rate_type || "WEIGHT",
+			item.charge_fee_in_cents || 0,
+		);
+		// Add additional fees that aren't handled by calculate_row_subtotal
+		const additionalFees = (item.insurance_fee_in_cents || 0) + (item.delivery_fee_in_cents || 0);
+		total += itemSubtotal + additionalFees;
 	});
 	return total;
 }
@@ -639,7 +656,7 @@ router.post("/", async (req, res) => {
 		//search rate for each item (get unique rate_ids to avoid duplicate queries)
 		const uniqueRateIds = [...new Set(items.map((item: any) => item.rate_id))];
 		const rates = await prisma.shippingRate.findMany({
-			select: { id: true,  cost_in_cents: true, rate_type: true, is_base_rate: true },
+			select: { id: true, cost_in_cents: true, rate_type: true, is_base_rate: true },
 			where: {
 				id: { in: uniqueRateIds },
 			},
@@ -817,42 +834,328 @@ router.delete("/:id", async (req, res) => {
 
 router.put("/:id", async (req, res) => {
 	const { id } = req.params;
-	const { user_id, agency_id, customer_id, receiver_id, service_id, total_amount, items } =
-		req.body;
 
-	// Generate new HBL codes for items that might be created
-	const newItemsCount = items.filter((item: any) => !item.hbl).length;
-	const newHblCodes = newItemsCount > 0 ? await generarTracking(agency_id, newItemsCount) : [];
-	let hblIndex = 0;
+	// Validate request body using schema
+	try {
+		const { user_id, agency_id, customer_id, receiver_id, service_id, items } =
+			updateInvoiceSchema.parse(req.body);
 
-	const extendedPrisma = prisma.$extends(createInvoiceHistoryExtension(user_id, prisma));
-	const invoice = await extendedPrisma.invoice.update({
-		where: { id: parseInt(id) },
-		data: {
-			user_id: user_id,
-			agency_id: agency_id,
-			customer_id: customer_id,
-			receiver_id: receiver_id,
-			service_id: service_id,
-			total_in_cents: calculateInvoiceTotal(items),
-			items: {
-				upsert: items.map((item: any) => ({
-					where: { hbl: item.hbl || "non-existent-hbl" },
-					update: { ...item, service_id, agency_id },
-					create: {
-						...item,
-						service_id,
-						agency_id,
-						hbl: item.hbl || newHblCodes[hblIndex++],
-					},
-				})),
+		console.log(items, "items");
+
+		// Generate new HBL codes for items that might be created
+		const newItemsCount = items.filter((item: any) => !item.hbl).length;
+		const newHblCodes =
+			newItemsCount > 0 ? await generateHBLFast(agency_id, service_id, newItemsCount) : [];
+		let hblIndex = 0;
+
+		// Get base rate for items that don't have rate_id
+		const baseRate = await prisma.shippingRate.findFirst({
+			select: { id: true },
+			where: {
+				agency_id: agency_id,
+				service_id: service_id,
+				is_base_rate: true,
+				is_active: true,
 			},
-		},
-		include: {
-			items: true,
-		},
-	});
-	res.status(200).json(invoice);
+		});
+
+		if (!baseRate) {
+			return res.status(400).json({
+				error: "No base rate found for this agency and service combination",
+			});
+		}
+
+		const extendedPrisma = prisma.$extends(createInvoiceHistoryExtension(user_id, prisma));
+
+		// Get current invoice with payment information
+		const currentInvoice = await prisma.invoice.findUnique({
+			where: { id: parseInt(id) },
+			select: {
+				customer_id: true,
+				receiver_id: true,
+				total_in_cents: true,
+				paid_in_cents: true,
+				payment_status: true,
+				items: { select: { hbl: true } },
+			},
+		});
+
+		if (!currentInvoice) {
+			return res.status(404).json({ error: "Invoice not found" });
+		}
+
+		// Get HBLs from the request (existing items with HBL and new items that will get HBL)
+		const requestHbls = new Set(
+			items.map((item: any) => item.hbl).filter((hbl: string) => hbl), // Only existing HBLs
+		);
+
+		// Find items to delete (current items not in the request)
+		const itemsToDelete = currentInvoice.items
+			.map((item) => item.hbl)
+			.filter((hbl) => !requestHbls.has(hbl));
+
+		// Validate that we won't end up with zero items after the update
+		const currentItemCount = currentInvoice.items.length;
+		const itemsToDeleteCount = itemsToDelete.length;
+		const existingItemsToKeep = items.filter(
+			(item: any) => item.hbl && requestHbls.has(item.hbl),
+		).length;
+
+		const finalItemCount = currentItemCount - itemsToDeleteCount + newItemsCount;
+
+		if (finalItemCount === 0) {
+			return res.status(400).json({
+				error: "Validation Error",
+				message: "Cannot update invoice to have zero items. Invoice must have at least one item.",
+				details: {
+					field: "items",
+					constraint: "minimum 1 item required",
+					currentItems: currentItemCount,
+					itemsToDelete: itemsToDeleteCount,
+					newItems: newItemsCount,
+					finalCount: finalItemCount,
+				},
+			});
+		}
+
+		// Get rate information for proper calculation
+		const uniqueRateIds = [
+			...new Set(items.map((item: any) => item.rate_id || baseRate.id)),
+		] as number[];
+		const rates = await prisma.shippingRate.findMany({
+			select: { id: true, rate_type: true },
+			where: {
+				id: { in: uniqueRateIds },
+			},
+		});
+
+		// Map rate_type to items for proper calculation
+		const itemsWithRateType = items.map((item: any) => {
+			const rateId = item.rate_id || baseRate.id;
+			const rate = rates.find((r: any) => r.id === rateId);
+			return {
+				...item,
+				rate_type: rate?.rate_type || "WEIGHT", // Default to WEIGHT if not found
+			};
+		});
+
+		// Calculate new total and determine payment status
+		const newTotalInCents = calculate_subtotal(itemsWithRateType);
+		const currentPaidInCents = currentInvoice.paid_in_cents;
+
+		// Use utility function to calculate payment status and warnings
+		const paymentResult = calculatePaymentStatus(currentPaidInCents, newTotalInCents);
+		const newPaymentStatus = paymentResult.paymentStatus;
+		const paymentWarnings = paymentResult.warnings;
+
+		// Check if sender (customer) or receiver changed
+		const senderChanged = currentInvoice.customer_id !== customer_id;
+		const receiverChanged = currentInvoice.receiver_id !== receiver_id;
+		const totalChanged = currentInvoice.total_in_cents !== newTotalInCents;
+
+		// Log changes for debugging/monitoring
+		if (senderChanged) {
+			console.log(
+				`Invoice ${id}: Sender changed from ${currentInvoice.customer_id} to ${customer_id}`,
+			);
+		}
+		if (receiverChanged) {
+			console.log(
+				`Invoice ${id}: Receiver changed from ${currentInvoice.receiver_id} to ${receiver_id}`,
+			);
+		}
+		if (totalChanged) {
+			console.log(
+				`Invoice ${id}: Total changed from $${(currentInvoice.total_in_cents / 100).toFixed(
+					2,
+				)} to $${(newTotalInCents / 100).toFixed(2)}`,
+			);
+			console.log(
+				`Invoice ${id}: Payment status updated from ${currentInvoice.payment_status} to ${newPaymentStatus}`,
+			);
+		}
+
+		try {
+			const invoice = await extendedPrisma.invoice.update({
+				where: { id: parseInt(id) },
+				data: {
+					user_id: user_id,
+					agency_id: agency_id,
+					customer_id: customer_id,
+					receiver_id: receiver_id,
+					service_id: service_id,
+					total_in_cents: newTotalInCents,
+					payment_status: newPaymentStatus,
+					items: {
+						// Delete items not present in the request
+						deleteMany:
+							itemsToDelete.length > 0
+								? {
+										hbl: { in: itemsToDelete },
+								  }
+								: undefined,
+						// Upsert items from the request
+						upsert: items.map((item: any) => ({
+							where: { hbl: item.hbl || "non-existent-hbl" },
+							update: {
+								...item,
+								service_id,
+								agency_id,
+								rate_id: item.rate_id || baseRate.id, // Use base rate as fallback
+							},
+							create: {
+								...item,
+								service_id,
+								agency_id,
+								hbl: item.hbl || newHblCodes[hblIndex++],
+								rate_id: item.rate_id || baseRate.id, // Use base rate as fallback
+							},
+						})),
+					},
+				},
+				include: {
+					items: true,
+					service: {
+						select: {
+							id: true,
+							name: true,
+						},
+					},
+				},
+			});
+
+			// Include payment warnings in response if any exist
+			const response: any = {
+				...invoice,
+				payment_warnings: paymentWarnings.length > 0 ? paymentWarnings : undefined,
+			};
+
+			res.status(200).json(response);
+		} catch (error: any) {
+			console.error("Error updating invoice:", error);
+
+			// Handle Prisma unique constraint violations
+			if (error.code === "P2002" && error.meta?.target?.includes("hbl")) {
+				return res.status(409).json({
+					error: "HBL Conflict",
+					message:
+						"One or more HBL codes are already in use. Each HBL must be unique across all items.",
+					details: {
+						field: "hbl",
+						duplicateValues: error.meta?.target || ["hbl"],
+						suggestion:
+							"Please check the HBL codes and ensure they are unique, or remove the HBL to auto-generate a new one.",
+					},
+				});
+			}
+
+			// Handle other Prisma unique constraint violations
+			if (error.code === "P2002") {
+				const field = error.meta?.target?.[0] || "unknown field";
+				return res.status(409).json({
+					error: "Unique Constraint Violation",
+					message: `The value for ${field} already exists and must be unique.`,
+					details: {
+						field: field,
+						constraintName: error.meta?.target,
+					},
+				});
+			}
+
+			// Handle other Prisma errors
+			if (error.name === "PrismaClientKnownRequestError") {
+				return res.status(400).json({
+					error: "Database Operation Failed",
+					message: "Unable to update invoice due to data constraints.",
+					details: {
+						code: error.code,
+						message: error.message,
+					},
+				});
+			}
+
+			// Handle generic errors
+			return res.status(500).json({
+				error: "Internal Server Error",
+				message: "An unexpected error occurred while updating the invoice.",
+			});
+		}
+	} catch (validationError: any) {
+		// Handle Zod validation errors
+		if (validationError instanceof z.ZodError) {
+			return res.status(400).json({
+				error: "Validation Error",
+				message: "Invalid request data",
+				details: validationError.issues.map((issue) => ({
+					path: issue.path.join("."),
+					message: issue.message,
+					code: issue.code,
+				})),
+			});
+		}
+
+		// Handle other validation errors
+		return res.status(500).json({
+			error: "Internal Server Error",
+			message: "An unexpected error occurred while validating the request.",
+		});
+	}
+});
+
+// Get invoice change history - useful for checking sender/receiver changes
+router.get("/:id/history", async (req, res) => {
+	const { id } = req.params;
+
+	try {
+		const history = await prisma.invoiceHistory.findMany({
+			where: { invoice_id: parseInt(id) },
+			include: {
+				user: {
+					select: {
+						name: true,
+						email: true,
+					},
+				},
+			},
+			orderBy: { created_at: "desc" },
+		});
+
+		// Parse and format the history for easier consumption
+		const formattedHistory = history.map((record) => {
+			const changes = record.changed_fields as any;
+
+			// Check if sender (customer) changed
+			const senderChanged = changes.customer_id
+				? {
+						from: changes.customer_id.from,
+						to: changes.customer_id.to,
+				  }
+				: null;
+
+			// Check if receiver changed
+			const receiverChanged = changes.receiver_id
+				? {
+						from: changes.receiver_id.from,
+						to: changes.receiver_id.to,
+				  }
+				: null;
+
+			return {
+				id: record.id,
+				timestamp: record.created_at,
+				user: record.user,
+				comment: record.comment,
+				senderChanged,
+				receiverChanged,
+				allChanges: changes,
+			};
+		});
+
+		res.status(200).json(formattedHistory);
+	} catch (error) {
+		console.error("Error fetching invoice history:", error);
+		res.status(500).json({ error: "Failed to fetch invoice history" });
+	}
 });
 
 // Generate PDF endpoint
@@ -878,6 +1181,13 @@ router.get("/:id/pdf", async (req, res) => {
 				agency: true,
 				service: true,
 				items: {
+					include: {
+						rate: {
+							select: {
+								rate_type: true,
+							},
+						},
+					},
 					orderBy: { hbl: "asc" },
 				},
 			},
@@ -890,7 +1200,6 @@ router.get("/:id/pdf", async (req, res) => {
 		// Convert Decimal fields to numbers for PDF generation
 		const invoiceForPDF = {
 			...invoice,
-			total: Number(invoice.total_in_cents),
 		};
 
 		// Generate PDF

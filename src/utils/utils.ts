@@ -1,4 +1,4 @@
-
+import { RateType } from "@prisma/client";
 
 export function formatPhoneNumber(phoneNumber: string) {
 	return phoneNumber.replace(/^(\+535|535)?/, "");
@@ -55,7 +55,7 @@ export const calculate_row_subtotal = (
 	rate_in_cents: number,
 	weight: number,
 	customs_fee_in_cents: number,
-	rate_type: string,
+	rate_type: RateType,
 	charge_fee_in_cents: number,
 ) => {
 	// Ensure all values are valid numbers
@@ -63,7 +63,7 @@ export const calculate_row_subtotal = (
 	const safeWeight = Number(weight) || 0;
 	const safeCustomsFeeInCents = Number(customs_fee_in_cents) || 0;
 	const safeChargeFeeInCents = charge_fee_in_cents || 0;
-	if (rate_type === "WEIGHT") {
+	if (rate_type === RateType.WEIGHT) {
 		return (
 			safeRateInCents * safeWeight + safeCustomsFeeInCents + safeChargeFeeInCents
 		);
