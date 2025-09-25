@@ -301,35 +301,45 @@ enum RateType {
   FIXED
   WEIGHT
 }
+
 model ShippingRate {
   id            Int      @id @default(autoincrement())
   name          String   @default("Base Rate")
   service_id    Int?
   service       Service? @relation(fields: [service_id], references: [id], onDelete: Cascade)
-  agency_id     Int
-  agency        Agency   @relation(fields: [agency_id], references: [id], onDelete: Cascade)
-  cost_in_cents Int      @default(0) // Costo para la agencia
-  forwarder_id  Int?   //created by forwarder
+  
+  // --- CAMPOS DE PROPIEDAD ---
+  agency_id     Int? // Opcional: una tarifa puede no pertenecer a una agencia (si es base)
+  agency        Agency?   @relation(fields: [agency_id], references: [id], onDelete: Cascade)
+  forwarder_id  Int?      // Opcional: una tarifa de agencia hereda esto de su padre
   forwarder     Forwarder? @relation(fields: [forwarder_id], references: [id], onDelete: Cascade)
-  // Para RateType.WEIGHT, este es el precio por libra (o la unidad de peso que uses).
-  // Para RateType.FIXED, este es el precio total y único.
-  rate_in_cents Int      @default(0)
-  // Estos rangos aplican principalmente para RateType.WEIGHT
-  min_weight    Float?
-  max_weight    Float?
 
-  is_active     Boolean  @default(true)
+  // --- PRECIOS ---
+  // Para una Tarifa Base del Forwarder: este es su precio de venta a la agencia.
+  // Para una Tarifa de Agencia: este es el precio final de venta al cliente.
+  rate_in_cents Int      @default(0) 
+
+  // Para una Tarifa de Agencia: este es su costo (el rate_in_cents de la tarifa padre).
+  cost_in_cents Int      @default(0) 
+
+  // --- RELACIÓN DE HERENCIA (LA CLAVE) ---
+  is_base_rate   Boolean  @default(false) // True si es una tarifa maestra del Forwarder
+  parent_rate_id Int?     @unique // La tarifa de una agencia apunta a una tarifa base
+  parent_rate    ShippingRate?  @relation("RateHierarchy", fields: [parent_rate_id], references: [id], onDelete: SetNull)
+  child_rates    ShippingRate[] @relation("RateHierarchy") // Una tarifa base puede tener muchas tarifas de agencias hijas
+
+  // ... resto de tus campos (min_weight, max_weight, etc.)
+  is_active     Boolean  @default(false)
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
   items         Item[]
   products      Product[]
   rate_type     RateType @default(WEIGHT)
-  is_base_rate       Boolean  @default(false)
-  // --- NUEVOS CAMPOS ---
-  // Campos opcionales para describir tarifas de tipo FIXED, ej: "Caja Mediana"
-  length        Float? // en pulgadas o cm
-  width         Float?
-  height        Float?
+  min_weight    Float? @default(0)
+  max_weight    Float? @default(0)
+  length        Float? @default(0)
+  width         Float? @default(0)
+  height        Float? @default(0)
 }
 
 

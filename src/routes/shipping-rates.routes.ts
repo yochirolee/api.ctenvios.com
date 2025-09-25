@@ -1,6 +1,6 @@
 import { Router } from "express";
 import prisma from "../config/prisma_db";
-import { RateType } from "@prisma/client";
+import { AgencyType, RateType } from "@prisma/client";
 
 const shipping_rates_routes = Router();
 
@@ -72,6 +72,22 @@ shipping_rates_routes.get("/agency/:agency_id/service/:service_id/fixed", async 
 });
 
 shipping_rates_routes.post("/", async (req, res) => {
+
+	//only if the agency is forwarder can create a rate, if the agency is not forwarder, return 403
+	const agency = await prisma.agency.findUnique({
+		where: { id: parseInt(agency_id) },
+	});
+	if (agency?.agency_type !== AgencyType.FORWARDER) {
+		return res.status(403).json({ message: "Only forwarders can create rates" });
+	}
+	//if agency if forwarder create the rates for him and all his childrens and all his childrens childrens and so on
+	if (agency?.agency_type === AgencyType.FORWARDER) {
+		const childrens = await prisma.agency.findMany({
+			where: { parent_agency_id: agency.id },
+		});
+		
+		
+	}
 	const { agency_id, name, service_id, cost_in_cents, rate_in_cents, rate_type, is_base_rate } =
 		req.body;
 	//convert to cents

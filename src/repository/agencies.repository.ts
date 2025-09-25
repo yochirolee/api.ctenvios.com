@@ -1,5 +1,5 @@
 import prisma from "../config/prisma_db";
-import { Prisma } from "@prisma/client";
+import { Prisma, RateType } from "@prisma/client";
 import repository from "./index";
 
 export const agencies = {
@@ -43,18 +43,47 @@ export const agencies = {
 		});
 		return users;
 	},
-	getServicesAndRates: async (id: number) => {
+	getServices: async (agency_id: number, is_active: boolean | null = null) => {
 		const servicesRates = await prisma.service.findMany({
-			include: {
-				provider: true,
-				shipping_rates: {
-					where: {
-						agency_id: id,
+			select: {
+				id: true,
+				name: true,
+				service_type: true,
+				provider: { select: { id: true, name: true } },
+				forwarder: { select: { id: true, name: true } },
+			},
+			where: {
+				agencies: {
+					some: {
+						id: agency_id,
 					},
 				},
+				is_active: is_active === null ? undefined : is_active,
 			},
 		});
 		return servicesRates;
+	},
+	getShippingRates: async (agency_id: number) => {
+		const rates = await prisma.shippingRate.findMany({
+			where: { agency_id: agency_id },
+		});
+		return rates;
+	},
+	getShippingRatesByService: async (
+		id: number,
+		service_id: number,
+		RateType: string | null = null,
+		IsActive: boolean | null = null,
+	) => {
+		let rates = await prisma.shippingRate.findMany({
+			where: {
+				agency_id: id,
+				service_id: service_id,
+				rate_type: RateType === null ? undefined : (RateType as RateType),
+				is_active: IsActive === null ? undefined : (IsActive as boolean),
+			},
+		});
+		return rates;
 	},
 
 	/* create: async (agency: Partial<Prisma.AgencyCreateInput>) => {

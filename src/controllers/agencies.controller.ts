@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { z } from "zod";
-import { AgencyType, Prisma, Roles } from "@prisma/client";
+import { AgencyType, Prisma, Roles, ShippingRate } from "@prisma/client";
 import AppError from "../utils/app.error";
 
 import { agencySchema } from "../types/types";
@@ -130,8 +130,6 @@ const agencies = {
 			},
 		});
 
-		console.log(parent_agency, "parent_agency");
-
 		if (!parent_agency?.shipping_rates) {
 			throw new AppError("Parent agency has no rates", 400, [], "zod");
 		}
@@ -143,8 +141,6 @@ const agencies = {
 			)
 			.map((shipping_rate) => shipping_rate.service_id)
 			.filter((id): id is number => id !== null);
-
-		console.log(services_ids, "services_ids");
 
 		try {
 			const agency_created = await prisma.$transaction(async (tx) => {
@@ -161,7 +157,7 @@ const agencies = {
 					},
 				});
 				await tx.shippingRate.createMany({
-					data: parent_agency?.shipping_rates.map((shipping_rate: any) => ({
+					data: parent_agency?.shipping_rates.map((shipping_rate: ShippingRate) => ({
 						cost_in_cents: shipping_rate.cost_in_cents,
 						rate_in_cents: shipping_rate.rate_in_cents,
 						service_id: shipping_rate.service_id,
@@ -169,14 +165,13 @@ const agencies = {
 						rate_type: shipping_rate.rate_type,
 						min_weight: shipping_rate.min_weight,
 						max_weight: shipping_rate.max_weight,
-						product_id: shipping_rate.product_id,
-						carrier_rates_id: shipping_rate.carrier_rates_id,
 						is_base_rate: shipping_rate.is_base_rate,
 						length: shipping_rate.length,
 						width: shipping_rate.width,
 						height: shipping_rate.height,
 						forwarder_id: shipping_rate.forwarder_id,
 						agency_id: created_agency.id,
+						parent_rate_id: shipping_rate.parent_rate_id,
 					})),
 				});
 
@@ -307,10 +302,52 @@ const agencies = {
 		const parent = await repository.agencies.getParent(Number(id));
 		res.status(200).json(parent);
 	},
-	getServicesAndRates: async (req: Request, res: Response) => {
+	getServices: async (req: Request, res: Response) => {
 		const { id } = req.params;
-		const servicesAndRates = await repository.agencies.getServicesAndRates(Number(id));
+		const { is_active } = req.query;
+		const isActiveBoolean =
+			is_active === undefined
+				? undefined
+				: is_active === "true"
+				? true
+				: is_active === "false"
+				? false
+				: undefined;
+		const servicesAndRates = await repository.agencies.getServices(
+			Number(id),
+			isActiveBoolean as boolean | null,
+		);
 		res.status(200).json(servicesAndRates);
+		res.status(200).json(servicesAndRates);
+	},
+	getServiceShippingRates: async (req: Request, res: Response) => {
+		const { id, service_id } = req.params;
+		if (!id || !service_id) {
+			throw new AppError("Agency ID and service ID are required", 400, [], "zod");
+		}
+		const { rate_type, is_active } = req.query;
+
+		const isActiveBoolean =
+			is_active === undefined
+				? undefined
+				: is_active === "true"
+				? true
+				: is_active === "false"
+				? false
+				: undefined;
+
+		const rates = await repository.agencies.getShippingRatesByService(
+			Number(id),
+			Number(service_id),
+			rate_type as string | null,
+			isActiveBoolean as boolean | null,
+		);
+		res.status(200).json(rates);
+	},
+	getShippingRates: async (req: Request, res: Response) => {
+		const { id } = req.params;
+		const rates = await repository.agencies.getShippingRates(Number(id));
+		res.status(200).json(rates);
 	},
 };
 
