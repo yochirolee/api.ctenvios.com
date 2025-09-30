@@ -11,11 +11,6 @@ agencies_routes.put("/:id", controllers.agencies.update);
 agencies_routes.delete("/:id", controllers.agencies.remove);
 agencies_routes.get("/:id/childrens", controllers.agencies.getChildren);
 agencies_routes.get("/:id/parent", controllers.agencies.getParent);
-agencies_routes.get("/:id/services", controllers.agencies.getServices);
-agencies_routes.get(
-	"/:id/service/:service_id/shipping-rates",
-	controllers.agencies.getServiceShippingRates,
-);
-agencies_routes.get("/:id/shipping-rates", controllers.agencies.getShippingRates);
+agencies_routes.get("/:id/services-with-rates", controllers.agencies.getServicesWithRates);
 
 export default agencies_routes;

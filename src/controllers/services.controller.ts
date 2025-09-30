@@ -57,8 +57,8 @@ export const services_controller = {
 		if (!agency_id || isNaN(Number(agency_id))) {
 			return res.status(400).json({ error: "Agency ID is required" });
 		}
-		const service = await repository.services.getByAgencyId(Number(agency_id));
-		res.status(200).json(service);
+		const services = await repository.services.getByAgencyId(Number(agency_id));
+		res.status(200).json(services);
 	},
 	update: async (req: Request, res: Response) => {
 		const { id } = req.params;

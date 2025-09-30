@@ -39,20 +39,26 @@ shipping_rates_routes.get("/agency/:agency_id", async (req, res) => {
 	res.status(200).json(rates);
 });
 
-shipping_rates_routes.get("/base_rate/agency/:agency_id/service/:service_id", async (req, res) => {
+shipping_rates_routes.get("/agency/:agency_id/service/:service_id", async (req, res) => {
 	const { agency_id, service_id } = req.params;
-	const rate = await prisma.shippingRate.findFirst({
+	const rate = await prisma.shippingRate.findMany({
 		select: {
 			id: true,
 			rate_in_cents: true,
 			rate_type: true,
 			min_weight: true,
 			max_weight: true,
+			
+			forwarder: {
+				select: {
+					id: true,
+					name: true,
+				},
+			},
 		},
 		where: {
 			agency_id: parseInt(agency_id),
 			service_id: parseInt(service_id),
-			is_base_rate: true,
 			is_active: true,
 		},
 	});

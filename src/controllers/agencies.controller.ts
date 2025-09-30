@@ -111,9 +111,9 @@ const agencies = {
 					code: issue.code,
 					...(issue.code === "invalid_type"
 						? {
-								expected: issue.expected,
-								received: issue.received,
-						  }
+							expected: issue.expected,
+							received: issue.received,
+						}
 						: {}),
 				})),
 			});
@@ -302,53 +302,25 @@ const agencies = {
 		const parent = await repository.agencies.getParent(Number(id));
 		res.status(200).json(parent);
 	},
-	getServices: async (req: Request, res: Response) => {
+	getServicesWithRates: async (req: Request, res: Response) => {
 		const { id } = req.params;
 		const { is_active } = req.query;
 		const isActiveBoolean =
 			is_active === undefined
 				? undefined
 				: is_active === "true"
-				? true
-				: is_active === "false"
-				? false
-				: undefined;
-		const servicesAndRates = await repository.agencies.getServices(
+					? true
+					: is_active === "false"
+						? false
+						: undefined;
+		const servicesAndRates = await repository.agencies.getServicesWithRates(
 			Number(id),
 			isActiveBoolean as boolean | null,
 		);
-		res.status(200).json(servicesAndRates);
-		res.status(200).json(servicesAndRates);
-	},
-	getServiceShippingRates: async (req: Request, res: Response) => {
-		const { id, service_id } = req.params;
-		if (!id || !service_id) {
-			throw new AppError("Agency ID and service ID are required", 400, [], "zod");
-		}
-		const { rate_type, is_active } = req.query;
 
-		const isActiveBoolean =
-			is_active === undefined
-				? undefined
-				: is_active === "true"
-				? true
-				: is_active === "false"
-				? false
-				: undefined;
+		res.status(200).json(servicesAndRates);
+	},
 
-		const rates = await repository.agencies.getShippingRatesByService(
-			Number(id),
-			Number(service_id),
-			rate_type as string | null,
-			isActiveBoolean as boolean | null,
-		);
-		res.status(200).json(rates);
-	},
-	getShippingRates: async (req: Request, res: Response) => {
-		const { id } = req.params;
-		const rates = await repository.agencies.getShippingRates(Number(id));
-		res.status(200).json(rates);
-	},
 };
 
 export default agencies;

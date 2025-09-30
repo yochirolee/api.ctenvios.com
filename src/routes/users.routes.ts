@@ -4,7 +4,6 @@ import { fromNodeHeaders } from "better-auth/node";
 import prisma from "../config/prisma_db";
 import { authMiddleware } from "../middlewares/auth-midleware";
 import { Roles } from "@prisma/client";
-import { resend } from "../services/resend";
 
 const router = Router();
 
@@ -125,6 +124,10 @@ router.post("/sign-up/email", authMiddleware, async (req, res) => {
 
 router.post("/sign-in/email", async (req, res) => {
 	const { email, password } = req.body;
+
+	if (!email || !password) {
+		return res.status(400).json({ message: "Email and password are required" });
+	}
 
 	try {
 		const { token } = await auth.api.signInEmail({

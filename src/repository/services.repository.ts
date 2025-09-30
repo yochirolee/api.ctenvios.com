@@ -46,6 +46,7 @@ const services = {
 				service_type: true,
 				provider: { select: { id: true, name: true } },
 				forwarder: { select: { id: true, name: true } },
+				shipping_rates: { select: { id: true, rate_in_cents: true, rate_type: true, min_weight: true, max_weight: true, length: true, width: true, height: true } },
 			},
 		});
 		return services;

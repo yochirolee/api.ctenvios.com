@@ -8,6 +8,7 @@ import {
 	Item,
 	Provider,
 	Forwarder,
+	ServiceType,
 } from "@prisma/client";
 import bwipjs from "bwip-js";
 import QRCode from "qrcode";
@@ -132,10 +133,8 @@ async function generateCleanCTEnviosLabel(
 
 	// Large letter for transport type (left side)
 	const transportLetter =
-		invoice.service.name.toLowerCase().includes("aereo") ||
-		invoice.service.name.toLowerCase().includes("air")
-			? "A"
-			: "M";
+		invoice.service.service_type === ServiceType.AIR ? "A" :
+		invoice.service.service_type === ServiceType.MARITIME ? "M" : "M";
 
 	// Draw border around the letter - aligned left with company name
 	doc.rect(margin, currentY + 5, 50, 50).stroke();
@@ -303,7 +302,7 @@ async function generateCleanCTEnviosLabel(
 		.text(item.description?.toUpperCase() || "", margin, currentY);
 	// Service section with border
 
-	currentY += 70;
+	currentY +=60;
 	//Sender Info
 	const senderInfo = formatName(
 		invoice.customer.first_name,
@@ -316,12 +315,12 @@ async function generateCleanCTEnviosLabel(
 	doc
 		.fontSize(8)
 		.font("Helvetica")
-		.text("ENVIA:", margin + 5, currentY);
+		.text("Env:", margin + 5, currentY);
 
 	doc
 		.fontSize(8)
 		.font("Helvetica")
-		.text(senderInfo.toUpperCase(), margin + 65, currentY);
+		.text(senderInfo.toUpperCase(), margin + 35, currentY);
 
 	// Transport type checkboxes
 	currentY += 10;
@@ -347,7 +346,7 @@ async function generateCleanCTEnviosLabel(
 	doc
 		.fontSize(8)
 		.font("Helvetica")
-		.text("RECIBE:", margin + 5, currentY + 5);
+		.text("Para:", margin + 5, currentY + 5);
 
 	// Smart name formatting with width constraints and font sizing
 	const maxNameWidth = labelWidth - margin - 65 - 10;
@@ -359,7 +358,7 @@ async function generateCleanCTEnviosLabel(
 	doc
 		.fontSize(nameFontSize)
 		.font("Helvetica-Bold")
-		.text(nameUpperCase, margin + 65, currentY + 5, {
+		.text(nameUpperCase, margin + 35, currentY + 5, {
 			width: maxNameWidth,
 			height: 20,
 			ellipsis: true,
@@ -368,7 +367,7 @@ async function generateCleanCTEnviosLabel(
 	doc
 		.fontSize(8)
 		.font("Helvetica")
-		.text("TELEFONOS:", margin + 5, currentY + 20);
+		.text("Tel:", margin + 5, currentY + 20);
 
 	doc
 		.fontSize(10)
@@ -377,7 +376,7 @@ async function generateCleanCTEnviosLabel(
 			`${invoice.receiver.mobile || ""}${
 				invoice.receiver.mobile && invoice.receiver.phone ? " - " : ""
 			}${invoice.receiver.phone || ""}`,
-			margin + 65,
+			margin + 35,
 			currentY + 20,
 		);
 
@@ -389,37 +388,47 @@ async function generateCleanCTEnviosLabel(
 	doc
 		.fontSize(10)
 		.font("Helvetica-Bold")
-		.text(invoice.receiver.ci || "", margin + 65, currentY + 35);
+		.text(invoice.receiver.ci || "", margin + 35, currentY + 35);
 
 	doc
 		.fontSize(8)
 		.font("Helvetica")
-		.text("DIRECCION:", margin + 5, currentY + 50);
+		.text("Dir:", margin + 5, currentY + 50);
 
 	// Address (regular text)
 	doc
-		.fontSize(10)
+		.fontSize(9)
 		.font("Helvetica")
-		.text(invoice.receiver.address, margin + 65, currentY + 50, {
-			width: labelWidth - margin - 65 - 10,
-			height: 15,
+		.text(invoice.receiver.address, margin + 35, currentY + 50, {
+			width: labelWidth - margin - 35 - 10,
 		});
 
-	// Province and Municipality (bold text)
+	// Province and Municipality (bold text) - positioned dynamically after address
+	const addressHeight = doc.heightOfString(invoice.receiver.address, {
+		width: labelWidth - margin - 35 - 10,
+	});
+	
 	doc
-		.fontSize(10)
+		.fontSize(10	)
 		.font("Helvetica-Bold")
 		.text(
 			`${invoice.receiver.province?.name || ""} / ${invoice.receiver.city?.name || ""}`,
-			margin + 65,
-			currentY + 65,
+			margin,
+			currentY + 50 + addressHeight + 5,
 			{
-				width: labelWidth - margin - 65 - 10,
-				height: 15,
+				width: labelWidth - margin * 2,
+				align: "center",
 			},
 		);
 
-	currentY += 90;
+	// Update currentY to account for dynamic address height plus province/city text
+	const provinceCityHeight = doc.heightOfString(
+		`${invoice.receiver.province?.name || ""} / ${invoice.receiver.city?.name || ""}`,
+		{
+			width: labelWidth - margin * 2,
+		}
+	);
+	currentY += 50 + addressHeight + 5 + provinceCityHeight + 10; // 10 points margin
 
 	// SUPER FAST Footer QR Code - Maximum speed optimization
 	try {
@@ -465,7 +474,7 @@ async function generateCleanCTEnviosLabel(
 		console.error("QR code generation error:", error);
 		// Enhanced fallback with error handling - positioned at bottom with provider name
 		const qrSize = 70;
-		const qrY = labelHeight - qrSize - 25; // Same safe margin as main QR
+		const qrY = labelHeight - qrSize - 20; // Same safe margin as main QR
 		const qrX = margin + 8;
 
 		doc

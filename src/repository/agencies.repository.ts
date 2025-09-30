@@ -13,25 +13,14 @@ export const agencies = {
 	},
 	getById: async (id: number) => {
 		const agency = await prisma.agency.findUnique({
-			include: {
-				services: {
-					include: {
-						provider: {
-							select: {
-								id: true,
-								name: true,
-							},
-						},
-						forwarder: {
-							select: {
-								id: true,
-								name: true,
-							},
-						},
-						shipping_rates: true,
-					},
-				},
-				users: true,
+			select: {
+				id: true,
+				name: true,
+				address: true,
+				contact: true,
+				phone: true,
+				email: true,
+				agency_type: true,
 			},
 			where: { id },
 		});
@@ -43,14 +32,22 @@ export const agencies = {
 		});
 		return users;
 	},
-	getServices: async (agency_id: number, is_active: boolean | null = null) => {
-		const servicesRates = await prisma.service.findMany({
+	getServicesWithRates: async (agency_id: number, is_active: boolean | null = null) => {
+
+		const servicesWithRates = await prisma.service.findMany({
 			select: {
 				id: true,
 				name: true,
+				description: true,
 				service_type: true,
 				provider: { select: { id: true, name: true } },
 				forwarder: { select: { id: true, name: true } },
+				shipping_rates: { select: { id: true, name: true, rate_in_cents: true, cost_in_cents: true, rate_type: true, is_active: true, min_weight: true, max_weight: true, length: true, width: true, height: true }
+				,where: {
+					agency_id: agency_id,
+					is_active: is_active === null ? undefined : is_active,
+				},
+			},
 			},
 			where: {
 				agencies: {
@@ -58,33 +55,61 @@ export const agencies = {
 						id: agency_id,
 					},
 				},
+				
 				is_active: is_active === null ? undefined : is_active,
 			},
 		});
-		return servicesRates;
-	},
-	getShippingRates: async (agency_id: number) => {
-		const rates = await prisma.shippingRate.findMany({
-			where: { agency_id: agency_id },
-		});
-		return rates;
-	},
-	getShippingRatesByService: async (
-		id: number,
-		service_id: number,
-		RateType: string | null = null,
-		IsActive: boolean | null = null,
-	) => {
-		let rates = await prisma.shippingRate.findMany({
-			where: {
-				agency_id: id,
-				service_id: service_id,
-				rate_type: RateType === null ? undefined : (RateType as RateType),
-				is_active: IsActive === null ? undefined : (IsActive as boolean),
+		return servicesWithRates;
+		/* const servicesWithRates = await prisma.agency.findUnique({
+			select: {
+				id: true,
+				name: true,
+				services: {
+					select: {
+						id: true,
+						name: true,
+						description: true,
+						
+						provider: {
+							select: {
+								id: true,
+								name: true,
+							},
+						},
+						
+						
+						service_type: true,
+						shipping_rates: {
+							select: {
+								id: true,
+								rate_in_cents: true,
+								cost_in_cents: true,
+								min_weight: true,
+								max_weight: true,
+								length: true,
+								width: true,
+								height: true,
+								rate_type: true,
+								agency_id: true,
+								forwarder_id: true,
+							},
+
+							where: {
+								agency_id: agency_id,
+								is_active: is_active === null ? undefined : is_active,
+							},
+						},
+					},
+				},
+				
+				
 			},
-		});
-		return rates;
+			where: { id: agency_id, is_active: is_active === null ? undefined : is_active },
+		}); */
+		
+		return servicesWithRates;
 	},
+	
 
 	/* create: async (agency: Partial<Prisma.AgencyCreateInput>) => {
 		const services = await repository.services.getAll();
