@@ -20,7 +20,7 @@ export function isValidCubanCI(ci: string): boolean {
 
 	if (!isValidDate) return false;
 
-	// Si es antes de 2014 no se exige dígito de control
+	// Si es antes de 2014 no se exige digito de control
 	if (fullYear < 2014) return true;
 
 	const weights = [1, 2, 1, 2, 1, 2, 1, 2, 1, 2];
@@ -35,7 +35,7 @@ export function isValidCubanCI(ci: string): boolean {
 
 export function dollarsToCents(amount: number | string): number {
 	const num = typeof amount === "string" ? parseFloat(amount) : amount;
-	if (!Number.isFinite(num)) throw new Error("Monto inválido");
+	if (!Number.isFinite(num)) throw new Error("Monto invalido");
 	return Math.round(num * 100);
 }
 

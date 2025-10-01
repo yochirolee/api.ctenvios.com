@@ -5,7 +5,7 @@ export function buildInvoiceTimeline(
 ) {
 	const events = [];
 
-	// 1️⃣ Creación
+	// 1️⃣ Creacion
 	events.push({
 		date: invoice.created_at,
 		type: "CREATED",
@@ -45,10 +45,10 @@ export function buildInvoiceTimeline(
 						statusText = "Factura pagada en su totalidad";
 						break;
 					case "SHIPPED":
-						statusText = "Envío despachado";
+						statusText = "Envio despachado";
 						break;
 					case "DELIVERED":
-						statusText = "Envío entregado";
+						statusText = "Envio entregado";
 						break;
 					case "CANCELLED":
 						statusText = "Factura cancelada";
@@ -72,10 +72,10 @@ export function buildInvoiceTimeline(
 		});
 	} */
 
-	// 4️⃣ Detección automática de “Fully Paid”
+	// 4️⃣ Deteccion automatica de “Fully Paid”
 	
 
-	// 5️⃣ Ordenar cronológicamente
+	// 5️⃣ Ordenar cronologicamente
 	events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
 	return events;

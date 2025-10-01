@@ -130,7 +130,7 @@ router.delete("/:id", authMiddleware, async (req: any, res) => {
 	res.status(200).json({ message: "Payment deleted successfully" });
 });
 
-// Puedes agregar más rutas como:
+// Puedes agregar mas rutas como:
 // GET /payments/:id
 // DELETE /payments/:id
 // GET /payments?invoice_id=123

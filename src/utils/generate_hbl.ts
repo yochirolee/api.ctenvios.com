@@ -43,7 +43,7 @@ async function generateUniqueHBL(
 		const todayOnlyDate = today.toISOString().slice(2, 10).replace(/-/g, "");
 
 		return await prisma.$transaction(async (tx) => {
-			// Intenta actualizar el contador atómicamente
+			// Intenta actualizar el contador atomicamente
 			const updatedCounter = await tx.counter.upsert({
 				where: {
 					date_agency_id: {
@@ -66,7 +66,7 @@ async function generateUniqueHBL(
 				},
 			});
 
-			// Genera los códigos
+			// Genera los codigos
 			const newSequence = updatedCounter.counter;
 			const start = newSequence - cantidad + 1;
 

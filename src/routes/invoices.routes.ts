@@ -17,7 +17,7 @@ import { buildInvoiceTimeline } from "../utils/build-invoice-timeline";
 import { calculateInvoiceTotal, calculatePaymentStatus } from "../utils/rename-invoice-changes";
 import { calculate_row_subtotal } from "../utils/utils";
 
-// Define un esquema de validación para los query params
+// Define un esquema de validacion para los query params
 const searchSchema = z.object({
 	page: z.string().optional().default("1"),
 	limit: z.string().optional().default("25"),
@@ -172,12 +172,12 @@ router.get("/search", authMiddleware, async (req: any, res) => {
 	try {
 		const user = req.user;
 
-		// 1. Validación de entradas con Zod
+		// 1. Validacion de entradas con Zod
 		const validation = searchSchema.safeParse(req.query);
 		if (!validation.success) {
 			return res
 				.status(400)
-				.json({ message: "Parámetros de consulta inválidos", errors: validation.error.issues });
+				.json({ message: "Parametros de consulta invalidos", errors: validation.error.issues });
 		}
 		const { page, limit, search, startDate, endDate } = validation.data;
 
@@ -188,7 +188,7 @@ router.get("/search", authMiddleware, async (req: any, res) => {
 		const words = searchTerm.split(/\s+/).filter(Boolean);
 		const isNumeric = /^\d+$/.test(searchTerm);
 
-		// 2. Construcción de Cláusula WHERE unificada
+		// 2. Construccion de Clausula WHERE unificada
 		let whereClause: any = {};
 		const filters: any[] = [];
 
@@ -197,29 +197,29 @@ router.get("/search", authMiddleware, async (req: any, res) => {
 			const dateFilter: any = { created_at: {} };
 			if (startDate) {
 				const start = parseDateFlexible(startDate);
-				if (!start) return res.status(400).json({ message: "startDate inválida" });
+				if (!start) return res.status(400).json({ message: "startDate invalida" });
 				dateFilter.created_at.gte = start;
 			}
 			if (endDate) {
 				const end = parseDateFlexible(endDate);
-				if (!end) return res.status(400).json({ message: "endDate inválida" });
+				if (!end) return res.status(400).json({ message: "endDate invalida" });
 				end.setHours(23, 59, 59, 999);
 				dateFilter.created_at.lte = end;
 			}
 			filters.push(dateFilter);
 		}
 
-		// Filtro principal de búsqueda
+		// Filtro principal de busqueda
 		if (searchTerm) {
 			if (isNumeric) {
-				// Lógica numérica combinada con OR para evitar el fallback
+				// Logica numerica combinada con OR para evitar el fallback
 				const numericConditions = [];
 				if (searchTerm.length <= 5) {
 					numericConditions.push({ id: parseInt(searchTerm) });
 				}
 				if (searchTerm.length === 10) {
 					numericConditions.push({ customer: { mobile: { contains: searchTerm } } });
-					numericConditions.push({ receiver: { mobile: { contains: searchTerm } } }); // fallback incluido aquí
+					numericConditions.push({ receiver: { mobile: { contains: searchTerm } } }); // fallback incluido aqui
 				}
 				if (searchTerm.length === 11) {
 					numericConditions.push({ receiver: { ci: { contains: searchTerm } } });
@@ -228,12 +228,12 @@ router.get("/search", authMiddleware, async (req: any, res) => {
 				if (numericConditions.length > 0) {
 					filters.push({ OR: numericConditions });
 				} else {
-					// Si es numérico pero no cumple ninguna longitud, no devolver nada.
-					// Esto evita que una búsqueda de 6 dígitos devuelva todos los resultados.
-					filters.push({ id: -1 }); // Condición para no encontrar resultados
+					// Si es numerico pero no cumple ninguna longitud, no devolver nada.
+					// Esto evita que una busqueda de 6 digitos devuelva todos los resultados.
+					filters.push({ id: -1 }); // Condicion para no encontrar resultados
 				}
 			} else {
-				// Lógica de búsqueda por nombre
+				// Logica de busqueda por nombre
 				const nameFilters = buildNameSearchFilter(words);
 				filters.push({ OR: [{ customer: nameFilters }, { receiver: nameFilters }] });
 			}
@@ -250,7 +250,7 @@ router.get("/search", authMiddleware, async (req: any, res) => {
 			whereClause.AND = filters;
 		}
 
-		// 3. Ejecutar consultas en una sola transacción
+		// 3. Ejecutar consultas en una sola transaccion
 		const [count, rows] = await prisma.$transaction([
 			prisma.invoice.count({ where: whereClause }),
 			prisma.invoice.findMany({
@@ -308,14 +308,14 @@ router.get("/search", authMiddleware, async (req: any, res) => {
 			if (startDate) {
 				const start = parseDateFlexible(startDate as string);
 				if (start) dateFilter.created_at.gte = start;
-				else return res.status(400).json({ message: "startDate inválida" });
+				else return res.status(400).json({ message: "startDate invalida" });
 			}
 			if (endDate) {
 				const end = parseDateFlexible(endDate as string);
 				if (end) {
 					end.setHours(23, 59, 59, 999);
 					dateFilter.created_at.lte = end;
-				} else return res.status(400).json({ message: "endDate inválida" });
+				} else return res.status(400).json({ message: "endDate invalida" });
 			}
 		}
 
@@ -340,7 +340,7 @@ router.get("/search", authMiddleware, async (req: any, res) => {
 					ci: { contains: searchTerm, mode: "insensitive" },
 				};
 			} else {
-				return res.status(400).json({ message: "Formato de búsqueda inválido" });
+				return res.status(400).json({ message: "Formato de busqueda invalido" });
 			}
 		} else if (searchTerm) {
 			const nameFilters = buildNameSearchFilter(words);
@@ -595,7 +595,7 @@ function calculate_subtotal(items: any[]): number {
 	});
 	return total;
 }
-// 🚀 OPTIMIZACIÓN 3: Generación HBL optimizada (sin retries innecesarios)
+// 🚀 OPTIMIZACIÓN 3: Generacion HBL optimizada (sin retries innecesarios)
 async function generateHBLFast(
 	agencyId: number,
 	serviceId: number,
@@ -604,7 +604,7 @@ async function generateHBLFast(
 	const today = new Date();
 	const todayOnlyDate = today.toISOString().slice(2, 10).replace(/-/g, "");
 
-	// Una sola transacción, sin retries
+	// Una sola transaccion, sin retries
 	const result = await prisma.$transaction(
 		async (tx) => {
 			const updatedCounter = await tx.counter.upsert({
@@ -631,7 +631,7 @@ async function generateHBLFast(
 			const agencia = agencyId.toString().padStart(2, "0");
 			const servicio = serviceId.toString().padStart(1, "0");
 
-			// Generación inline (más rápida que Array.from)
+			// Generacion inline (mas rapida que Array.from)
 			const codigos: string[] = [];
 			for (let i = 0; i < cantidad; i++) {
 				const secuencia = (start + i).toString().padStart(4, "0");
@@ -641,7 +641,7 @@ async function generateHBLFast(
 			return codigos;
 		},
 		{ timeout: 10000 },
-	); // Timeout más corto
+	); // Timeout mas corto
 
 	return result;
 }
@@ -649,7 +649,7 @@ async function generateHBLFast(
 // 🚀 OPTIMIZACIÓN 4: Endpoint principal optimizado
 router.post("/", async (req, res) => {
 	try {
-		// Validación rápida
+		// Validacion rapida
 		const { agency_id, user_id, customer_id, receiver_id, service_id, items, total_in_cents } =
 			newInvoiceSchema.parse(req.body);
 
@@ -670,10 +670,10 @@ router.post("/", async (req, res) => {
 
 		console.log(items_with_rates, "items_with_rates");
 
-		// 🚀 Usar total del frontend si existe, sino calcular rápido
+		// 🚀 Usar total del frontend si existe, sino calcular rapido
 		const finalTotal = total_in_cents || calculate_subtotal(items);
 
-		// 🚀 Generación HBL optimizada
+		// 🚀 Generacion HBL optimizada
 		const totalItems = items_with_rates.length; // Cada item = 1 HBL (simplificado)
 		const allHblCodes = await generateHBLFast(agency_id, service_id, totalItems);
 
@@ -697,7 +697,7 @@ router.post("/", async (req, res) => {
 			});
 		}
 
-		// 🚀 Transacción optimizada (sin timeout largo)
+		// 🚀 Transaccion optimizada (sin timeout largo)
 		const transaction = await prisma.$transaction(
 			async (tx) => {
 				const invoice = await tx.invoice.create({
@@ -724,7 +724,7 @@ router.post("/", async (req, res) => {
 			{ timeout: 15000 },
 		); // Timeout reducido
 
-		// 🚀 Receiver connection FUERA de la transacción (async)
+		// 🚀 Receiver connection FUERA de la transaccion (async)
 		receivers_db
 			.connect(receiver_id, customer_id)
 			.catch((err) => console.error("Receiver connection failed (non-critical):", err));

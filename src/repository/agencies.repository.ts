@@ -1,5 +1,5 @@
 import prisma from "../config/prisma_db";
-import { Prisma, RateType } from "@prisma/client";
+import { AgencyType, Prisma, RateType } from "@prisma/client";
 import repository from "./index";
 
 export const agencies = {
@@ -110,6 +110,7 @@ export const agencies = {
 		return servicesWithRates;
 	},
 	
+	
 
 	/* create: async (agency: Partial<Prisma.AgencyCreateInput>) => {
 		const services = await repository.services.getAll();
@@ -182,6 +183,27 @@ export const agencies = {
 			where: { id },
 		});
 		return parent;
+	},
+	getAllChildrenRecursively: async (parentId: number): Promise<number[]> => {
+		const getAllChildren = async (agencyId: number): Promise<number[]> => {
+			const directChildren = await prisma.agency.findMany({
+				where: { parent_agency_id: agencyId },
+				select: { id: true },
+			});
+
+			const childIds = directChildren.map(child => child.id);
+			const allChildIds = [...childIds];
+
+			// Recursively get children of children
+			for (const childId of childIds) {
+				const grandChildren = await getAllChildren(childId);
+				allChildIds.push(...grandChildren);
+			}
+
+			return allChildIds;
+		};
+
+		return getAllChildren(parentId);
 	},
 };
 

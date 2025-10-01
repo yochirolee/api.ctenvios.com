@@ -6,7 +6,7 @@ const prisma = new PrismaClient();
 const provinciasConCiudades = [
 	{
 		id: 1,
-		name: "Pinar del Río",
+		name: "Pinar del Rio",
 		cities: [
 			"Pinar del Rio",
 			"Consolacion del Sur",
@@ -33,7 +33,7 @@ const provinciasConCiudades = [
 			"Guanajay",
 			"Guira de Melena",
 			"Mariel",
-			"San Antonio de los Baños",
+			"San Antonio de los Banos",
 			"San Cristobal",
 			"Bahia Honda",
 		],
@@ -166,8 +166,8 @@ const provinciasConCiudades = [
 			"Carlos Manuel de Cespedes",
 			"Esmeralda",
 			"Florida",
-			"Guaímaro",
-			"Jimaguayú",
+			"Guaimaro",
+			"Jimaguayu",
 			"Minas",
 			"Najasa",
 			"Nuevitas",
@@ -254,8 +254,8 @@ const provinciasConCiudades = [
 			"Caimanera",
 			"El Salvador",
 			"Guantanamo",
-			"Imías",
-			"Maisí",
+			"Imias",
+			"Maisi",
 			"Manuel Tames",
 			"Niceto Perez",
 			"San Antonio del Sur",
@@ -302,7 +302,7 @@ async function main(): Promise<void> {
 		update: {},
 		create: {
 			name: "Transcargo",
-			address: "Avenida del Puerto y Línea del Ferrocarril, Regla, La Habana.",
+			address: "Avenida del Puerto y Linea del Ferrocarril, Regla, La Habana.",
 			contact: "Transcargo",
 			phone: "5376980069",
 			email: "atcliente2@transcargo.transnet.cu",
@@ -318,7 +318,7 @@ async function main(): Promise<void> {
 		create: {
 			name: "Maritimo",
 			service_type: "MARITIME",
-			description: "Envios Marítimos",
+			description: "Envios Maritimos",
 			forwarder: { connect: { id: forwarder.id } },
 			provider: { connect: { id: provider.id } },
 		},
@@ -336,7 +336,7 @@ async function main(): Promise<void> {
 			phone: "3058513004",
 			email: "gerente@ctenvios.com",
 			forwarder_id: forwarder.id,
-			agency_type: AgencyType.AGENCY,
+			agency_type: AgencyType.FORWARDER,
 		},
 		update: {},
 	});

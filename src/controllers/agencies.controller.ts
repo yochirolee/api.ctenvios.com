@@ -34,14 +34,22 @@ const create_agency_schema = z.object({
 const agencies = {
 	getAll: async (req: any, res: Response) => {
 		const user = req.user;
+		
+		if(!user.agency_id) {
+			throw new AppError("Agency ID is required", 400, [], "zod");
+		}
 		const user_agency = await repository.agencies.getById(user.agency_id);
+
 		let agencies = [];
-		if (user_agency?.agency_type === AgencyType.FORWARDER) {
+		const permited_roles = [Roles.ROOT, Roles.ADMINISTRATOR, Roles.FORWARDER_ADMIN];
+		if (user_agency?.agency_type === AgencyType.FORWARDER && permited_roles.includes(user?.role)) {
 			agencies = await repository.agencies.getAll();
 		} else {
 			agencies.push(user_agency);
 			agencies.push(...(await repository.agencies.getChildren(Number(user_agency?.id))));
 		}
+
+		
 		res.status(200).json(agencies);
 	},
 	getById: async (req: Request, res: Response) => {
@@ -58,6 +66,7 @@ const agencies = {
 		const users = await repository.agencies.getUsers(Number(id));
 		res.status(200).json(users);
 	},
+//if agency is FORWARDER create agency with parent_agency_id as null with services but no shipping_rates
 
 	create: async (req: any, res: Response) => {
 		const current_user = req.user;
@@ -121,6 +130,12 @@ const agencies = {
 
 		const { agency, user } = result.data;
 
+		if(agency.agency_type === AgencyType.FORWARDER) {
+			agency.parent_agency_id = undefined;
+			
+		}
+
+
 		const parent_agency = await prisma.agency.findUnique({
 			where: {
 				id: agency.parent_agency_id || current_user.agency_id,
@@ -162,6 +177,7 @@ const agencies = {
 						rate_in_cents: shipping_rate.rate_in_cents,
 						service_id: shipping_rate.service_id,
 						name: shipping_rate.name,
+						description: shipping_rate.description,
 						rate_type: shipping_rate.rate_type,
 						min_weight: shipping_rate.min_weight,
 						max_weight: shipping_rate.max_weight,
@@ -208,68 +224,6 @@ const agencies = {
 			});
 		}
 	},
-
-	/* 	create: async (req: any, res: Response) => {
-		const user = req.user;
-		if (
-			user.role !== Roles.ROOT &&
-			user.role !== Roles.ADMINISTRATOR &&
-			user.role !== Roles.AGENCY_ADMIN
-		) {
-			res.status(400).json({
-				message: "You are not authorized to create this agency, please contact the administrator",
-			});
-			return;
-		}
-		const user_agency = await repository.agencies.getById(user.agency_id);
-
-		if (
-			user_agency?.agency_type !== AgencyType.FORWARDER &&
-			user_agency?.agency_type !== AgencyType.RESELLER
-		) {
-			res.status(400).json({
-				message: "You are not authorized to create this agency, please contact the administrator",
-			});
-			return;
-		}
-
-		const result = agencySchema.safeParse(req.body) as z.SafeParseReturnType<
-			typeof agencySchema,
-			Agency
-		>;
-		if (!result.success) {
-			throw new AppError("Invalid agency data", 400, result.error.flatten().fieldErrors, "zod");
-		}
-
-		const data = result.data;
-
-		// Set parent agency relationship based on user's agency type
-		if (user_agency?.agency_type === AgencyType.FORWARDER) {
-			// FORWARDER can create agencies without parent (top-level) or with themselves as parent
-			data.parent_agency_id = data.parent_agency_id || null;
-		} else if (user_agency?.agency_type === AgencyType.RESELLER) {
-			// RESELLER agencies must have the current user's agency as parent
-			data.parent_agency_id = user_agency.id;
-			data.agency_type = AgencyType.AGENCY;
-		}
-
-		// Validate that forwarder_id is set correctly
-		if (!data.forwarder_id) {
-			data.forwarder_id = user_agency?.forwarder_id || 1; // Default to forwarder 1 if not specified
-		}
-
-		try {
-			const agency = await repository.agencies.create(data as Partial<Prisma.AgencyCreateInput>);
-
-			res.status(201).json({
-				message: "Agency created successfully",
-				agency,
-			});
-		} catch (error) {
-			console.error("Failed to create agency:", error);
-			throw new AppError("Failed to create agency", 500, [], "database");
-		}
-	}, */
 
 	update: async (req: Request, res: Response) => {
 		const { id } = req.params;

@@ -503,7 +503,7 @@ function addOptimizedTableHeaders(
 ): number {
 	const headers = [
 		{ text: "HBL", x: 30, width: 100, align: "left" },
-		{ text: "Descripción", x: 140, width: 150, align: "left" },
+		{ text: "Descripcion", x: 140, width: 150, align: "left" },
 		{ text: "Seguro", x: 300, width: 40, align: "right" },
 		{ text: "Cargo", x: 340, width: 40, align: "right" },
 		{ text: "Arancel", x: 385, width: 40, align: "right" },

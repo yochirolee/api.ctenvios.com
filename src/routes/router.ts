@@ -27,7 +27,6 @@ router.use("/forwarders", forwarders_routes);
 router.use("/agencies", agencies_routes);
 router.use("/services", services_routes);
 router.use("/shipping-rates", shipping_rates_routes);
-router.use("/shipping_rates", shipping_rates_routes); // Backward compatibility alias
 router.use("/customs-rates", customs_rates_routes);
 
 router.use("/users", users_routes);
