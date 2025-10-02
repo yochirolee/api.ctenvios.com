@@ -40,6 +40,7 @@ export const providers = {
 		const provider = await repository.providers.getById(id);
 		res.status(200).json(provider);
 	},
+	
 	update: async (req: Request, res: Response) => {
 		const id = Number(req.params.id);
 		if (isNaN(id)) {

@@ -323,7 +323,7 @@ model ShippingRate {
 
   // --- RELACIÓN DE HERENCIA (LA CLAVE) ---
   is_base_rate   Boolean        @default(false) // True si es una tarifa maestra del Forwarder
-  parent_rate_id Int?           @unique // La tarifa de una agencia apunta a una tarifa base
+  parent_rate_id Int?           // La tarifa de una agencia apunta a una tarifa base
   parent_rate    ShippingRate?  @relation("RateHierarchy", fields: [parent_rate_id], references: [id], onDelete: SetNull)
   child_rates    ShippingRate[] @relation("RateHierarchy") // Una tarifa base puede tener muchas tarifas de agencias hijas
 

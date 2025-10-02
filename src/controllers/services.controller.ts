@@ -24,6 +24,8 @@ export const services_controller = {
 				throw new Error(service.error.message);
 			}
 
+			const all_agencies = await repository.agencies.getAll();
+
 			// Transform data for Prisma ServiceCreateInput
 			const { forwarder_id, provider_id, ...serviceData } = service.data;
 			const prismaServiceData = {
@@ -34,6 +36,10 @@ export const services_controller = {
 				provider: {
 					connect: { id: provider_id },
 				},
+				agencies: {
+					connect: all_agencies.map((agency) => ({ id: agency.id })),
+				},
+				
 			};
 
 			const newService = await repository.services.create(prismaServiceData);
@@ -58,6 +64,14 @@ export const services_controller = {
 			return res.status(400).json({ error: "Agency ID is required" });
 		}
 		const services = await repository.services.getByAgencyId(Number(agency_id));
+		res.status(200).json(services);
+	},
+	getByProviderId: async (req: Request, res: Response) => {
+		const { provider_id } = req.params;
+		if (!provider_id || isNaN(Number(provider_id))) {
+			return res.status(400).json({ error: "Provider ID is required" });
+		}
+		const services = await repository.services.getByProviderId(Number(provider_id));
 		res.status(200).json(services);
 	},
 	update: async (req: Request, res: Response) => {

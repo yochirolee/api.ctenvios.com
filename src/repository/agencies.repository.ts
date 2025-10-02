@@ -42,7 +42,7 @@ export const agencies = {
 				service_type: true,
 				provider: { select: { id: true, name: true } },
 				forwarder: { select: { id: true, name: true } },
-				shipping_rates: { select: { id: true, name: true, rate_in_cents: true, cost_in_cents: true, rate_type: true, is_active: true, min_weight: true, max_weight: true, length: true, width: true, height: true }
+				shipping_rates: { select: { id: true, name: true,description: true, rate_in_cents: true, cost_in_cents: true, rate_type: true, is_active: true, min_weight: true, max_weight: true, length: true, width: true, height: true }
 				,where: {
 					agency_id: agency_id,
 					is_active: is_active === null ? undefined : is_active,
@@ -110,50 +110,6 @@ export const agencies = {
 		return servicesWithRates;
 	},
 	
-	
-
-	/* create: async (agency: Partial<Prisma.AgencyCreateInput>) => {
-		const services = await repository.services.getAll();
-
-		// Using Prisma transaction to ensure atomicity
-		const newAgency = await prisma.$transaction(async (tx) => {
-			// Step 1: Create the agency with services
-			const createdAgency = await tx.agency.create({
-				data: {
-					...agency,
-					services: {
-						connect: services.map((service) => ({
-							id: service.id,
-						})),
-					},
-				},
-			});
-
-			// Step 2: Create service rates for each service
-			await Promise.all(
-				services.map((service) =>
-					tx.shipping_rates.create({
-						data: {
-							service_id: service.id,
-							agency_id: createdAgency.id,
-							agency_rate: 199,
-							rate_in_cents: 199,
-							rate_type: "WEIGHT",
-							min_weight: 0,
-							max_weight: 0,
-							product_id: null,
-							carrier_rates_id: null,
-						},
-					}),
-				),
-			);
-
-			return createdAgency;
-		});
-
-		return newAgency;
-	}, */
-
 	update: async (id: number, agency: Prisma.AgencyUpdateInput) => {
 		const updatedAgency = await prisma.agency.update({
 			where: { id },

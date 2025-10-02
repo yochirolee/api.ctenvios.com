@@ -9,7 +9,7 @@ const shipping_rates_routes = Router();
 
 const shipping_ratesSchema = z
    .object({
-      agency_id: z.number().min(1, "Agency is required"),
+      agency_id: z.number().optional(),
       name: z.string().min(1, "Name is required"),
       description: z.string().min(1, "Description is required"),
       service_id: z.number().min(1, "Service is required"),
@@ -18,6 +18,7 @@ const shipping_ratesSchema = z
       rate_type: z.nativeEnum(RateType),
       min_weight: z.number().min(0, "Min weight is required"),
       max_weight: z.number().min(0, "Max weight is required"),
+      is_active: z.boolean().default(false),
    })
    .refine((data) => data.rate_in_cents >= data.cost_in_cents, {
       message: "Rate must be equal to or greater than cost",
@@ -68,7 +69,7 @@ shipping_rates_routes.get("/", async (req, res) => {
    res.status(200).json(rates);
 });
 
-shipping_rates_routes.get("/agency/:agency_id", async (req, res) => {
+/* shipping_rates_routes.get("/agency/:agency_id", async (req, res) => {
    const { agency_id } = req.params;
 
    try {
@@ -80,9 +81,9 @@ shipping_rates_routes.get("/agency/:agency_id", async (req, res) => {
          error: error instanceof Error ? error.message : "Unknown error",
       });
    }
-});
+}); */
 
-shipping_rates_routes.get("/agency/:agency_id/service/:service_id", async (req, res) => {
+/* shipping_rates_routes.get("/agency/:agency_id/service/:service_id", async (req, res) => {
    const { agency_id, service_id } = req.params;
 
    try {
@@ -97,9 +98,9 @@ shipping_rates_routes.get("/agency/:agency_id/service/:service_id", async (req, 
          error: error instanceof Error ? error.message : "Unknown error",
       });
    }
-});
+}); */
 
-shipping_rates_routes.post("/", authMiddleware, async (req: any, res: any) => {
+shipping_rates_routes.post("/base-rate", authMiddleware, async (req: any, res: any) => {
    const user = req?.user;
    const permited_roles = [Roles.ROOT, Roles.ADMINISTRATOR];
    if (!permited_roles.includes(user.role)) {
@@ -108,14 +109,15 @@ shipping_rates_routes.post("/", authMiddleware, async (req: any, res: any) => {
 
    const result = shipping_ratesSchema.safeParse(req.body);
    if (!result.success) {
+      console.log(result.error);
       return res.status(400).json({ message: result.error.issues[0].message });
    }
 
-   const { agency_id, name, description, service_id, cost_in_cents, rate_in_cents, rate_type, min_weight, max_weight } =
+   const {  name, description, service_id, cost_in_cents, rate_in_cents, rate_type, min_weight, max_weight } =
       result.data;
 
    const agency = await prisma.agency.findUnique({
-      where: { id: agency_id },
+      where: { id: user.agency_id },
    });
    if (!agency || agency?.agency_type !== AgencyType.FORWARDER) {
       return res.status(404).json({ message: "Agency not found or is not a forwarder" });
@@ -148,30 +150,55 @@ shipping_rates_routes.post("/", authMiddleware, async (req: any, res: any) => {
       });
    }
 });
+shipping_rates_routes.put("/base-rate/:id", authMiddleware, async (req: any, res: any) => {
+   try {
+   const user = req?.user;
+   const permited_roles = [Roles.ROOT, Roles.ADMINISTRATOR];
+   if (!permited_roles.includes(user.role)) {
+      return res.status(403).json({ message: "You are not authorized to create rates" });
+   }
+   const { id } = req.params;
+   if (!id) {
+      return res.status(400).json({ message: "Id is required" });
+   }
+   const { name, description, cost_in_cents, rate_in_cents, rate_type, min_weight, max_weight, is_active } = req.body;
+   const rate = await repository.shippingRates.updateBaseRate(parseInt(id), {
+      name,
+      description,
+      cost_in_cents,
+      rate_in_cents,
+      rate_type,
+      min_weight,
+      max_weight,
+      is_active,
+      });
+      res.status(200).json(rate);
+   } catch (error) {
+      res.status(500).json({
+         message: "Error updating rate",
+         error: error instanceof Error ? error.message : "Unknown error",
+      });
+   }
+});
 
 shipping_rates_routes.put("/:id", authMiddleware, async (req: any, res: any) => {
-   const { id } = req.params;
-   const user = req?.user;
-   const permited_roles = [Roles.ROOT, Roles.ADMINISTRATOR, Roles.AGENCY_ADMIN, Roles.AGENCY_SUPERVISOR];
-   if (!permited_roles.includes(user.role)) {
-      return res.status(403).json({ message: "You are not authorized to update rates" });
-   }
-
-   const result = shipping_ratesSchema.safeParse(req.body);
-   if (!result.success) {
-      return res.status(400).json({ message: result.error.issues[0].message });
-   }
-
-   //if
-
-   const { name, description, cost_in_cents, rate_in_cents, rate_type, min_weight, max_weight } = result.data;
-
    try {
+      const { id } = req.params;
+      const user = req?.user;
+      const permited_roles = [Roles.ROOT, Roles.ADMINISTRATOR, Roles.AGENCY_ADMIN, Roles.AGENCY_SUPERVISOR];
+      if (!permited_roles.includes(user.role)) {
+         return res.status(403).json({ message: "You are not authorized to update rates" });
+      }
+
+      const { name, description, cost_in_cents, rate_in_cents, rate_type, min_weight, max_weight, is_active } =
+         req.body;
+
       const rate = await repository.shippingRates.updateRate(parseInt(id), {
          name,
          description,
          cost_in_cents,
          rate_in_cents,
+         is_active,
          rate_type,
          min_weight,
          max_weight,
