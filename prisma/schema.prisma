@@ -323,7 +323,7 @@ model ShippingRate {
 
   // --- RELACIÓN DE HERENCIA (LA CLAVE) ---
   is_base_rate   Boolean        @default(false) // True si es una tarifa maestra del Forwarder
-  parent_rate_id Int?           // La tarifa de una agencia apunta a una tarifa base
+  parent_rate_id Int? // La tarifa de una agencia apunta a una tarifa base
   parent_rate    ShippingRate?  @relation("RateHierarchy", fields: [parent_rate_id], references: [id], onDelete: SetNull)
   child_rates    ShippingRate[] @relation("RateHierarchy") // Una tarifa base puede tener muchas tarifas de agencias hijas
 
@@ -369,14 +369,16 @@ model Product {
 }
 
 model InvoiceHistory {
-  id             Int      @id @default(autoincrement())
+  id             Int              @id @default(autoincrement())
   invoice_id     Int
-  invoice        Invoice  @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
+  invoice        Invoice          @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
   user_id        String
-  user           User     @relation(fields: [user_id], references: [id])
+  status         InvoiceStatus
+  user           User             @relation(fields: [user_id], references: [id])
   changed_fields Json
+  type           InvoiceEventType @default(SYSTEM_ACTION)
   comment        String?
-  created_at     DateTime @default(now())
+  created_at     DateTime         @default(now())
 }
 
 model Payment {
@@ -560,10 +562,19 @@ enum FeeType {
   VALUE // Porcentaje o valor declarado (si aplica)
 }
 
+enum InvoiceEventType {
+  PAYMENT
+  PRIVATE_TRACKING
+  PUBLIC_TRACKING
+  SYSTEM_ACTION
+  ISSUE_REPORTED
+}
+
 enum InvoiceStatus {
   // 📦 Inicial
   DRAFT // Borrador, creada pero no confirmada
   CREATED // Pendiente de pago
+  PARTIALLY_PAID // Parcialmente pagada
   PAID // Pagada
 
   // 🚚 Procesamiento
