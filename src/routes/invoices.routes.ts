@@ -1,7 +1,6 @@
 import { Router, Request, Response } from "express";
 import prisma from "../config/prisma_db";
 import receivers_db from "../repository/receivers.repository";
-import { generarTracking } from "../utils/generate_hbl";
 import { generateInvoicePDF } from "../utils/generate-invoice-pdf";
 import { RateType, Roles, PaymentStatus, InvoiceStatus, InvoiceEventType } from "@prisma/client";
 // Removed unused imports for shipping labels
@@ -10,7 +9,6 @@ import { z } from "zod";
 import AppError from "../utils/app.error";
 import { createInvoiceHistoryExtension } from "../middlewares/invoice-middleware";
 import { authMiddleware } from "../middlewares/auth-midleware";
-import { buildInvoiceTimeline } from "../utils/build-invoice-timeline";
 import { calculatePaymentStatus } from "../utils/rename-invoice-changes";
 import { calculate_row_subtotal } from "../utils/utils";
 
@@ -39,8 +37,8 @@ const invoiceItemSchema = z.object({
 });
 
 const newInvoiceSchema = z.object({
-   user_id: z.string().min(1),
-   agency_id: z.number().positive(),
+   user_id: z.string().min(1).optional(),
+   agency_id: z.number().positive().optional(),
    customer_id: z.number().positive(),
    receiver_id: z.number().positive(),
    service_id: z.number().positive(),
@@ -292,20 +290,22 @@ router.get("/search", authMiddleware, async (req: any, res) => {
 });
 
 function calculate_subtotal(items: any[]): number {
-   let total = 0;
+   let total_in_cents = 0;
+   console.log("on calculate_subtotal");
    items.forEach((item) => {
       const itemSubtotal = calculate_row_subtotal(
          item.rate_in_cents || 0,
          item.weight || 0,
          item.customs_fee_in_cents || 0,
-         item.rate_type || "WEIGHT",
-         item.charge_fee_in_cents || 0
+         item.insurance_fee_in_cents || 0, // FIX: Correct parameter order
+         item.charge_fee_in_cents || 0, // FIX: Correct parameter order
+         item.rate_type || "WEIGHT"
       );
-      // Add additional fees that aren't handled by calculate_row_subtotal
-      const additionalFees = (item.insurance_fee_in_cents || 0) + (item.delivery_fee_in_cents || 0);
-      total += itemSubtotal + additionalFees;
+      total_in_cents += itemSubtotal;
    });
-   return total;
+   console.log(total_in_cents, "total_in_cents");
+   console.log(total_in_cents, "total already in cents, no need to multiply");
+   return total_in_cents; // Return cents directly, no incorrect rounding
 }
 // 🚀 OPTIMIZACIÓN 3: Generacion HBL optimizada (sin retries innecesarios)
 async function generateHBLFast(agencyId: number, serviceId: number, cantidad: number): Promise<string[]> {
@@ -355,11 +355,15 @@ async function generateHBLFast(agencyId: number, serviceId: number, cantidad: nu
 }
 
 // 🚀 OPTIMIZACIÓN 4: Endpoint principal optimizado
-router.post("/", async (req, res) => {
+router.post("/", authMiddleware, async (req: any, res) => {
    try {
       // Validacion rapida
-      const { agency_id, user_id, customer_id, receiver_id, service_id, items, total_in_cents } =
-         newInvoiceSchema.parse(req.body);
+      const user = req.user;
+      if (!user) {
+         return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { customer_id, receiver_id, service_id, items } = newInvoiceSchema.parse(req.body);
 
       /* 	//search rate for each item (get unique rate_ids to avoid duplicate queries)
 		const uniqueRateIds = [...new Set(items.map((item: any) => item.rate_id))];
@@ -377,11 +381,11 @@ router.post("/", async (req, res) => {
 		}); */
 
       // 🚀 Usar total del frontend si existe, sino calcular rapido
-      const finalTotal = total_in_cents || calculate_subtotal(items);
+      const finalTotal = calculate_subtotal(items);
 
       // 🚀 Generacion HBL optimizada
       const totalItems = items.length; // Cada item = 1 HBL (simplificado)
-      const allHblCodes = await generateHBLFast(agency_id, service_id, totalItems);
+      const allHblCodes = await generateHBLFast(user.agency_id, service_id, totalItems);
 
       // 🚀 Mapeo optimizado (sin .flat(), sin reduce)
       const items_hbl: any[] = [];
@@ -401,7 +405,7 @@ router.post("/", async (req, res) => {
             quantity: 1,
             weight: item.weight,
             service_id,
-            agency_id,
+            agency_id: user.agency_id,
          });
       }
 
@@ -410,8 +414,8 @@ router.post("/", async (req, res) => {
          async (tx) => {
             const invoice = await tx.invoice.create({
                data: {
-                  user_id,
-                  agency_id,
+                  user_id: user.id,
+                  agency_id: user.agency_id,
                   customer_id,
                   receiver_id,
                   service_id,
@@ -432,9 +436,9 @@ router.post("/", async (req, res) => {
             await tx.invoiceHistory.create({
                data: {
                   invoice_id: invoice.id,
-                  user_id,
+                  user_id: user.id,
                   status: InvoiceStatus.CREATED,
-                  type: InvoiceEventType.PUBLIC,
+                  type: InvoiceEventType.SYSTEM_ACTION,
                   changed_fields: {
                      status: {
                         field: "status",
@@ -608,7 +612,7 @@ router.put("/:id", async (req, res) => {
             total_in_cents: true,
             paid_in_cents: true,
             payment_status: true,
-		    status:true,
+            status: true,
             items: { select: { hbl: true } },
          },
       });
@@ -674,7 +678,6 @@ router.put("/:id", async (req, res) => {
       const paymentResult = calculatePaymentStatus(currentPaidInCents, newTotalInCents);
       const newPaymentStatus = paymentResult.paymentStatus;
       const paymentWarnings = paymentResult.warnings;
-	  
 
       // Check if sender (customer) or receiver changed
       const senderChanged = currentInvoice.customer_id !== customer_id;

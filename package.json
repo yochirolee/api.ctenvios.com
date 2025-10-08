@@ -23,6 +23,7 @@
 		"seed": "tsx prisma/seed.ts",
 		"seed-provinces": "tsx prisma/province-cities.seed.ts",
 		"seed-receipts": "tsx prisma/recepit-seed.ts",
+		"seed-customers": "tsx prisma/customers-seed.ts",
 		"seed-customs-rates": "tsx prisma/customsRates.seed.ts",
 		"generate": "npx prisma migrate reset --preview-feature && npx prisma migrate deploy"
 	},

@@ -1,10 +1,10 @@
 import { Router } from "express";
-import { z } from "zod";
 import prisma from "../config/prisma_db";
 import { authMiddleware } from "../middlewares/auth-midleware";
-import { Invoice, PaymentMethod, PaymentStatus, PrismaClient, InvoiceStatus } from "@prisma/client";
+import { Invoice, PaymentStatus, PrismaClient, InvoiceStatus } from "@prisma/client";
 import { registerInvoiceChange } from "../utils/rename-invoice-changes";
 import { paymentSchema } from "../types/types";
+import { formatCents } from "../utils/utils";
 
 const router = Router();
 
@@ -15,62 +15,42 @@ router.post("/invoice/:id", authMiddleware, async (req: any, res) => {
       const user = req.user;
       if (!user) return res.status(401).json({ message: "Unauthorized" });
 
-      const { amount_in_cents, method, reference, notes } = paymentSchema.parse(req.body);
+      const { amount_in_cents, method, charge_in_cents, reference, notes } = paymentSchema.parse(req.body);
       const invoice = await prisma.invoice.findUnique({
          where: { id: parseInt(id) },
       });
       if (!invoice) return res.status(404).json({ message: "Invoice not found" });
 
-      let amount_to_pay_in_cents = amount_in_cents;
-      let charge_amount = 0;
+      let amount_to_pay_in_cents = amount_in_cents + charge_in_cents;
 
-      if (method === PaymentMethod.CREDIT_CARD || method === PaymentMethod.DEBIT_CARD) {
-         charge_amount = Math.round(amount_in_cents * 0.03 * 100); //in cents
-      }
-
-      const pending = invoice.total_in_cents + charge_amount - invoice.paid_in_cents;
+      const pending = invoice.total_in_cents + charge_in_cents - invoice.paid_in_cents;
 
       if (amount_to_pay_in_cents > pending) {
          return res.status(400).json({
-            message: `Payment exceeds pending amount. Pending: $${(pending / 100).toFixed(2)}`,
+            message: `Payment exceeds pending amount. Pending: ${formatCents(pending)}`,
          });
       }
 
       const payment_status = amount_to_pay_in_cents === pending ? PaymentStatus.PAID : PaymentStatus.PARTIALLY_PAID;
       const invoice_status = payment_status === PaymentStatus.PAID ? InvoiceStatus.PAID : InvoiceStatus.PARTIALLY_PAID;
 
-      // Debug logging
-      console.log("Payment processing:", {
-         amount_to_pay_in_cents,
-         pending,
-         charge_amount,
-         payment_status,
-         invoice_status,
-         current_status: invoice.status,
-         current_payment_status: invoice.payment_status,
-      });
-
       const result = await prisma.$transaction(async (tx) => {
          const updatedInvoice = await tx.invoice.update({
             where: { id: parseInt(id) },
             data: {
                paid_in_cents: { increment: amount_to_pay_in_cents },
-               charge_in_cents: { increment: charge_amount },
+               charge_in_cents: { increment: charge_in_cents },
+               total_in_cents: { increment: charge_in_cents },
                payment_status: payment_status,
                status: invoice_status,
             },
-         });
-
-         console.log("After update:", {
-            status: updatedInvoice.status,
-            payment_status: updatedInvoice.payment_status,
          });
 
          await tx.payment.create({
             data: {
                invoice_id: parseInt(id),
                amount_in_cents: amount_to_pay_in_cents,
-               charge_in_cents: charge_amount,
+               charge_in_cents: charge_in_cents,
                method: method,
                reference: reference || "",
                date: new Date(),
@@ -85,7 +65,7 @@ router.post("/invoice/:id", authMiddleware, async (req: any, res) => {
             updatedInvoice as Invoice,
             user.id,
             invoice_status,
-            `Payment of $${(amount_in_cents / 100).toFixed(2)} ${method} added to invoice ${id}`
+            `Payment of ${formatCents(amount_in_cents + charge_in_cents)} ${method} added to invoice ${id}`
          );
 
          return updatedInvoice;

@@ -21,7 +21,8 @@ export interface AuthenticatedRequest extends Request {
 }
 
 export const paymentSchema = z.object({
-	amount_in_cents: z.number().min(0.01),
+	amount_in_cents: z.number().min(0.00),
+	charge_in_cents: z.number().min(0.00),
 	method: z.nativeEnum(PaymentMethod),
 	reference: z.string().optional(),
 	notes: z.string().optional(),

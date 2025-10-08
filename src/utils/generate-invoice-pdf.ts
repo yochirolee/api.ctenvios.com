@@ -4,7 +4,7 @@ import { promises as fs } from "fs";
 import * as path from "path";
 import { Invoice, Customer, Receiver, Agency, Service, Item, RateType } from "@prisma/client";
 import { formatName } from "./capitalize";
-import { calculate_row_subtotal, centsToDollars } from "./utils";
+import { calculate_row_subtotal, centsToDollars, formatCents } from "./utils";
 
 interface InvoiceWithRelations extends Invoice {
    customer: Customer;
@@ -23,6 +23,39 @@ interface InvoiceWithRelations extends Invoice {
          rate_type: string;
       };
    })[];
+}
+
+// Pre-calculate all financial totals //have to move this to the utils
+function calculateInvoiceTotals(invoice: InvoiceWithRelations) {
+   const subtotal_in_cents = invoice.items.reduce(
+      (acc, item) =>
+         acc +
+         calculate_row_subtotal(
+            item.rate_in_cents,
+            item.weight,
+            item.customs_fee_in_cents,
+            item.insurance_fee_in_cents || 0,
+            item.charge_fee_in_cents || 0,
+            item.rate.rate_type as RateType
+         ),
+      0
+   );
+
+   const subtotal = formatCents(subtotal_in_cents);
+   const totalWeight = invoice.items.reduce((acc, item) => acc + item.weight, 0);
+   const chargeAmount = formatCents(invoice.charge_in_cents);
+   const paidAmount = formatCents(invoice.paid_in_cents);
+   const totalAmount = formatCents(invoice.total_in_cents);
+   const balance = formatCents(invoice.total_in_cents - invoice.paid_in_cents);
+
+   return {
+      subtotal,
+      totalWeight,
+      chargeAmount,
+      paidAmount,
+      totalAmount,
+      balance,
+   };
 }
 
 // Cache for logos and barcodes to avoid regeneration
@@ -154,39 +187,6 @@ async function generateBarcode(invoiceId: number): Promise<Buffer | null> {
       console.log("Barcode generation failed:", error);
       return null;
    }
-}
-
-// Pre-calculate all financial totals
-function calculateInvoiceTotals(invoice: InvoiceWithRelations) {
-   const subtotal = invoice.items.reduce(
-      (acc, item) =>
-         acc +
-         calculate_row_subtotal(
-            item.rate_in_cents,
-            item.weight,
-            item.customs_fee_in_cents,
-            item.rate.rate_type as RateType,
-            item.charge_fee_in_cents || 0
-         ) /
-            100 +
-         ((item.delivery_fee_in_cents || 0) + (item.insurance_fee_in_cents || 0)) / 100,
-      0
-   );
-
-   const totalWeight = invoice.items.reduce((acc, item) => acc + item.weight, 0);
-   const chargeAmount = invoice.charge_in_cents / 100;
-   const paidAmount = (invoice.paid_in_cents + invoice.charge_in_cents) / 100;
-   const totalAmount = (invoice.total_in_cents + invoice.charge_in_cents) / 100;
-   const balance = (invoice.total_in_cents - invoice.paid_in_cents) / 100;
-
-   return {
-      subtotal,
-      totalWeight,
-      chargeAmount,
-      paidAmount,
-      totalAmount,
-      balance,
-   };
 }
 
 // Pre-format all string data
@@ -425,12 +425,13 @@ async function generateItemsTableOptimized(
    const processedItems = invoice.items.map((item, index) => ({
       ...item,
       hbl: item.hbl || `CTE${String(invoice.id).padStart(6, "0")}${String(index + 1).padStart(6, "0")}`,
-      subtotal: calculate_row_subtotal(
+      subtotal_in_cents: calculate_row_subtotal(
          item.rate_in_cents,
          item.weight,
          item.customs_fee_in_cents,
-         item.rate.rate_type as RateType,
-         item.charge_fee_in_cents || 0
+         item.insurance_fee_in_cents || 0,
+         item.charge_fee_in_cents || 0,
+         item.rate.rate_type as RateType
       ),
    }));
 
@@ -526,28 +527,28 @@ function renderTableRow(
       { text: item.hbl, x: 30, y: verticalCenter, width: 100 },
       { text: item.description, x: 140, y: currentY + 8, width: 150 },
       {
-         text: `$${centsToDollars(item.insurance_fee_in_cents || 0).toFixed(2)}`,
+         text: `${formatCents(item.insurance_fee_in_cents || 0)}`,
          x: 300,
          y: verticalCenter,
          width: 40,
          align: "right",
       },
       {
-         text: `$${centsToDollars(item.delivery_fee_in_cents || 0).toFixed(2)}`,
+         text: `${formatCents(item.delivery_fee_in_cents || 0)}`,
          x: 340,
          y: verticalCenter,
          width: 40,
          align: "right",
       },
       {
-         text: `$${centsToDollars(item.customs_fee_in_cents || 0).toFixed(2)}`,
+         text: `${formatCents(item.customs_fee_in_cents || 0)}`,
          x: 385,
          y: verticalCenter,
          width: 40,
          align: "right",
       },
       {
-         text: `$${centsToDollars(item.rate_in_cents || 0).toFixed(2)}`,
+         text: `${formatCents(item.rate_in_cents || 0)}`,
          x: 430,
          y: verticalCenter,
          width: 40,
@@ -555,15 +556,7 @@ function renderTableRow(
       },
       { text: `${item.weight.toFixed(2)}`, x: 470, y: verticalCenter, width: 40, align: "right" },
       {
-         text: `$${centsToDollars(
-            calculate_row_subtotal(
-               item.rate_in_cents,
-               item.weight,
-               item.customs_fee_in_cents,
-               item.rate.rate_type as RateType,
-               item.charge_fee_in_cents || 0
-            )
-         ).toFixed(2)}`,
+         text: `${formatCents(item.subtotal_in_cents)}`,
          x: 520,
          y: verticalCenter,
          width: 40,
@@ -595,22 +588,22 @@ function renderTotalsSection(
    let currentY = startY;
 
    const totals = [
-      { label: "Subtotal:", value: `$${calculations.subtotal.toFixed(2)}`, color: COLORS.BLACK },
+      { label: "Subtotal:", value: `${calculations.subtotal}`, color: COLORS.BLACK },
       { label: "Delivery:", value: "$0.00", color: COLORS.BLACK },
       { label: "Seguro:", value: "$0.00", color: COLORS.BLACK },
-      { label: "Cargo:", value: `$${calculations.chargeAmount.toFixed(2)}`, color: COLORS.BLACK },
+      { label: "Cargo:", value: `${calculations.chargeAmount}`, color: COLORS.BLACK },
       { label: "Descuento:", value: "$0.00", color: COLORS.BLACK },
       {
          label: "Total:",
-         value: `$${calculations.totalAmount.toFixed(2)}`,
+         value: `${calculations.totalAmount}`,
          color: COLORS.BLACK,
          bold: true,
       },
-      { label: "Paid:", value: `$${calculations.paidAmount.toFixed(2)}`, color: COLORS.BLACK },
+      { label: "Paid:", value: `${calculations.paidAmount}`, color: COLORS.BLACK },
       {
          label: "Balance:",
-         value: `$${calculations.balance.toFixed(2)}`,
-         color: calculations.balance === 0 ? COLORS.BLACK : COLORS.RED,
+         value: `${calculations.balance}`,
+         color: `${calculations.balance === "$0.00" ? COLORS.BLACK : COLORS.RED}`,
       },
    ];
 
