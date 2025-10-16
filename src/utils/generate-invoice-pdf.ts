@@ -2,11 +2,11 @@ import PDFKit from "pdfkit";
 import * as bwipjs from "bwip-js";
 import { promises as fs } from "fs";
 import * as path from "path";
-import { Invoice, Customer, Receiver, Agency, Service, Item, RateType } from "@prisma/client";
+import { Order, Customer, Receiver, Agency, Service, Item, RateType } from "@prisma/client";
 import { formatName } from "./capitalize";
 import { calculate_row_subtotal, centsToDollars, formatCents } from "./utils";
 
-interface InvoiceWithRelations extends Invoice {
+interface OrderWithRelations extends Order {
    customer: Customer;
    receiver: Receiver & {
       province?: { name: string };
@@ -26,32 +26,36 @@ interface InvoiceWithRelations extends Invoice {
 }
 
 // Pre-calculate all financial totals //have to move this to the utils
-function calculateInvoiceTotals(invoice: InvoiceWithRelations) {
-   const subtotal_in_cents = invoice.items.reduce(
+function calculateInvoiceTotals(order: OrderWithRelations) {
+   const subtotal_in_cents = order.items.reduce(
       (acc, item) =>
          acc +
          calculate_row_subtotal(
             item.rate_in_cents,
             item.weight,
             item.customs_fee_in_cents,
-            item.insurance_fee_in_cents || 0,
             item.charge_fee_in_cents || 0,
+            item.insurance_fee_in_cents || 0,
+            item.delivery_fee_in_cents || 0,
             item.rate.rate_type as RateType
          ),
       0
    );
+   const total_delivery_fee_in_cents = order.items.reduce((acc, item) => acc + (item.delivery_fee_in_cents || 0), 0);
 
    const subtotal = formatCents(subtotal_in_cents);
-   const totalWeight = invoice.items.reduce((acc, item) => acc + item.weight, 0);
-   const chargeAmount = formatCents(invoice.charge_in_cents);
-   const paidAmount = formatCents(invoice.paid_in_cents);
-   const totalAmount = formatCents(invoice.total_in_cents);
-   const balance = formatCents(invoice.total_in_cents - invoice.paid_in_cents);
+   const totalWeight = order.items.reduce((acc, item) => acc + item.weight, 0);
+   const chargeAmount = formatCents(order.charge_in_cents || 0);
+   const deliveryFeeAmount = formatCents(total_delivery_fee_in_cents);
+   const paidAmount = formatCents(order.paid_in_cents);
+   const totalAmount = formatCents(order.total_in_cents);
+   const balance = formatCents(order.total_in_cents - order.paid_in_cents);
 
    return {
       subtotal,
       totalWeight,
       chargeAmount,
+      deliveryFeeAmount,
       paidAmount,
       totalAmount,
       balance,
@@ -87,7 +91,7 @@ const LAYOUT = {
    FOOTER_Y: 710,
 } as const;
 
-export const generateInvoicePDF = async (invoice: InvoiceWithRelations): Promise<PDFKit.PDFDocument> => {
+export const generateInvoicePDF = async (invoice: OrderWithRelations): Promise<PDFKit.PDFDocument> => {
    try {
       const doc = new PDFKit({ margin: 10, size: "letter" });
       await generateOptimizedInvoice(doc, invoice);
@@ -97,7 +101,7 @@ export const generateInvoicePDF = async (invoice: InvoiceWithRelations): Promise
    }
 };
 
-async function generateOptimizedInvoice(doc: PDFKit.PDFDocument, invoice: InvoiceWithRelations) {
+async function generateOptimizedInvoice(doc: PDFKit.PDFDocument, invoice: OrderWithRelations) {
    // Pre-load assets
    const [logoBuffer, barcodeBuffer] = await Promise.all([
       loadLogo(invoice.agency.logo ?? undefined),
@@ -190,7 +194,7 @@ async function generateBarcode(invoiceId: number): Promise<Buffer | null> {
 }
 
 // Pre-format all string data
-function formatInvoiceData(invoice: InvoiceWithRelations) {
+function formatInvoiceData(invoice: OrderWithRelations) {
    const senderName = formatName(
       invoice.customer.first_name,
       invoice.customer.middle_name,
@@ -232,7 +236,7 @@ function formatInvoiceData(invoice: InvoiceWithRelations) {
 
 async function generatePageHeader(
    doc: PDFKit.PDFDocument,
-   invoice: InvoiceWithRelations,
+   invoice: OrderWithRelations,
    logoBuffer: Buffer | null,
    barcodeBuffer: Buffer | null,
    formattedData: ReturnType<typeof formatInvoiceData>,
@@ -345,7 +349,7 @@ class TextStyler {
 
 function generateSenderRecipientInfo(
    doc: PDFKit.PDFDocument,
-   invoice: InvoiceWithRelations,
+   invoice: OrderWithRelations,
    formattedData: ReturnType<typeof formatInvoiceData>
 ) {
    const textStyle = new TextStyler(doc);
@@ -411,7 +415,7 @@ function generateSenderRecipientInfo(
 
 async function generateItemsTableOptimized(
    doc: PDFKit.PDFDocument,
-   invoice: InvoiceWithRelations,
+   invoice: OrderWithRelations,
    calculations: ReturnType<typeof calculateInvoiceTotals>,
    logoBuffer: Buffer | null,
    barcodeBuffer: Buffer | null,
@@ -429,8 +433,9 @@ async function generateItemsTableOptimized(
          item.rate_in_cents,
          item.weight,
          item.customs_fee_in_cents,
-         item.insurance_fee_in_cents || 0,
          item.charge_fee_in_cents || 0,
+         item.insurance_fee_in_cents || 0,
+         item.delivery_fee_in_cents || 0,
          item.rate.rate_type as RateType
       ),
    }));
@@ -521,24 +526,24 @@ function renderTableRow(
 ) {
    const verticalCenter = currentY + rowHeight / 2 - 4;
 
-   textStyle.style(FONTS.NORMAL, 8.5, COLORS.DARK_GRAY);
-
    const rowData = [
-      { text: item.hbl, x: 30, y: verticalCenter, width: 100 },
-      { text: item.description, x: 140, y: currentY + 8, width: 150 },
+      { text: item.hbl, x: 30, y: verticalCenter, width: 100, color: COLORS.DARK_GRAY },
+      { text: item.description, x: 140, y: currentY + 8, width: 150, color: COLORS.DARK_GRAY },
       {
          text: `${formatCents(item.insurance_fee_in_cents || 0)}`,
          x: 300,
          y: verticalCenter,
          width: 40,
          align: "right",
+         color: (item.insurance_fee_in_cents || 0) === 0 ? COLORS.GRAY : COLORS.DARK_GRAY,
       },
       {
-         text: `${formatCents(item.delivery_fee_in_cents || 0)}`,
+         text: `${formatCents(item.charge_fee_in_cents || 0)}`,
          x: 340,
          y: verticalCenter,
          width: 40,
          align: "right",
+         color: (item.charge_fee_in_cents || 0) === 0 ? COLORS.GRAY : COLORS.DARK_GRAY,
       },
       {
          text: `${formatCents(item.customs_fee_in_cents || 0)}`,
@@ -546,6 +551,7 @@ function renderTableRow(
          y: verticalCenter,
          width: 40,
          align: "right",
+         color: (item.customs_fee_in_cents || 0) === 0 ? COLORS.GRAY : COLORS.DARK_GRAY,
       },
       {
          text: `${formatCents(item.rate_in_cents || 0)}`,
@@ -553,19 +559,28 @@ function renderTableRow(
          y: verticalCenter,
          width: 40,
          align: "right",
+         color: COLORS.DARK_GRAY,
       },
-      { text: `${item.weight.toFixed(2)}`, x: 470, y: verticalCenter, width: 40, align: "right" },
+      {
+         text: `${item.weight.toFixed(2)}`,
+         x: 470,
+         y: verticalCenter,
+         width: 40,
+         align: "right",
+         color: COLORS.DARK_GRAY,
+      },
       {
          text: `${formatCents(item.subtotal_in_cents)}`,
          x: 520,
          y: verticalCenter,
          width: 40,
          align: "right",
+         color: COLORS.DARK_GRAY,
       },
    ];
 
    rowData.forEach((data) => {
-      textStyle.text(data.text, data.x, data.y, {
+      textStyle.style(FONTS.NORMAL, 8.5, data.color).text(data.text, data.x, data.y, {
          width: data.width,
          align: data.align as any,
       });
@@ -588,33 +603,31 @@ function renderTotalsSection(
    let currentY = startY;
 
    const totals = [
-      { label: "Subtotal:", value: `${calculations.subtotal}`, color: COLORS.BLACK },
-      { label: "Delivery:", value: "$0.00", color: COLORS.BLACK },
-      { label: "Seguro:", value: "$0.00", color: COLORS.BLACK },
-      { label: "Cargo:", value: `${calculations.chargeAmount}`, color: COLORS.BLACK },
-      { label: "Descuento:", value: "$0.00", color: COLORS.BLACK },
-      {
-         label: "Total:",
-         value: `${calculations.totalAmount}`,
-         color: COLORS.BLACK,
-         bold: true,
-      },
-      { label: "Paid:", value: `${calculations.paidAmount}`, color: COLORS.BLACK },
-      {
-         label: "Balance:",
-         value: `${calculations.balance}`,
-         color: `${calculations.balance === "$0.00" ? COLORS.BLACK : COLORS.RED}`,
-      },
+      { label: "Subtotal:", value: calculations.subtotal },
+      { label: "Delivery:", value: calculations.deliveryFeeAmount },
+      { label: "Seguro:", value: "$0.00" },
+      { label: "Cargo:", value: calculations.chargeAmount },
+      { label: "Descuento:", value: "$0.00" },
+      { label: "Total:", value: calculations.totalAmount, bold: true },
+      { label: "Paid:", value: calculations.paidAmount },
+      { label: "Balance:", value: calculations.balance, isBalance: true },
    ];
 
    totals.forEach((total, index) => {
       const font = total.bold ? FONTS.BOLD : FONTS.NORMAL;
       const size = total.bold ? 10.5 : index >= totals.length - 2 ? 9 : 8.5;
 
-      textStyle
-         .style(font, size, total.color)
-         .text(total.label, 380, currentY, { width: 80, align: "right" })
-         .text(total.value, 520, currentY, { width: 50, align: "right" });
+      // Determine color: balance can be red, $0.00 values are gray, others are black
+      let valueColor: string = COLORS.BLACK;
+      if (total.isBalance && total.value !== "$0.00") {
+         valueColor = COLORS.RED;
+      } else if (total.value === "$0.00" && !total.bold) {
+         valueColor = COLORS.GRAY;
+      }
+
+      textStyle.style(font, size, COLORS.BLACK).text(total.label, 380, currentY, { width: 80, align: "right" });
+
+      textStyle.style(font, size, valueColor).text(total.value, 520, currentY, { width: 50, align: "right" });
 
       currentY += 15;
    });
@@ -622,14 +635,14 @@ function renderTotalsSection(
 
 function addFooterToPage(
    doc: PDFKit.PDFDocument,
-   invoice: InvoiceWithRelations,
+   order: OrderWithRelations,
    currentPage: number,
    totalPages: number = 1
 ) {
    const textStyle = new TextStyler(doc);
 
    // Tracking info
-   textStyle.style(FONTS.BOLD, 10, COLORS.BLUE).text(`Tracking: ${invoice.agency.website}`, 40, LAYOUT.FOOTER_Y, {
+   textStyle.style(FONTS.BOLD, 10, COLORS.BLUE).text(`Tracking: ${order.agency.website}`, 40, LAYOUT.FOOTER_Y, {
       align: "center",
       width: 532,
    });

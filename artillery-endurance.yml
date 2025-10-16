@@ -1,0 +1,47 @@
+config:
+   target: "http://localhost:3000"
+   http:
+      timeout: 30
+   defaults:
+      headers:
+         Authorization: "Bearer qbbgruprcXiaDF9uQr7LODO85a6D6aE0" # Add a valid JWT token
+   phases:
+      # Sustained high load over a long period
+      - duration: 60
+        arrivalRate: 20
+        name: "Warm up - 20 req/s"
+      - duration: 600 # 10 minutes
+        arrivalRate: 40
+        name: "Sustained load - 40 req/s for 10 min"
+      - duration: 300 # 5 minutes
+        arrivalRate: 60
+        name: "Peak sustained - 60 req/s for 5 min"
+      - duration: 60
+        arrivalRate: 20
+        name: "Cool down - 20 req/s"
+   processor: "./artillery-processor.js"
+   plugins:
+      metrics-by-endpoint:
+         useOnlyRequestNames: true
+
+scenarios:
+   - name: "Endurance Invoice Creation"
+     weight: 100
+     flow:
+        - function: "generateInvoiceData"
+        - post:
+             url: "/api/v1/invoices"
+             headers:
+                Content-Type: "application/json"
+             json:
+                agency_id: "{{ agency_id }}"
+                user_id: "{{ user_id }}"
+                customer_id: "{{ customer_id }}"
+                receiver_id: "{{ receiver_id }}"
+                service_id: "{{ service_id }}"
+                items: "{{ items }}"
+                paid_in_cents: "{{ paid_in_cents }}"
+                total_in_cents: "{{ total_in_cents }}"
+             expect:
+                - statusCode: [200, 201]
+        - think: 1

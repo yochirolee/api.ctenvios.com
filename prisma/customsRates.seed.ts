@@ -2,7 +2,7 @@ import { PrismaClient, FeeType } from "@prisma/client";
 const prisma = new PrismaClient();
 
 async function main() {
-   const rows = [
+   const customsRates = [
       {
          name: `Planchas electricas domesticas`,
          description: `Plancha electrica domestica`,
@@ -2217,7 +2217,7 @@ hasta 10 unidades`,
       },
    ];
 
-   for (const r of rows) {
+   for (const r of customsRates) {
       // Update by name if exists, otherwise create
       const res = await prisma.customsRates.updateMany({
          where: { name: r.name },

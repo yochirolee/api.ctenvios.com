@@ -1,40 +1,46 @@
 config:
-  target: "http://localhost:3000"
-  phases:
-    # Much lighter load to avoid database overload
-    - duration: 20
-      arrivalRate: 1 # Only 1 user per second
-      name: "Very light warm up"
-    - duration: 30
-      arrivalRate: 2 # 2 users per second
-      name: "Light load"
-    - duration: 20
-      arrivalRate: 3 # 3 users per second
-      name: "Moderate load"
-  processor: "./artillery-processor.js"
+   target: "http://localhost:3000"
+   http:
+      timeout: 30
+   defaults:
+      headers:
+         Authorization: "Bearer qbbgruprcXiaDF9uQr7LODO85a6D6aE0" # Add a valid JWT token
+   phases:
+      - duration: 10
+        arrivalRate: 2 # 2 users per second - light load
+        name: "Light warm up"
+      - duration: 20
+        arrivalRate: 5 # 5 users per second - moderate load
+        name: "Light sustained"
+      - duration: 10
+        arrivalRate: 8 # 8 users per second - light peak
+        name: "Light peak"
+   processor: "./artillery-processor.js"
+   plugins:
+      metrics-by-endpoint:
+         useOnlyRequestNames: true
 
 scenarios:
-  - name: "Light Invoice Creation Test"
-    weight: 100
-    flow:
-      - function: "generateInvoiceData"
-      - post:
-          url: "/api/v1/invoices"
-          headers:
-            Content-Type: "application/json"
-          json:
-            agency_id: "{{ agency_id }}"
-            user_id: "{{ user_id }}"
-            customer_id: "{{ customer_id }}"
-            receiver_id: "{{ receiver_id }}"
-            service_id: "{{ service_id }}"
-            items: "{{ items }}"
-            paid_in_cents: "{{ paid_in_cents }}"
-            total_in_cents: "{{ total_in_cents }}"
-          expect:
-            - statusCode: [200, 201]
-            - hasProperty: "id"
-          capture:
-            - json: "$.id"
-              as: "invoice_id"
-      - think: 3 # 3 second pause between requests (very conservative)
+   - name: "Invoice Creation Light Test"
+     weight: 100
+     flow:
+        - function: "generateInvoiceData"
+        - post:
+             url: "/api/v1/invoices"
+             headers:
+                Content-Type: "application/json"
+             json:
+                agency_id: "{{ agency_id }}"
+                user_id: "{{ user_id }}"
+                customer_id: "{{ customer_id }}"
+                receiver_id: "{{ receiver_id }}"
+                service_id: "{{ service_id }}"
+                items: "{{ items }}"
+                paid_in_cents: "{{ paid_in_cents }}"
+                total_in_cents: "{{ total_in_cents }}"
+             expect:
+                - statusCode: [200, 201]
+             capture:
+                - json: "$.id"
+                  as: "invoice_id"
+        - think: 1

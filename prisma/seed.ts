@@ -1,409 +1,265 @@
-import { AgencyType, PrismaClient, Roles } from "@prisma/client";
-import { auth } from "../src/lib/auth";
+import { AgencyType, PrismaClient, Roles, CityType } from "@prisma/client";
+import { auth } from "../src/lib/auth.lib";
+import { customsRates, provincesWithCities } from "./seed.data";
 
 const prisma = new PrismaClient();
 
-const provinciasConCiudades = [
-	{
-		id: 1,
-		name: "Pinar del Rio",
-		cities: [
-			"Pinar del Rio",
-			"Consolacion del Sur",
-			"Guane",
-			"La Palma",
-			"Los Palacios",
-			"Mantua",
-			"Minas de Matahambre",
-			"San Juan y Martinez",
-			"San Luis",
-			"Sandino",
-			"Vinales",
-		],
-	},
-	{
-		id: 2,
-		name: "Artemisa",
-		cities: [
-			"Alquizar",
-			"Artemisa",
-			"Bauta",
-			"Caimito",
-			"Candelaria",
-			"Guanajay",
-			"Guira de Melena",
-			"Mariel",
-			"San Antonio de los Banos",
-			"San Cristobal",
-			"Bahia Honda",
-		],
-	},
-	{
-		id: 3,
-		name: "La Habana",
-		cities: [
-			"Arroyo Naranjo",
-			"Boyeros",
-			"Centro Habana",
-			"Cerro",
-			"Cotorro",
-			"Diez de Octubre",
-			"Guanabacoa",
-			"Habana del Este",
-			"Habana Vieja",
-			"La Lisa",
-			"Marianao",
-			"Playa",
-			"Plaza de la Revolucion",
-			"Regla",
-			"San Miguel del Padron",
-		],
-	},
-	{
-		id: 4,
-		name: "Mayabeque",
-		cities: [
-			"Batabano",
-			"Bejucal",
-			"Guines",
-			"Jaruco",
-			"Madruga",
-			"Melena del Sur",
-			"Nueva Paz",
-			"Quivican",
-			"San Jose de las Lajas",
-			"San Nicolas",
-			"Santa Cruz del Norte",
-		],
-	},
-	{
-		id: 5,
-		name: "Matanzas",
-		cities: [
-			"Cardenas",
-			"Cienaga de Zapata",
-			"Colon",
-			"Jaguey Grande",
-			"Jovellanos",
-			"Limonar",
-			"Los Arabos",
-			"Marti",
-			"Matanzas",
-			"Pedro Betancourt",
-			"Perico",
-			"Union de Reyes",
-			"Calimete",
-		],
-	},
-	{
-		id: 6,
-		name: "Cienfuegos",
-		cities: [
-			"Abreus",
-			"Aguada de Pasajeros",
-			"Cienfuegos",
-			"Cruces",
-			"Cumanayagua",
-			"Lajas",
-			"Palmira",
-			"Rodas",
-		],
-	},
-	{
-		id: 7,
-		name: "Villa Clara",
-		cities: [
-			"Caibarien",
-			"Camajuani",
-			"Cifuentes",
-			"Corralillo",
-			"Encrucijada",
-			"Manicaragua",
-			"Placetas",
-			"Quemado de Guines",
-			"Ranchuelo",
-			"Remedios",
-			"Sagua la Grande",
-			"Santa Clara",
-			"Santo Domingo",
-		],
-	},
-	{
-		id: 8,
-		name: "Sancti Spiritus",
-		cities: [
-			"Cabaiguan",
-			"Fomento",
-			"Jatibonico",
-			"La Sierpe",
-			"Sancti Spiritus",
-			"Taguasco",
-			"Trinidad",
-			"Yaguajay",
-		],
-	},
-	{
-		id: 9,
-		name: "Ciego de Avila",
-		cities: [
-			"Baragua",
-			"Bolivia",
-			"Chambas",
-			"Ciego de Avila",
-			"Ciro Redondo",
-			"Florencia",
-			"Majagua",
-			"Moron",
-			"Primero de Enero",
-			"Venezuela",
-		],
-	},
-	{
-		id: 10,
-		name: "Camaguey",
-		cities: [
-			"Camaguey",
-			"Carlos Manuel de Cespedes",
-			"Esmeralda",
-			"Florida",
-			"Guaimaro",
-			"Jimaguayu",
-			"Minas",
-			"Najasa",
-			"Nuevitas",
-			"Santa Cruz del Sur",
-			"Sibanicu",
-			"Sierra de Cubitas",
-			"Vertientes",
-		],
-	},
-	{
-		id: 11,
-		name: "Las Tunas",
-		cities: [
-			"Amancio",
-			"Colombia",
-			"Jesus Menendez",
-			"Jobabo",
-			"Las Tunas",
-			"Majibacoa",
-			"Manati",
-			"Puerto Padre",
-		],
-	},
-	{
-		id: 12,
-		name: "Holguin",
-		cities: [
-			"Antilla",
-			"Baguanos",
-			"Banes",
-			"Cacocum",
-			"Calixto Garcia",
-			"Cueto",
-			"Frank Pais",
-			"Gibara",
-			"Holguin",
-			"Mayari",
-			"Moa",
-			"Rafael Freyre",
-			"Sagua de Tanamo",
-			"Urbano Noris",
-			"Velasco",
-		],
-	},
-	{
-		id: 13,
-		name: "Granma",
-		cities: [
-			"Bartolome Maso",
-			"Bayamo",
-			"Buey Arriba",
-			"Campechuela",
-			"Cauto Cristo",
-			"Guisa",
-			"Jiguani",
-			"Manzanillo",
-			"Media Luna",
-			"Niquero",
-			"Pilon",
-			"Rio Cauto",
-			"Yara",
-		],
-	},
-	{
-		id: 14,
-		name: "Santiago de Cuba",
-		cities: [
-			"Contramaestre",
-			"Guama",
-			"Mella",
-			"Palma Soriano",
-			"San Luis",
-			"Santiago de Cuba",
-			"Segundo Frente",
-			"Songo La Maya",
-			"Tercer Frente",
-		],
-	},
-	{
-		id: 15,
-		name: "Guantanamo",
-		cities: [
-			"Baracoa",
-			"Caimanera",
-			"El Salvador",
-			"Guantanamo",
-			"Imias",
-			"Maisi",
-			"Manuel Tames",
-			"Niceto Perez",
-			"San Antonio del Sur",
-			"Yateras",
-		],
-	},
-	{
-		id: 16,
-		name: "Isla de la Juventud",
-		cities: ["Isla de la Juventud"],
-	},
-];
-
 async function main(): Promise<void> {
-	console.log("🚀 Starting database seed...");
+   console.log("🚀 Starting database seed...");
 
-	// Create forwarder
-	const forwarder = await prisma.forwarder.upsert({
-		where: { id: 1 },
-		update: {},
-		create: {
-			name: "Caribe Travel Express and Services Inc",
-			address: "10230 NW 80th Ave, Miami, FL 33016",
-			contact: "F Infanzon",
-			phone: "3058513004",
-			email: "gerente@ctenvios.com",
-		},
-	});
+   // Create forwarder
+   const forwarder = await prisma.forwarder.upsert({
+      where: { id: 1 },
+      update: {},
+      create: {
+         name: "Caribe Travel Express and Services Inc",
+         address: "10230 NW 80th Ave, Miami, FL 33016",
+         contact: "F Infanzon",
+         phone: "3058513004",
+         email: "gerente@ctenvios.com",
+      },
+   });
 
-	console.log(`✅ Forwarder created: ${forwarder.name}`);
+   console.log(`✅ Forwarder created: ${forwarder.name}`);
 
-	const cuba = await prisma.country.upsert({
-		where: { id: 1 },
-		update: {},
-		create: {
-			name: "Cuba",
-			code: "CU",
-		},
-	});
-	console.log(`✅ Country created: ${cuba.name}`);
+   const cuba = await prisma.country.upsert({
+      where: { id: 1 },
+      update: {},
+      create: {
+         name: "Cuba",
+         code: "CU",
+      },
+   });
+   console.log(`✅ Country created: ${cuba.name}`);
 
-	const provider = await prisma.provider.upsert({
-		where: { id: 1 },
-		update: {},
-		create: {
-			name: "Transcargo",
-			address: "Avenida del Puerto y Linea del Ferrocarril, Regla, La Habana.",
-			contact: "Transcargo",
-			phone: "5376980069",
-			email: "atcliente2@transcargo.transnet.cu",
-		},
-	});
+   const provider = await prisma.provider.upsert({
+      where: { id: 1 },
+      update: {},
+      create: {
+         name: "Transcargo",
+         address: "Avenida del Puerto y Linea del Ferrocarril, Regla, La Habana.",
+         contact: "Transcargo",
+         phone: "5376980069",
+         email: "atcliente2@transcargo.transnet.cu",
+      },
+   });
 
-	console.log(`✅ Provider created: ${provider.name}`);
+   console.log(`✅ Provider created: ${provider.name}`);
 
-	// Create services
-	const maritimeService = await prisma.service.upsert({
-		where: { id: 1 },
-		update: {},
-		create: {
-			name: "Maritimo",
-			service_type: "MARITIME",
-			description: "Envios Maritimos",
-			forwarder: { connect: { id: forwarder.id } },
-			provider: { connect: { id: provider.id } },
-		},
-	});
+   // Create services
+   const maritimeService = await prisma.service.upsert({
+      where: { id: 1 },
+      update: {},
+      create: {
+         name: "Maritimo",
+         service_type: "MARITIME",
+         description: "Envios Maritimos",
+         forwarder: { connect: { id: forwarder.id } },
+         provider: { connect: { id: provider.id } },
+      },
+   });
 
-	console.log(`✅ Maritime service created: ${maritimeService.name}`);
+   console.log(`✅ Maritime service created: ${maritimeService.name}`);
 
-	// Create Agencia Habana (padre)
-	const CTEnvios = await prisma.agency.upsert({
-		where: { id: 1 },
-		create: {
-			name: "CTEnvios",
-			address: "10230 NW 80th Ave, Miami, FL 33016",
-			contact: "F Infanzon",
-			phone: "3058513004",
-			email: "gerente@ctenvios.com",
-			forwarder_id: forwarder.id,
-			agency_type: AgencyType.FORWARDER,
-		},
-		update: {},
-	});
-	console.log(`✅ Agency created: ${CTEnvios.name}`);
+   // Create Agencia Habana (padre)
+   const CTEnvios = await prisma.agency.upsert({
+      where: { id: 1 },
+      create: {
+         name: "CTEnvios",
+         address: "10230 NW 80th Ave, Miami, FL 33016",
+         contact: "F Infanzon",
+         phone: "3058513004",
+         email: "gerente@ctenvios.com",
+         forwarder_id: forwarder.id,
+         agency_type: AgencyType.FORWARDER,
+         is_active: true,
+         services: { connect: { id: maritimeService.id } },
+      },
 
-	console.log("🏝️ Creating provinces and cities...");
-	for (const provincia of provinciasConCiudades) {
-		// First, upsert the province
-		const createdProvince = await prisma.province.upsert({
-			where: { id: provincia.id },
-			update: {
-				name: provincia.name,
-			},
-			create: {
-				name: provincia.name,
-			},
-		});
+      update: {},
+   });
+   console.log(`✅ Agency created: ${CTEnvios.name}`);
 
-		// Then, create cities that don't exist for this province
-		for (const cityName of provincia.cities) {
-			const existingCity = await prisma.city.findFirst({
-				where: {
-					name: cityName,
-					province_id: createdProvince.id,
-				},
-			});
+   console.log(`✅ Services connected to CTEnvios`);
 
-			if (!existingCity) {
-				await prisma.city.create({
-					data: {
-						name: cityName,
-						province_id: createdProvince.id,
-					},
-				});
-			}
-		}
+   console.log("🏝️ Creating provinces and cities...");
+   for (const provincia of provincesWithCities) {
+      // First, upsert the province
+      const createdProvince = await prisma.province.upsert({
+         where: { id: provincia.id },
+         update: {
+            name: provincia.name,
+         },
+         create: {
+            name: provincia.name,
+         },
+      });
 
-		console.log(`✅ Province created: ${createdProvince.name} (${provincia.cities.length} cities)`);
-	}
+      // Then, create or update cities for this province
+      for (const city of provincia.cities) {
+         const existingCity = await prisma.city.findFirst({
+            where: {
+               name: city.name,
+               province_id: createdProvince.id,
+            },
+         });
 
-	const session = await auth.api.signUpEmail({
-		body: {
-			email: "yleecruz@gmail.com",
-			password: "Audioslave*84",
-			name: "Yochiro Lee Cruz",
-		},
-	});
-	console.log(session);
+         if (existingCity) {
+            // Update existing city with city_type
+            await prisma.city.update({
+               where: { id: existingCity.id },
+               data: {
+                  city_type: city.city_type,
+               },
+            });
+         } else {
+            // Create new city with city_type
+            await prisma.city.create({
+               data: {
+                  name: city.name,
+                  province_id: createdProvince.id,
+                  city_type: city.city_type,
+               },
+            });
+         }
+      }
 
-	// Update the user with role and agency_id
-	/* await prisma.user.update({
-		where: { id: session.user.id },
-		data: {
-			role: Roles.ROOT,
-			agency_id: 1,
-		},
-	}); */
+      console.log(`✅ Province created: ${createdProvince.name} (${provincia.cities.length} cities)`);
+   }
 
-	console.log(`✅ User created:  with ROOT role`);
-	console.log("🎉 Database seed completed successfully!");
+   console.log("🏳️ Creating customs rates...");
+   const customsRatesPromises = customsRates.map(async (rate, index) => {
+      // Log progress every 100 items
+      if (index % 100 === 0 && index > 0) {
+         console.log(`   Progress: ${index}/${customsRates.length} customs rates processed`);
+      }
+
+      const existing = await prisma.customsRates.findFirst({
+         where: { name: rate.name },
+      });
+
+      if (existing) {
+         return prisma.customsRates.update({
+            where: { id: existing.id },
+            data: {
+               description: rate.description,
+               chapter: rate.chapter,
+               country_id: rate.country_id,
+               fee_type: rate.fee_type,
+               fee_in_cents: rate.fee_in_cents,
+               custom_value: rate.custom_value,
+            },
+         });
+      }
+
+      return prisma.customsRates.create({ data: rate });
+   });
+
+   await Promise.all(customsRatesPromises);
+   console.log(`✅ Customs rates created: ${customsRates.length} total`);
+
+   // Create carrier for delivery services
+   console.log("🚚 Creating carrier...");
+   const carrier = await prisma.carrier.upsert({
+      where: { id: 1 },
+      update: {},
+      create: {
+         name: "Transcargo Carrier",
+         forwarder_id: forwarder.id,
+      },
+   });
+   console.log(`✅ Carrier created: ${carrier.name}`);
+
+   // Update maritime service with carrier
+   await prisma.service.update({
+      where: { id: maritimeService.id },
+      data: {
+         carrier_id: carrier.id,
+      },
+   });
+   console.log(`✅ Maritime service updated with carrier`);
+
+   // Create base delivery rates for carrier
+   console.log("📦 Creating delivery rates...");
+   const deliveryRates = [
+      {
+         name: "Delivery - Special Zone",
+         description: "Havana, Artemisa, Mayabeque",
+         forwarder_id: forwarder.id,
+         carrier_id: carrier.id,
+         city_type: CityType.SPECIAL,
+         cost_in_cents: 500, // $5 USD
+         rate_in_cents: 500, // $5 USD
+         is_base_rate: true,
+      },
+      {
+         name: "Delivery - Provincial Capital",
+         description: "Provincial capitals",
+         forwarder_id: forwarder.id,
+         carrier_id: carrier.id,
+         city_type: CityType.CAPITAL,
+         cost_in_cents: 1000, // $10 USD
+         rate_in_cents: 1000, // $10 USD
+         is_base_rate: true,
+      },
+      {
+         name: "Delivery - Other Cities",
+         description: "All other cities",
+         forwarder_id: forwarder.id,
+         carrier_id: carrier.id,
+         city_type: CityType.CITY,
+         cost_in_cents: 1500, // $15 USD
+         rate_in_cents: 1500, // $15 USD
+         is_base_rate: true,
+      },
+   ];
+
+   for (const rate of deliveryRates) {
+      // Check if delivery rate exists
+      const existingRate = await prisma.deliveryRate.findFirst({
+         where: {
+            forwarder_id: rate.forwarder_id,
+            carrier_id: rate.carrier_id,
+            city_type: rate.city_type,
+            is_base_rate: true,
+            agency_id: null,
+         },
+      });
+
+      if (existingRate) {
+         await prisma.deliveryRate.update({
+            where: { id: existingRate.id },
+            data: {
+               cost_in_cents: rate.cost_in_cents,
+               rate_in_cents: rate.rate_in_cents,
+            },
+         });
+      } else {
+         await prisma.deliveryRate.create({
+            data: rate,
+         });
+      }
+   }
+   console.log(`✅ Delivery rates created: ${deliveryRates.length} total`);
+
+   const session = await auth.api.signUpEmail({
+      body: {
+         email: "yleecruz@gmail.com",
+         password: "Audioslave*84",
+         name: "Yochiro Lee Cruz",
+      },
+   });
+   console.log(session);
+
+   console.log(`✅ User created:  with ROOT role`);
+   console.log("🎉 Database seed completed successfully!");
 }
 
 main()
-	.catch((e) => {
-		console.error("❌ Error seeding database:", e);
-		process.exit(1);
-	})
-	.finally(async () => {
-		await prisma.$disconnect();
-	});
+   .catch((e) => {
+      console.error("❌ Error seeding database:", e);
+      process.exit(1);
+   })
+   .finally(async () => {
+      await prisma.$disconnect();
+   });

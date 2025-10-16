@@ -7,17 +7,21 @@ import provinces from "./provinces.controller";
 import receivers from "./receivers.controller";
 import customsRates from "./customs.rates.controller";
 import { analytics } from "./analytics.controller";
+import partners from "./partners.controller";
+import orders from "./orders.controller";
 
 const controllers = {
-	agencies,
-	providers,
-	forwarders,
-	services,
-	customers,
-	provinces,
-	receivers,
-	customsRates,
-	analytics,
+   agencies,
+   providers,
+   forwarders,
+   services,
+   customers,
+   provinces,
+   receivers,
+   customsRates,
+   analytics,
+   partners,
+   orders,
 };
 
 export default controllers;

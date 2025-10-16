@@ -1,0 +1,83 @@
+config:
+   target: "http://localhost:3000"
+   http:
+      timeout: 45
+   defaults:
+      headers:
+         Authorization: "Bearer qbbgruprcXiaDF9uQr7LODO85a6D6aE0" # Add a valid JWT token
+   phases:
+      # Gradual ramp-up to avoid immediate overload
+      - duration: 30
+        arrivalRate: 10
+        name: "Warm up - 10 req/s"
+      - duration: 60
+        arrivalRate: 30
+        name: "Moderate load - 30 req/s"
+      - duration: 60
+        arrivalRate: 50
+        name: "High load - 50 req/s"
+      - duration: 90
+        arrivalRate: 75
+        name: "Very high load - 75 req/s"
+      - duration: 120
+        arrivalRate: 100
+        name: "Maximum stress - 100 req/s"
+      - duration: 60
+        arrivalRate: 150
+        name: "EXTREME - 150 req/s"
+      - duration: 30
+        arrivalRate: 50
+        name: "Cool down - 50 req/s"
+   processor: "./artillery-processor.js"
+   plugins:
+      metrics-by-endpoint:
+         useOnlyRequestNames: true
+      expect:
+         outputFormat: "pretty"
+
+scenarios:
+   - name: "Invoice Creation Ultra Stress"
+     weight: 70
+     flow:
+        - function: "generateInvoiceData"
+        - post:
+             url: "/api/v1/invoices"
+             headers:
+                Content-Type: "application/json"
+             json:
+                agency_id: "{{ agency_id }}"
+                user_id: "{{ user_id }}"
+                customer_id: "{{ customer_id }}"
+                receiver_id: "{{ receiver_id }}"
+                service_id: "{{ service_id }}"
+                items: "{{ items }}"
+                paid_in_cents: "{{ paid_in_cents }}"
+                total_in_cents: "{{ total_in_cents }}"
+             expect:
+                - statusCode: [200, 201]
+             capture:
+                - json: "$.id"
+                  as: "invoice_id"
+        - think: 0.5
+
+   - name: "Complex Invoice Ultra Stress"
+     weight: 30
+     flow:
+        - function: "generateComplexInvoiceData"
+        - post:
+             url: "/api/v1/invoices"
+             headers:
+                Content-Type: "application/json"
+             json:
+                agency_id: "{{ agency_id }}"
+                user_id: "{{ user_id }}"
+                customer_id: "{{ customer_id }}"
+                receiver_id: "{{ receiver_id }}"
+                service_id: "{{ service_id }}"
+                items: "{{ complex_items }}"
+             expect:
+                - statusCode: [200, 201]
+             capture:
+                - json: "$.id"
+                  as: "complex_invoice_id"
+        - think: 1

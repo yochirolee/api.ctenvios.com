@@ -1,0 +1,56 @@
+config:
+   target: "http://localhost:3000"
+   http:
+      timeout: 30
+   defaults:
+      headers:
+         Authorization: "Bearer qbbgruprcXiaDF9uQr7LODO85a6D6aE0" # Add a valid JWT token
+   phases:
+      # Simulate sudden traffic spikes
+      - duration: 30
+        arrivalRate: 5
+        name: "Normal baseline"
+      - duration: 10
+        arrivalRate: 200 # SPIKE!
+        name: "SPIKE 1 - 200 req/s"
+      - duration: 30
+        arrivalRate: 10
+        name: "Recovery 1"
+      - duration: 15
+        arrivalRate: 150 # SPIKE!
+        name: "SPIKE 2 - 150 req/s"
+      - duration: 30
+        arrivalRate: 10
+        name: "Recovery 2"
+      - duration: 20
+        arrivalRate: 250 # MASSIVE SPIKE!
+        name: "SPIKE 3 - 250 req/s"
+      - duration: 60
+        arrivalRate: 10
+        name: "Final recovery"
+   processor: "./artillery-processor.js"
+   plugins:
+      metrics-by-endpoint:
+         useOnlyRequestNames: true
+
+scenarios:
+   - name: "Spike Test - Simple Invoices"
+     weight: 100
+     flow:
+        - function: "generateInvoiceData"
+        - post:
+             url: "/api/v1/invoices"
+             headers:
+                Content-Type: "application/json"
+             json:
+                agency_id: "{{ agency_id }}"
+                user_id: "{{ user_id }}"
+                customer_id: "{{ customer_id }}"
+                receiver_id: "{{ receiver_id }}"
+                service_id: "{{ service_id }}"
+                items: "{{ items }}"
+                paid_in_cents: "{{ paid_in_cents }}"
+                total_in_cents: "{{ total_in_cents }}"
+             expect:
+                - statusCode: [200, 201, 408, 429, 500, 502, 503, 504] # Allow failures during spikes
+

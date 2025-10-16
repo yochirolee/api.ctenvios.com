@@ -1,15 +1,18 @@
-export function formatPhoneNumber(phoneNumber: string) {
+import { RateType } from "@prisma/client";
+
+export function formatPhoneNumber(phoneNumber: string): string {
    return phoneNumber.replace(/^(\+535|535)?/, "");
 }
 
 export function isValidCubanCI(ci: string): boolean {
    if (!/^\d{11}$/.test(ci)) return false;
 
-   const digits = ci.split("").map(Number);
    const year = parseInt(ci.slice(0, 2), 10);
    const month = parseInt(ci.slice(2, 4), 10);
    const day = parseInt(ci.slice(4, 6), 10);
    const fullYear = year >= 30 ? 1900 + year : 2000 + year;
+
+   if (month < 1 || month > 12 || day < 1 || day > 31) return false;
 
    // Validar fecha
    const date = new Date(fullYear, month - 1, day);
@@ -21,13 +24,15 @@ export function isValidCubanCI(ci: string): boolean {
    if (fullYear < 2014) return true;
 
    const weights = [1, 2, 1, 2, 1, 2, 1, 2, 1, 2];
-   const sum = weights.reduce((acc, weight, i) => {
-      const product = digits[i] * weight;
-      return acc + (product < 10 ? product : Math.floor(product / 10) + (product % 10));
-   }, 0);
+   let sum = 0;
+   for (let i = 0; i < 10; i++) {
+      const digit = parseInt(ci[i], 10);
+      const product = digit * weights[i];
+      sum += product < 10 ? product : Math.floor(product / 10) + (product % 10);
+   }
 
    const controlDigit = (10 - (sum % 10)) % 10;
-   return controlDigit === digits[10];
+   return controlDigit === parseInt(ci[10], 10);
 }
 
 export function dollarsToCents(amount: number | string): number {
@@ -40,13 +45,27 @@ export function centsToDollars(cents: number): number {
    return Math.round((cents / 100) * 100) / 100;
 }
 
+const formatterCache = new Map<string, Intl.NumberFormat>();
+
+function getFormatter(locale: string, currency: string): Intl.NumberFormat {
+   const key = `${locale}-${currency}`;
+   let formatter = formatterCache.get(key);
+
+   if (!formatter) {
+      formatter = new Intl.NumberFormat(locale, {
+         style: "currency",
+         currency,
+         minimumFractionDigits: 2,
+         maximumFractionDigits: 2,
+      });
+      formatterCache.set(key, formatter);
+   }
+
+   return formatter;
+}
+
 export function formatCents(cents: number, locale: string = "en-US", currency: string = "USD"): string {
-   return new Intl.NumberFormat(locale, {
-      style: "currency",
-      currency,
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-   }).format(cents / 100);
+   return getFormatter(locale, currency).format(cents / 100);
 }
 
 export const calculate_row_subtotal = (
@@ -55,21 +74,42 @@ export const calculate_row_subtotal = (
    customs_fee_in_cents: number,
    charge_fee_in_cents: number,
    insurance_fee_in_cents: number,
+   delivery_fee_in_cents: number,
    rate_type: string
 ): number => {
-   // Ensure all values are valid numbers
-   const safeRateInCents = Number(rate_in_cents) || 0;
-   const safeWeight = Number(weight) || 0;
-   const safeCustomsFeeInCents = Number(customs_fee_in_cents) || 0;
-   const safeChargeFeeInCents = Number(charge_fee_in_cents) || 0;
-   const safeInsuranceFeeInCents = Number(insurance_fee_in_cents) || 0;
+   const safeRateInCents = rate_in_cents || 0;
+   const safeWeight = weight || 0;
+   const safeCustomsFeeInCents = customs_fee_in_cents || 0;
+   const safeChargeFeeInCents = charge_fee_in_cents || 0;
+   const safeInsuranceFeeInCents = insurance_fee_in_cents || 0;
+   const safeDeliveryFeeInCents = delivery_fee_in_cents || 0;
 
    if (rate_type === "WEIGHT") {
-      // Always return integer cents using ceil to round up any fractional cents
       return Math.ceil(
-         safeRateInCents * safeWeight + safeCustomsFeeInCents + safeChargeFeeInCents + safeInsuranceFeeInCents
+         safeRateInCents * safeWeight +
+            safeCustomsFeeInCents +
+            safeChargeFeeInCents +
+            safeInsuranceFeeInCents +
+            safeDeliveryFeeInCents
       );
-   } else {
-      return Math.ceil(safeRateInCents + safeCustomsFeeInCents);
    }
+   return Math.ceil(
+      safeRateInCents + safeCustomsFeeInCents + safeChargeFeeInCents + safeInsuranceFeeInCents + safeDeliveryFeeInCents
+   );
 };
+
+// Helper function for calculating order total (matches invoice calculation)
+export function calculateOrderTotal(items: any[]): number {
+   return items.reduce((total, item) => {
+      const itemSubtotal = calculate_row_subtotal(
+         item.rate_in_cents || 0,
+         item.weight || 0,
+         item.customs_fee_in_cents || 0,
+         item.charge_fee_in_cents || 0,
+         item.insurance_fee_in_cents || 0,
+         item.delivery_fee_in_cents || 0,
+         (item.rate_type || RateType.WEIGHT) as string
+      );
+      return total + itemSubtotal;
+   }, 0);
+}

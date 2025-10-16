@@ -1,14 +1,14 @@
 import { Router, Request, Response } from "express";
 import prisma from "../config/prisma_db";
-import receivers_db from "../repository/receivers.repository";
+import receivers_db from "../repositories/receivers.repository";
 import { generateInvoicePDF } from "../utils/generate-invoice-pdf";
 import { RateType, Roles, PaymentStatus, InvoiceStatus, InvoiceEventType } from "@prisma/client";
 // Removed unused imports for shipping labels
-import { generateCTEnviosLabels, generateBulkCTEnviosLabels } from "../utils/generate-shipping-labels-ctenvios";
+import { generateCTEnviosLabels, generateBulkCTEnviosLabels } from "../utils/generate-labels-pdf";
 import { z } from "zod";
 import AppError from "../utils/app.error";
-import { createInvoiceHistoryExtension } from "../middlewares/invoice-middleware";
-import { authMiddleware } from "../middlewares/auth-midleware";
+import { createInvoiceHistoryExtension } from "../middlewares/invoice.middleware";
+import { authMiddleware } from "../middlewares/auth.middleware";
 import { calculatePaymentStatus } from "../utils/rename-invoice-changes";
 import { calculate_row_subtotal } from "../utils/utils";
 
@@ -26,14 +26,14 @@ const invoiceItemSchema = z.object({
    rate_id: z.number().positive().optional(),
    customs_id: z.number().optional(),
    product_id: z.number().positive().optional(),
-   cost_in_cents: z.number().min(0).optional().default(0),
+   cost_in_cents: z.number().min(0).optional().default(0), // 🔒 Backend resolves from rate_id
    charge_fee_in_cents: z.number().min(0).optional().default(0),
    delivery_fee_in_cents: z.number().min(0).optional().default(0),
    weight: z.number().positive(),
-   rate_in_cents: z.number().min(0),
+   rate_in_cents: z.number().min(0).optional().default(0), // 🔒 Backend resolves from rate_id
    customs_fee_in_cents: z.number().min(0).optional().default(0),
    insurance_fee_in_cents: z.number().min(0).optional().default(0),
-   rate_type: z.nativeEnum(RateType).optional(),
+   rate_type: z.nativeEnum(RateType).optional(), // 🔒 Backend resolves from rate_id
 });
 
 const newInvoiceSchema = z.object({
@@ -78,7 +78,97 @@ const bulkLabelsSchema = z.object({
 
 const router = Router();
 
-router.get("/", async (req, res) => {
+function parseDateFlexible(dateStr: string): Date | null {
+   if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
+      const d = new Date(dateStr);
+      return isNaN(d.getTime()) ? null : d;
+   }
+   if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
+      const [day, month, year] = dateStr.split("/");
+      const d = new Date(`${year}-${month}-${day}T00:00:00`);
+      return isNaN(d.getTime()) ? null : d;
+   }
+   return null;
+}
+
+function buildNameSearchFilter(words: string[]) {
+   return {
+      AND: words.map((w) => ({
+         OR: [
+            { first_name: { contains: w, mode: "insensitive" } },
+            { middle_name: { contains: w, mode: "insensitive" } },
+            { last_name: { contains: w, mode: "insensitive" } },
+            { second_last_name: { contains: w, mode: "insensitive" } },
+         ],
+      })),
+   };
+}
+
+function calculate_subtotal(items: any[]): number {
+   let total_in_cents = 0;
+   for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const itemSubtotal = calculate_row_subtotal(
+         item.rate_in_cents || 0,
+         item.weight || 0,
+         item.customs_fee_in_cents || 0,
+         item.charge_fee_in_cents || 0,
+         item.insurance_fee_in_cents || 0,
+         item.delivery_fee_in_cents || 0,
+         item.rate_type as RateType
+      );
+      total_in_cents += itemSubtotal;
+   }
+   return total_in_cents;
+}
+// 🚀 OPTIMIZACIÓN 3: Generacion HBL optimizada (sin retries innecesarios)
+async function generateHBLFast(agencyId: number, serviceId: number, cantidad: number): Promise<string[]> {
+   const today = new Date();
+   const todayOnlyDate = today.toISOString().slice(2, 10).replace(/-/g, "");
+
+   // Una sola transaccion, sin retries
+   const result = await prisma.$transaction(
+      async (tx) => {
+         const updatedCounter = await tx.counter.upsert({
+            where: {
+               date_agency_id: {
+                  agency_id: agencyId,
+                  date: todayOnlyDate,
+               },
+            },
+            create: {
+               agency_id: agencyId,
+               date: todayOnlyDate,
+               counter: cantidad,
+            },
+            update: {
+               counter: { increment: cantidad },
+            },
+            select: { counter: true },
+         });
+
+         const newSequence = updatedCounter.counter;
+         const start = newSequence - cantidad + 1;
+         const fecha = todayOnlyDate;
+         const agencia = agencyId.toString().padStart(2, "0");
+         const servicio = serviceId.toString().padStart(1, "0");
+
+         // Generacion inline (mas rapida que Array.from)
+         const codigos: string[] = [];
+         for (let i = 0; i < cantidad; i++) {
+            const secuencia = (start + i).toString().padStart(4, "0");
+            codigos.push(`CTE${fecha}${servicio}${agencia}${secuencia}`);
+         }
+
+         return codigos;
+      },
+      { timeout: 10000 }
+   ); // Timeout mas corto
+
+   return result;
+}
+
+router.get("/", authMiddleware, async (req, res) => {
    const { page, limit } = req.query;
    console.log(req.query, "req.query");
    const total = await prisma.invoice.count();
@@ -140,31 +230,6 @@ router.get("/", async (req, res) => {
    res.status(200).json({ rows, total });
 });
 
-function parseDateFlexible(dateStr: string): Date | null {
-   if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
-      const d = new Date(dateStr);
-      return isNaN(d.getTime()) ? null : d;
-   }
-   if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
-      const [day, month, year] = dateStr.split("/");
-      const d = new Date(`${year}-${month}-${day}T00:00:00`);
-      return isNaN(d.getTime()) ? null : d;
-   }
-   return null;
-}
-
-function buildNameSearchFilter(words: string[]) {
-   return {
-      AND: words.map((w) => ({
-         OR: [
-            { first_name: { contains: w, mode: "insensitive" } },
-            { middle_name: { contains: w, mode: "insensitive" } },
-            { last_name: { contains: w, mode: "insensitive" } },
-            { second_last_name: { contains: w, mode: "insensitive" } },
-         ],
-      })),
-   };
-}
 router.get("/search", authMiddleware, async (req: any, res) => {
    try {
       const user = req.user;
@@ -289,114 +354,67 @@ router.get("/search", authMiddleware, async (req: any, res) => {
    }
 });
 
-function calculate_subtotal(items: any[]): number {
-   let total_in_cents = 0;
-   console.log("on calculate_subtotal");
-   items.forEach((item) => {
-      const itemSubtotal = calculate_row_subtotal(
-         item.rate_in_cents || 0,
-         item.weight || 0,
-         item.customs_fee_in_cents || 0,
-         item.insurance_fee_in_cents || 0, // FIX: Correct parameter order
-         item.charge_fee_in_cents || 0, // FIX: Correct parameter order
-         item.rate_type || "WEIGHT"
-      );
-      total_in_cents += itemSubtotal;
-   });
-   console.log(total_in_cents, "total_in_cents");
-   console.log(total_in_cents, "total already in cents, no need to multiply");
-   return total_in_cents; // Return cents directly, no incorrect rounding
-}
-// 🚀 OPTIMIZACIÓN 3: Generacion HBL optimizada (sin retries innecesarios)
-async function generateHBLFast(agencyId: number, serviceId: number, cantidad: number): Promise<string[]> {
-   const today = new Date();
-   const todayOnlyDate = today.toISOString().slice(2, 10).replace(/-/g, "");
-
-   // Una sola transaccion, sin retries
-   const result = await prisma.$transaction(
-      async (tx) => {
-         const updatedCounter = await tx.counter.upsert({
-            where: {
-               date_agency_id: {
-                  agency_id: agencyId,
-                  date: todayOnlyDate,
-               },
-            },
-            create: {
-               agency_id: agencyId,
-               date: todayOnlyDate,
-               counter: cantidad,
-            },
-            update: {
-               counter: { increment: cantidad },
-            },
-            select: { counter: true },
-         });
-
-         const newSequence = updatedCounter.counter;
-         const start = newSequence - cantidad + 1;
-         const fecha = todayOnlyDate;
-         const agencia = agencyId.toString().padStart(2, "0");
-         const servicio = serviceId.toString().padStart(1, "0");
-
-         // Generacion inline (mas rapida que Array.from)
-         const codigos: string[] = [];
-         for (let i = 0; i < cantidad; i++) {
-            const secuencia = (start + i).toString().padStart(4, "0");
-            codigos.push(`CTE${fecha}${servicio}${agencia}${secuencia}`);
-         }
-
-         return codigos;
-      },
-      { timeout: 10000 }
-   ); // Timeout mas corto
-
-   return result;
-}
-
 // 🚀 OPTIMIZACIÓN 4: Endpoint principal optimizado
 router.post("/", authMiddleware, async (req: any, res) => {
    try {
       // Validacion rapida
       const user = req.user;
-      if (!user) {
-         return res.status(401).json({ message: "Unauthorized" });
+      const result = newInvoiceSchema.safeParse(req.body);
+      if (!result.success) return res.status(400).json({ message: "Validation error", errors: result.error.format() });
+      const { customer_id, receiver_id, service_id, items } = result.data;
+
+      // 🚀 OPTIMIZATION: Batch fetch all unique rates in parallel
+      const uniqueRateIds = [...new Set(items.map((item) => item.rate_id).filter(Boolean))];
+      const ratesMap = new Map();
+
+      if (uniqueRateIds.length > 0) {
+         const rates = await prisma.shippingRate.findMany({
+            where: { id: { in: uniqueRateIds as number[] } },
+            select: {
+               id: true,
+               rate_in_cents: true,
+               cost_in_cents: true,
+               rate_type: true,
+               is_active: true,
+            },
+         });
+
+         rates.forEach((rate) => {
+            ratesMap.set(rate.id, rate);
+         });
       }
 
-      const { customer_id, receiver_id, service_id, items } = newInvoiceSchema.parse(req.body);
-
-      /* 	//search rate for each item (get unique rate_ids to avoid duplicate queries)
-		const uniqueRateIds = [...new Set(items.map((item: any) => item.rate_id))];
-		const rates = await prisma.shippingRate.findMany({
-			select: { id: true, cost_in_cents: true, rate_type: true, is_base_rate: true },
-			where: {
-				id: { in: uniqueRateIds },
-			},
-		});
-
-		//map rates to items
-		const items_with_rates = items.map((item: any) => {
-			const rate = rates.find((rate: any) => rate.id === item.rate_id);
-			return { ...item, rate };
-		}); */
-
-      // 🚀 Usar total del frontend si existe, sino calcular rapido
-      const finalTotal = calculate_subtotal(items);
-
-      // 🚀 Generacion HBL optimizada
-      const totalItems = items.length; // Cada item = 1 HBL (simplificado)
+      // 🚀 Generacion HBL optimizada (movida antes del calculo para paralelizar)
+      const totalItems = items.length;
       const allHblCodes = await generateHBLFast(user.agency_id, service_id, totalItems);
 
-      // 🚀 Mapeo optimizado (sin .flat(), sin reduce)
-      const items_hbl: any[] = [];
+      // 🚀 Mapeo optimizado con pre-asignacion de array y rate resolution
+      const items_hbl: any[] = new Array(items.length);
       for (let i = 0; i < items.length; i++) {
          const item = items[i];
-         items_hbl.push({
+
+         // 🔒 SECURITY: Get rate information from database, not from frontend
+         const rate = item.rate_id ? ratesMap.get(item.rate_id) : null;
+
+         if (item.rate_id && !rate) {
+            return res.status(404).json({ message: `Rate with ID ${item.rate_id} not found` });
+         }
+
+         if (rate && !rate.is_active) {
+            return res.status(400).json({ message: `Rate with ID ${item.rate_id} is not active` });
+         }
+
+         // Use rate from database as source of truth
+         const rate_in_cents = rate?.rate_in_cents || 0;
+         const cost_in_cents = rate?.cost_in_cents || 0;
+         const rate_type = rate?.rate_type || RateType.WEIGHT;
+
+         items_hbl[i] = {
             hbl: allHblCodes[i],
             description: item.description,
-            base_rate_in_cents: item.rate_in_cents || 0,
-            rate_in_cents: item.rate_in_cents || 0,
-            cost_in_cents: item.cost_in_cents,
+            base_rate_in_cents: cost_in_cents,
+            rate_in_cents: rate_in_cents,
+            cost_in_cents: cost_in_cents,
             charge_fee_in_cents: item.charge_fee_in_cents || 0,
             delivery_fee_in_cents: item.delivery_fee_in_cents || 0,
             rate_id: item.rate_id,
@@ -406,7 +424,14 @@ router.post("/", authMiddleware, async (req: any, res) => {
             weight: item.weight,
             service_id,
             agency_id: user.agency_id,
-         });
+            rate_type: rate_type,
+         };
+      }
+
+      // 🚀 Calcular total despues del mapeo
+      const finalTotal = calculate_subtotal(items_hbl);
+      for (let i = 0; i < items_hbl.length; i++) {
+         delete items_hbl[i].rate_type;
       }
 
       // 🚀 Transaccion optimizada (sin timeout largo)
@@ -448,44 +473,230 @@ router.post("/", authMiddleware, async (req: any, res) => {
                   },
                   comment: "Invoice created",
                },
-               include: {
-                  invoice: true,
-               },
             });
 
             return invoice;
          },
-         { timeout: 15000 }
-      ); // Timeout reducido
+         { timeout: 12000 }
+      );
 
-      // 🚀 Receiver connection FUERA de la transaccion (async)
+      // 🚀 Receiver connection FUERA de la transaccion (async, non-blocking)
       receivers_db
          .connect(receiver_id, customer_id)
          .catch((err) => console.error("Receiver connection failed (non-critical):", err));
+
       res.status(200).json(transaction);
    } catch (error: any) {
-      console.error("Fast invoice creation error:", error);
+      console.error("Invoice creation error:", error);
 
       if (error instanceof z.ZodError) {
          return res.status(400).json({
+            status: "error",
             message: "Validation failed",
             errors: error.issues.map((issue) => ({
                path: issue.path.join("."),
                message: issue.message,
+               code: issue.code,
             })),
          });
       }
 
+      if (error instanceof AppError) {
+         return res.status(error.statusCode).json({
+            status: "error",
+            message: error.message,
+         });
+      }
+
       res.status(500).json({
+         status: "error",
          message: "Error creating invoice",
          error: error.message || error,
       });
    }
 });
 
+// ==========================================
+// IMPORTANT: Specific routes MUST come before generic /:id route
+// Otherwise Express will match /:id first and never reach specific routes
+// ==========================================
+
+router.get("/:id/history", authMiddleware, async (req, res) => {
+   const { id } = req.params;
+   if (!id)
+      res.status(401).send({
+         message: "The id is required",
+      });
+   const history = await prisma.invoiceHistory.findMany({
+      select: {
+         id: true,
+         invoice_id: true,
+         user_id: true,
+         status: true,
+         type: true,
+         comment: true,
+         created_at: true,
+         user: {
+            select: { name: true, email: true },
+         },
+      },
+
+      where: {
+         invoice_id: parseInt(id),
+      },
+      orderBy: {
+         created_at: "desc",
+      },
+   });
+
+   res.status(200).json(history);
+});
+
+// Generate PDF endpoint
+router.get("/:id/pdf", async (req, res) => {
+   try {
+      const { id } = req.params;
+
+      if (!id || isNaN(parseInt(id))) {
+         throw new AppError("Invalid invoice ID", 400);
+      }
+
+      // Fetch invoice with all required relations
+      const invoice = await prisma.order.findUnique({
+         where: { id: parseInt(id) },
+         include: {
+            customer: true,
+            receiver: {
+               include: {
+                  province: true,
+                  city: true,
+               },
+            },
+            agency: true,
+            service: true,
+            items: {
+               include: {
+                  rate: {
+                     select: {
+                        rate_type: true,
+                     },
+                  },
+               },
+               orderBy: { hbl: "asc" },
+            },
+         },
+      });
+
+      if (!invoice) {
+         throw new AppError("Invoice not found", 404);
+      }
+
+      // Convert Decimal fields to numbers for PDF generation
+      const invoiceForPDF = {
+         ...invoice,
+      };
+
+      // Generate PDF
+      const doc = await generateInvoicePDF(invoiceForPDF);
+
+      // Set response headers for PDF
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `inline; filename="invoice-${invoice.id}.pdf"`);
+
+      // Pipe the PDF to response
+      doc.pipe(res);
+      doc.end();
+   } catch (error) {
+      console.error("PDF generation error:", error);
+
+      if (error instanceof AppError) {
+         res.status(error.statusCode).json({
+            status: "error",
+            message: error.message,
+         });
+      } else {
+         res.status(500).json({
+            status: "error",
+            message: "Error generating PDF",
+            error: process.env.NODE_ENV === "development" ? error : undefined,
+         });
+      }
+   }
+});
+
+router.get("/:id/labels/", async (req, res) => {
+   try {
+      const { id } = req.params;
+
+      if (!id || isNaN(parseInt(id))) {
+         throw new AppError("Invalid invoice ID", 400);
+      }
+
+      // Fetch invoice with all required relations
+      const invoice = await prisma.order.findUnique({
+         where: { id: parseInt(id) },
+         include: {
+            customer: true,
+            receiver: {
+               include: {
+                  province: true,
+                  city: true,
+               },
+            },
+
+            agency: true,
+            service: {
+               include: {
+                  provider: true,
+                  forwarder: true,
+               },
+            },
+            items: {
+               orderBy: { hbl: "asc" },
+            },
+         },
+      });
+
+      if (!invoice) {
+         throw new AppError("Invoice not found", 404);
+      }
+
+      if (!invoice.items || invoice.items.length === 0) {
+         throw new AppError("No items found for this invoice", 400);
+      }
+
+      // Generate CTEnvios labels
+      const doc = await generateCTEnviosLabels(invoice);
+
+      // Set response headers for PDF to open in browser (inline)
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `inline; filename="ctenvios-labels-${invoice.id}.pdf"`);
+
+      // Pipe the PDF to response
+      doc.pipe(res);
+      doc.end();
+   } catch (error) {
+      console.error("label generation error:", error);
+
+      if (error instanceof AppError) {
+         res.status(error.statusCode).json({
+            status: "error",
+            message: error.message,
+         });
+      } else {
+         res.status(500).json({
+            status: "error",
+            message: "Error generating labels",
+            error: process.env.NODE_ENV === "development" ? error : undefined,
+         });
+      }
+   }
+});
+
+// Generic /:id route - MUST come after all specific routes
 router.get("/:id", authMiddleware, async (req: any, res) => {
    const { id } = req.params;
-   const rows = await prisma.invoice.findUnique({
+   const rows = await prisma.order.findUnique({
       where: { id: parseInt(id) },
       include: {
          customer: true,
@@ -532,42 +743,12 @@ router.get("/:id", authMiddleware, async (req: any, res) => {
    res.status(200).json({ rows: rows ? [rows] : [], total: rows ? 1 : 0 });
 });
 
-router.get("/:id/history", authMiddleware, async (req, res) => {
+router.delete("/:id", authMiddleware, async (req, res) => {
    const { id } = req.params;
-   if (!id)
-      res.status(401).send({
-         message: "The id is required",
-      });
-   const history = await prisma.invoiceHistory.findMany({
-      select: {
-         id: true,
-         invoice_id: true,
-         user_id: true,
-         status: true,
-         type: true,
-         comment: true,
-         created_at: true,
-         user: {
-            select: { name: true, email: true },
-         },
-      },
-
-      where: {
-         invoice_id: parseInt(id),
-      },
-      orderBy: {
-         created_at: "desc",
-      },
-   });
-
-   res.status(200).json(history);
-});
-router.delete("/:id", async (req, res) => {
-   const { id } = req.params;
-   const invoice = await prisma.invoice.delete({
+   const order = await prisma.order.delete({
       where: { id: parseInt(id) },
    });
-   res.status(200).json(invoice);
+   res.status(200).json(order);
 });
 
 router.put("/:id", async (req, res) => {
@@ -825,203 +1006,6 @@ router.put("/:id", async (req, res) => {
          error: "Internal Server Error",
          message: "An unexpected error occurred while validating the request.",
       });
-   }
-});
-
-// Get invoice change history - useful for checking sender/receiver changes
-router.get("/:id/history", async (req, res) => {
-   const { id } = req.params;
-
-   try {
-      const history = await prisma.invoiceHistory.findMany({
-         where: { invoice_id: parseInt(id) },
-         include: {
-            user: {
-               select: {
-                  name: true,
-                  email: true,
-               },
-            },
-         },
-         orderBy: { created_at: "desc" },
-      });
-
-      // Parse and format the history for easier consumption
-      const formattedHistory = history.map((record) => {
-         const changes = record.changed_fields as any;
-
-         // Check if sender (customer) changed
-         const senderChanged = changes.customer_id
-            ? {
-                 from: changes.customer_id.from,
-                 to: changes.customer_id.to,
-              }
-            : null;
-
-         // Check if receiver changed
-         const receiverChanged = changes.receiver_id
-            ? {
-                 from: changes.receiver_id.from,
-                 to: changes.receiver_id.to,
-              }
-            : null;
-
-         return {
-            id: record.id,
-            timestamp: record.created_at,
-            user: record.user,
-            comment: record.comment,
-            senderChanged,
-            receiverChanged,
-            allChanges: changes,
-         };
-      });
-
-      res.status(200).json(formattedHistory);
-   } catch (error) {
-      console.error("Error fetching invoice history:", error);
-      res.status(500).json({ error: "Failed to fetch invoice history" });
-   }
-});
-
-// Generate PDF endpoint
-router.get("/:id/pdf", async (req, res) => {
-   try {
-      const { id } = req.params;
-
-      if (!id || isNaN(parseInt(id))) {
-         throw new AppError("Invalid invoice ID", 400);
-      }
-
-      // Fetch invoice with all required relations
-      const invoice = await prisma.invoice.findUnique({
-         where: { id: parseInt(id) },
-         include: {
-            customer: true,
-            receiver: {
-               include: {
-                  province: true,
-                  city: true,
-               },
-            },
-            agency: true,
-            service: true,
-            items: {
-               include: {
-                  rate: {
-                     select: {
-                        rate_type: true,
-                     },
-                  },
-               },
-               orderBy: { hbl: "asc" },
-            },
-         },
-      });
-
-      if (!invoice) {
-         throw new AppError("Invoice not found", 404);
-      }
-
-      // Convert Decimal fields to numbers for PDF generation
-      const invoiceForPDF = {
-         ...invoice,
-      };
-
-      // Generate PDF
-      const doc = await generateInvoicePDF(invoiceForPDF);
-
-      // Set response headers for PDF
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `inline; filename="invoice-${invoice.id}.pdf"`);
-
-      // Pipe the PDF to response
-      doc.pipe(res);
-      doc.end();
-   } catch (error) {
-      console.error("PDF generation error:", error);
-
-      if (error instanceof AppError) {
-         res.status(error.statusCode).json({
-            status: "error",
-            message: error.message,
-         });
-      } else {
-         res.status(500).json({
-            status: "error",
-            message: "Error generating PDF",
-            error: process.env.NODE_ENV === "development" ? error : undefined,
-         });
-      }
-   }
-});
-
-router.get("/:id/labels/", async (req, res) => {
-   try {
-      const { id } = req.params;
-
-      if (!id || isNaN(parseInt(id))) {
-         throw new AppError("Invalid invoice ID", 400);
-      }
-
-      // Fetch invoice with all required relations
-      const invoice = await prisma.invoice.findUnique({
-         where: { id: parseInt(id) },
-         include: {
-            customer: true,
-            receiver: {
-               include: {
-                  province: true,
-                  city: true,
-               },
-            },
-
-            agency: true,
-            service: {
-               include: {
-                  provider: true,
-                  forwarder: true,
-               },
-            },
-            items: {
-               orderBy: { hbl: "asc" },
-            },
-         },
-      });
-
-      if (!invoice) {
-         throw new AppError("Invoice not found", 404);
-      }
-
-      if (!invoice.items || invoice.items.length === 0) {
-         throw new AppError("No items found for this invoice", 400);
-      }
-
-      // Generate CTEnvios labels
-      const doc = await generateCTEnviosLabels(invoice);
-
-      // Set response headers for PDF to open in browser (inline)
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `inline; filename="ctenvios-labels-${invoice.id}.pdf"`);
-
-      // Pipe the PDF to response
-      doc.pipe(res);
-      doc.end();
-   } catch (error) {
-      console.error("label generation error:", error);
-
-      if (error instanceof AppError) {
-         res.status(error.statusCode).json({
-            status: "error",
-            message: error.message,
-         });
-      } else {
-         res.status(500).json({
-            status: "error",
-            message: "Error generating labels",
-            error: process.env.NODE_ENV === "development" ? error : undefined,
-         });
-      }
    }
 });
 

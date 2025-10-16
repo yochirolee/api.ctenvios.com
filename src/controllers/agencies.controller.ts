@@ -1,12 +1,12 @@
 import { Request, Response } from "express";
 import { z } from "zod";
-import { AgencyType, Prisma, Roles, ShippingRate } from "@prisma/client";
+import { AgencyType, Prisma, Roles } from "@prisma/client";
 import AppError from "../utils/app.error";
 
 import { agencySchema } from "../types/types";
-import repository from "../repository";
+import repository from "../repositories";
 import prisma from "../config/prisma_db";
-import { auth } from "../lib/auth";
+import { auth } from "../lib/auth.lib";
 
 // Create update schema by making all fields optional
 const agencyUpdateSchema = agencySchema.partial();
@@ -71,13 +71,16 @@ const agencies = {
       const current_user = req.user;
       const permited_roles = [Roles.ROOT, Roles.ADMINISTRATOR, Roles.AGENCY_ADMIN];
       if (!permited_roles.includes(current_user.role)) {
-         return res.status(403).json({ message: "You are not authorized to create agencies" });
+         return res.status(403).json({ error: "You are not authorized to create agencies" });
       }
       const current_agency = await prisma.agency.findUnique({
          where: { id: current_user.agency_id },
       });
-      if (!current_agency || current_agency?.agency_type !== AgencyType.FORWARDER) {
-         return res.status(404).json({ message: "This can not create an agency" });
+      if (
+         !current_agency ||
+         (current_agency.agency_type !== AgencyType.FORWARDER && current_agency.agency_type !== AgencyType.RESELLER)
+      ) {
+         return res.status(404).json({ error: "This can not create an agency" });
       }
       const result = create_agency_schema.safeParse(req.body);
       if (!result.success) {
@@ -113,90 +116,119 @@ const agencies = {
          agency.parent_agency_id = undefined;
       }
 
+      // Determine parent agency (from input or current user's agency)
+      const parent_agency_id = agency.parent_agency_id || current_user.agency_id;
+
+      // Validate parent agency exists and get its basic info
       const parent_agency = await prisma.agency.findUnique({
-         where: {
-            id: agency.parent_agency_id || current_user.agency_id,
-         },
-         include: {
-            shipping_rates: true,
+         where: { id: parent_agency_id },
+         select: {
+            id: true,
+            forwarder_id: true,
+            agency_type: true,
          },
       });
 
-      if (!parent_agency?.shipping_rates) {
-         throw new AppError("Parent agency has no rates", 400, [], "zod");
+      if (!parent_agency) {
+         return res.status(404).json({ error: "Parent agency not found" });
       }
 
-      const services_ids = parent_agency?.shipping_rates
-         .filter(
-            (shipping_rate, index, self) => index === self.findIndex((t) => t.service_id === shipping_rate.service_id)
-         )
-         .map((shipping_rate) => shipping_rate.service_id)
-         .filter((id): id is number => id !== null);
+      // Get services from parent agency's rates to connect to new agency
+      const parent_rates = await prisma.shippingRate.findMany({
+         where: { agency_id: parent_agency.id },
+         select: { service_id: true },
+         distinct: ["service_id"],
+      });
 
-      try {
-         const agency_created = await prisma.$transaction(async (tx) => {
-            const created_agency = await tx.agency.create({
-               data: {
-                  ...agency,
-                  parent_agency_id: parent_agency?.id,
-                  forwarder_id: parent_agency?.forwarder_id || 1,
-                  services: {
-                     connect: services_ids.map((service_id) => ({
-                        id: service_id,
-                     })),
-                  },
-               },
-            });
-            await tx.shippingRate.createMany({
-               data: parent_agency?.shipping_rates.map((shipping_rate: ShippingRate) => ({
-                  cost_in_cents: shipping_rate.cost_in_cents,
-                  rate_in_cents: shipping_rate.rate_in_cents,
-                  service_id: shipping_rate.service_id,
-                  name: shipping_rate.name,
-                  description: shipping_rate.description,
-                  rate_type: shipping_rate.rate_type,
-                  min_weight: shipping_rate.min_weight,
-                  max_weight: shipping_rate.max_weight,
-                  is_base_rate: false,
-                  length: shipping_rate.length,
-                  width: shipping_rate.width,
-                  height: shipping_rate.height,
-                  forwarder_id: shipping_rate.forwarder_id,
-                  agency_id: created_agency.id,
-                  parent_rate_id: shipping_rate.parent_rate_id,
-               })),
-            });
-
-            // Create user using signup API instead of admin API
-            await auth.api.signUpEmail({
-               body: {
-                  email: user.email,
-                  password: user.password,
-                  name: user.name,
-               },
-            });
-
-            // Update the created user with additional fields
-            await tx.user.update({
-               where: { email: user.email },
-               data: {
-                  agency_id: created_agency.id,
-                  role: user.role,
-                  phone: user.phone,
-                  emailVerified: true,
-                  created_by: current_user.email,
-               },
-            });
-
-            return created_agency;
+      // ✅ Validate parent has rates before creating child agency
+      if (parent_rates.length === 0) {
+         return res.status(400).json({
+            error: "Parent agency has no rates configured. Cannot create child agency.",
+            parent_agency_id: parent_agency.id,
          });
+      }
 
-         res.status(201).json(agency_created);
+      const services_ids = parent_rates.map((rate) => rate.service_id).filter((id): id is number => id !== null);
+
+      // Step 1: Create user in auth system (outside transaction - cannot rollback HTTP calls)
+      try {
+         await auth.api.signUpEmail({
+            body: {
+               email: user.email,
+               password: user.password,
+               name: user.name,
+            },
+         });
       } catch (error) {
-         console.error("Error creating agency:", error);
-         res.status(500).json({
-            message: "Error creating agency",
-            error: error,
+         console.error("Error creating user in auth system:", error);
+         return res.status(500).json({
+            message: "Error creating user in authentication system",
+            error: error instanceof Error ? error.message : "Unknown error",
+         });
+      }
+
+      // Step 2: Create agency, rates, and link user in ONE atomic transaction
+      try {
+         const result = await prisma.$transaction(
+            async (tx) => {
+               // 1. Create the agency
+               const created_agency = await tx.agency.create({
+                  data: {
+                     ...agency,
+                     parent_agency_id: parent_agency.id,
+                     forwarder_id: parent_agency.forwarder_id,
+                     services: {
+                        connect: services_ids.map((service_id) => ({ id: service_id })),
+                     },
+                  },
+               });
+
+               // 2. Create rates for the new agency (within same transaction)
+               const ratesResult = await repository.shippingRates.createRatesForNewAgency(
+                  created_agency.id,
+                  created_agency.parent_agency_id,
+                  created_agency.forwarder_id,
+                  created_agency.commission_rate || 0,
+                  tx // ✅ Pass transaction context
+               );
+
+               // 3. Link user in our database with agency relationship
+               await tx.user.update({
+                  where: { email: user.email },
+                  data: {
+                     agency_id: created_agency.id,
+                     role: user.role,
+                     phone: user.phone,
+                     emailVerified: true,
+                     created_by: current_user.email,
+                  },
+               });
+
+               return {
+                  agency: created_agency,
+                  rates_created: ratesResult.createdRates.length,
+               };
+            },
+            {
+               maxWait: 10000, // 10 seconds max wait to start transaction
+               timeout: 30000, // 30 seconds max transaction time
+            }
+         );
+
+         console.log(`✅ Agency created with ${result.rates_created} inherited rates (inactive)`);
+
+         res.status(201).json({
+            ...result,
+            message: "Agency created successfully with inherited rates (inactive by default)",
+         });
+      } catch (error) {
+         console.error("Error in agency creation transaction:", error);
+         return res.status(500).json({
+            message:
+               "Error creating agency. User was created in auth system but agency/rates creation failed. Please contact support.",
+            error: error instanceof Error ? error.message : "Unknown error",
+            user_email: user.email,
+            note: "You may need to manually clean up the auth user or retry agency creation.",
          });
       }
    },
@@ -232,17 +264,18 @@ const agencies = {
       const parent = await repository.agencies.getParent(Number(id));
       res.status(200).json(parent);
    },
-   getServicesWithRates: async (req: Request, res: Response) => {
+   getActivesServicesRates: async (req: Request, res: Response) => {
       const { id } = req.params;
-      const { is_active } = req.query;
-      const isActiveBoolean =
-         is_active === undefined ? undefined : is_active === "true" ? true : is_active === "false" ? false : undefined;
-      const servicesAndRates = await repository.agencies.getServicesWithRates(
-         Number(id),
-         isActiveBoolean as boolean | null
-      );
+      const services = await repository.agencies.getActivesServicesRates(Number(id));
 
-      res.status(200).json(servicesAndRates);
+      res.status(200).json(services);
+   },
+   //por ahora no se usa pero se deja para futuras implementaciones
+   getActivesShippingRates: async (req: Request, res: Response) => {
+      const { id, service_id } = req.params;
+
+      const shipping_rates = await repository.agencies.getActivesShippingRates(Number(id), Number(service_id));
+      res.status(200).json(shipping_rates);
    },
 };
 
