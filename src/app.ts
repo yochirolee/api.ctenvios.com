@@ -7,14 +7,13 @@ import morgan from "morgan";
 import compression from "compression";
 
 const app: Application = express();
-// Mount BetterAuth handler BEFORE express.json() middleware
 
 app.use(
    cors({
       origin: [
          "http://localhost:5173",
          "http://localhost:3000",
-         "https://api-ctenvios-com.vercel.app/api/v1/",
+         "https://api-ctenvios-com.vercel.app",
          "https://dev.ctenvios.com",
       ],
       methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -22,16 +21,21 @@ app.use(
       credentials: true,
    })
 );
-//middleware betterAuth
 
-//app.use("/api/auth/{*any}", toNodeHandler(auth));
 app.use(express.json());
 app.use(helmet());
 app.use(morgan("dev"));
 app.use(compression());
 app.use(express.urlencoded({ extended: true }));
+
+// Health check endpoint
+app.get("/", (req, res) => {
+   res.json({ status: "ok", message: "API is running" });
+});
+
 app.use("/api/v1/", router);
-// Add error handler
+
+// Add error handler (MUST be last)
 app.use(errorMiddleware);
 
 export default app;

@@ -2,20 +2,20 @@ import app from "./app";
 
 const PORT = process.env.PORT || 3000;
 
-const startServer = async () => {
-	app.listen(PORT, () => {
-		console.log(`Server is running on port ${PORT}`);
-	});
-};
+// Solo se ejecuta en desarrollo local, NO en Vercel
+if (process.env.NODE_ENV !== "production") {
+   app.listen(PORT, () => {
+      console.log(`🚀 Server running on http://localhost:${PORT}`);
+   });
+}
 
 process.on("unhandledRejection", (reason, promise) => {
-	console.log("Unhandled Rejection at:", promise, "reason:", reason);
+   console.error("Unhandled Rejection at:", promise, "reason:", reason);
 });
 
 process.on("uncaughtException", (error) => {
-	console.log("Uncaught Exception:", error);
+   console.error("Uncaught Exception:", error);
+   process.exit(1);
 });
-
-startServer();
 
 export default app;
