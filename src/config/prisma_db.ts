@@ -3,8 +3,8 @@ import { PrismaClient } from "@prisma/client";
 // Creating a singleton pattern to prevent multiple instances during development
 // This helps avoid connection issues during hot reloading
 declare global {
-	// eslint-disable-next-line no-var
-	var prisma: PrismaClient | undefined;
+   // eslint-disable-next-line no-var
+   var prisma: PrismaClient | undefined;
 }
 
 /**
@@ -14,17 +14,19 @@ declare global {
  * run: npx prisma generate
  */
 const prisma: PrismaClient =
-	global.prisma ||
-	new PrismaClient({
-		transactionOptions: {
-			maxWait: 10000, // 10 seconds to wait for transaction to start
-			timeout: 30000, // 30 seconds for transaction to complete
-		},
-	});
+   global.prisma ||
+   new PrismaClient({
+      log: process.env.NODE_ENV === "production" ? ["error", "warn"] : ["query", "error", "warn"],
+      transactionOptions: {
+         maxWait: 10000, // 10 seconds to wait for transaction to start
+         timeout: 30000, // 30 seconds for transaction to complete
+      },
+      errorFormat: "pretty",
+   });
 
 // Save reference to global in development
 if (process.env.NODE_ENV !== "production") {
-	global.prisma = prisma;
+   global.prisma = prisma;
 }
 
 export default prisma;

@@ -240,7 +240,8 @@ const agencies = {
       if (!agency) {
          throw new AppError("Agency not found", 404, [], "zod");
       }
-      const getActives = agency.agency_type === AgencyType.FORWARDER || agency.agency_type === AgencyType.RESELLER ? true : false;
+      const getActives =
+         agency.agency_type === AgencyType.FORWARDER || agency.agency_type === AgencyType.RESELLER ? true : false;
 
       const services = await repository.services.getByAgencyId(Number(id), getActives);
 
@@ -260,8 +261,6 @@ const agencies = {
             }),
          };
       });
-
-      console.log(services_with_rates);
 
       res.status(200).json(services_with_rates);
    },

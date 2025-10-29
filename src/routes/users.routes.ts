@@ -143,8 +143,16 @@ router.post("/sign-in/email", async (req, res) => {
       const session = await auth.api.getSession({
          headers: sessionHeaders,
       });
+      const agency = await prisma.agency.findUnique({
+         where: {
+            id: session?.user.agency_id ?? 0,
+         },
+      });
 
-      res.status(200).json(session);
+      res.status(200).json({
+         ...session,
+         agency,
+      });
    } catch (error) {
       console.error("Sign-in error:", error);
       res.status(500).json({
