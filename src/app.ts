@@ -15,7 +15,7 @@ app.use(
          "http://localhost:5173",
          "http://localhost:3000",
          "https://api-ctenvios-com.vercel.app/api/v1/",
-         "https://dashboard-ctenvios-com-git-main-yoshos-projects.vercel.app",
+         "https://dev.ctenvios.com",
       ],
       methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
       allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"],
