@@ -32,57 +32,6 @@ export const agencies = {
       return users;
    },
 
-   getActivesServicesRates: async (id: number) => {
-      const services = await prisma.service.findMany({
-         select: {
-            id: true,
-            name: true,
-            service_type: true,
-            is_active: true,
-            provider: {
-               select: {
-                  id: true,
-                  name: true,
-               },
-            },
-            shipping_rates: {
-               select: {
-                  id: true,
-                  name: true,
-                  description: true,
-                  rate_in_cents: true,
-                  cost_in_cents: true,
-                  rate_type: true,
-                  is_active: true,
-                  min_weight: true,
-                  max_weight: true,
-               },
-               where: { is_active: true, agency_id: id },
-               orderBy: { id: "asc" },
-            },
-         },
-         where: { agencies: { some: { id } } },
-      });
-      return services;
-   },
-
-   //por ahora no se usa pero se deja para futuras implementaciones
-   getActivesShippingRates: async (id: number, service_id: number) => {
-      const shipping_rates = await prisma.shippingRate.findMany({
-         select: {
-            id: true,
-            name: true,
-            description: true,
-            rate_in_cents: true,
-            cost_in_cents: true,
-            rate_type: true,
-            is_active: true,
-         },
-         orderBy: { id: "asc" },
-         where: { agency_id: id, service_id: service_id, is_active: true },
-      });
-      return shipping_rates;
-   },
 
    update: async (id: number, agency: Prisma.AgencyUpdateInput) => {
       const updatedAgency = await prisma.agency.update({

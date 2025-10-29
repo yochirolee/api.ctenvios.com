@@ -2,9 +2,9 @@ import PDFKit from "pdfkit";
 import * as bwipjs from "bwip-js";
 import { promises as fs } from "fs";
 import * as path from "path";
-import { Order, Customer, Receiver, Agency, Service, Item, RateType } from "@prisma/client";
+import { Order, Customer, Receiver, Agency, Service, Item, Unit } from "@prisma/client";
 import { formatName } from "./capitalize";
-import { calculate_row_subtotal, centsToDollars, formatCents } from "./utils";
+import { calculate_row_subtotal, formatCents } from "./utils";
 
 interface OrderWithRelations extends Order {
    customer: Customer;
@@ -15,14 +15,9 @@ interface OrderWithRelations extends Order {
    total_in_cents: number;
    paid_in_cents: number;
    charge_in_cents: number;
-
    agency: Agency;
    service: Service;
-   items: (Item & {
-      rate: {
-         rate_type: string;
-      };
-   })[];
+   items: Item[];
 }
 
 // Pre-calculate all financial totals //have to move this to the utils
@@ -31,13 +26,12 @@ function calculateInvoiceTotals(order: OrderWithRelations) {
       (acc, item) =>
          acc +
          calculate_row_subtotal(
-            item.rate_in_cents,
+            item.price_in_cents,
             item.weight,
             item.customs_fee_in_cents,
             item.charge_fee_in_cents || 0,
             item.insurance_fee_in_cents || 0,
-            item.delivery_fee_in_cents || 0,
-            item.rate.rate_type as RateType
+            item.unit as Unit
          ),
       0
    );
@@ -66,10 +60,21 @@ function calculateInvoiceTotals(order: OrderWithRelations) {
 const logoCache = new Map<string, Buffer>();
 const barcodeCache = new Map<string, Buffer>();
 
-// Font and color constants to avoid repeated calls
+// Font paths
+const FONT_PATHS = {
+   REGULAR: path.join(process.cwd(), "assets", "fonts", "Inter-Regular.ttf"),
+   MEDIUM: path.join(process.cwd(), "assets", "fonts", "Inter-Medium.ttf"),
+   SEMIBOLD: path.join(process.cwd(), "assets", "fonts", "Inter-SemiBold.ttf"),
+   BOLD: path.join(process.cwd(), "assets", "fonts", "Inter-Bold.ttf"),
+} as const;
+
+// Font names (after registration)
 const FONTS = {
-   BOLD: "Helvetica-Bold",
-   NORMAL: "Helvetica",
+   REGULAR: "Inter-Regular",
+   MEDIUM: "Inter-Medium",
+   SEMIBOLD: "Inter-SemiBold",
+   BOLD: "Inter-Bold",
+   NORMAL: "Inter-Regular", // Alias for compatibility
 } as const;
 
 const COLORS = {
@@ -91,9 +96,23 @@ const LAYOUT = {
    FOOTER_Y: 710,
 } as const;
 
+// Register custom fonts with PDFKit
+function registerCustomFonts(doc: PDFKit.PDFDocument): void {
+   try {
+      doc.registerFont(FONTS.REGULAR, FONT_PATHS.REGULAR);
+      doc.registerFont(FONTS.MEDIUM, FONT_PATHS.MEDIUM);
+      doc.registerFont(FONTS.SEMIBOLD, FONT_PATHS.SEMIBOLD);
+      doc.registerFont(FONTS.BOLD, FONT_PATHS.BOLD);
+   } catch (error) {
+      console.warn("Failed to register custom fonts, falling back to Helvetica:", error);
+      // Fallback to default fonts if custom fonts fail to load
+   }
+}
+
 export const generateInvoicePDF = async (invoice: OrderWithRelations): Promise<PDFKit.PDFDocument> => {
    try {
       const doc = new PDFKit({ margin: 10, size: "letter" });
+      registerCustomFonts(doc);
       await generateOptimizedInvoice(doc, invoice);
       return doc;
    } catch (error) {
@@ -273,7 +292,7 @@ async function generatePageHeader(
    currentY += 60;
 
    // Company information
-   textStyle.style(FONTS.BOLD, 12, COLORS.BLACK).text(invoice.agency.name, 30, currentY);
+   textStyle.style(FONTS.SEMIBOLD, 12, COLORS.BLACK).text(invoice.agency.name, 30, currentY);
 
    currentY += 16;
 
@@ -283,7 +302,9 @@ async function generatePageHeader(
       .text(`Phone: ${invoice.agency.phone}`, 30, currentY + 12);
 
    // Right side information
-   textStyle.style(FONTS.BOLD, 16, COLORS.BLACK).text(`Invoice ${invoice.id}`, 450, 20, { align: "right", width: 122 });
+   textStyle
+      .style(FONTS.SEMIBOLD, 16, COLORS.BLACK)
+      .text(`Invoice ${invoice.id}`, 450, 20, { align: "right", width: 122 });
 
    textStyle
       .style(FONTS.NORMAL, 12, COLORS.BLACK)
@@ -356,7 +377,7 @@ function generateSenderRecipientInfo(
    let currentY = 115;
 
    // Left side - Sender information
-   textStyle.style(FONTS.BOLD, 10, COLORS.DARK_GRAY).text(formattedData.senderName, 40, currentY);
+   textStyle.style(FONTS.MEDIUM, 10, COLORS.DARK_GRAY).text(formattedData.senderName, 40, currentY);
 
    currentY += 14;
 
@@ -379,11 +400,13 @@ function generateSenderRecipientInfo(
    let recipientY = 117;
    const recipientFontSize = formattedData.recipientName.length > 25 ? 9 : 10;
 
-   textStyle.style(FONTS.BOLD, recipientFontSize, COLORS.DARK_GRAY).text(formattedData.recipientName, 320, recipientY, {
-      width: 250,
-      height: 16,
-      ellipsis: true,
-   });
+   textStyle
+      .style(FONTS.MEDIUM, recipientFontSize, COLORS.DARK_GRAY)
+      .text(formattedData.recipientName, 320, recipientY, {
+         width: 250,
+         height: 16,
+         ellipsis: true,
+      });
 
    recipientY += 14;
 
@@ -430,13 +453,12 @@ async function generateItemsTableOptimized(
       ...item,
       hbl: item.hbl || `CTE${String(invoice.id).padStart(6, "0")}${String(index + 1).padStart(6, "0")}`,
       subtotal_in_cents: calculate_row_subtotal(
-         item.rate_in_cents,
+         item.price_in_cents,
          item.weight,
          item.customs_fee_in_cents,
          item.charge_fee_in_cents || 0,
          item.insurance_fee_in_cents || 0,
-         item.delivery_fee_in_cents || 0,
-         item.rate.rate_type as RateType
+         item.unit as Unit
       ),
    }));
 
@@ -554,7 +576,7 @@ function renderTableRow(
          color: (item.customs_fee_in_cents || 0) === 0 ? COLORS.GRAY : COLORS.DARK_GRAY,
       },
       {
-         text: `${formatCents(item.rate_in_cents || 0)}`,
+         text: `${formatCents(item.price_in_cents || 0)}`,
          x: 430,
          y: verticalCenter,
          width: 40,
@@ -614,7 +636,7 @@ function renderTotalsSection(
    ];
 
    totals.forEach((total, index) => {
-      const font = total.bold ? FONTS.BOLD : FONTS.NORMAL;
+      const font = total.bold ? FONTS.SEMIBOLD : FONTS.NORMAL;
       const size = total.bold ? 10.5 : index >= totals.length - 2 ? 9 : 8.5;
 
       // Determine color: balance can be red, $0.00 values are gray, others are black
@@ -642,7 +664,7 @@ function addFooterToPage(
    const textStyle = new TextStyler(doc);
 
    // Tracking info
-   textStyle.style(FONTS.BOLD, 10, COLORS.BLUE).text(`Tracking: ${order.agency.website}`, 40, LAYOUT.FOOTER_Y, {
+   textStyle.style(FONTS.SEMIBOLD, 10, COLORS.BLUE).text(`Tracking: ${order.agency.website}`, 40, LAYOUT.FOOTER_Y, {
       align: "center",
       width: 532,
    });

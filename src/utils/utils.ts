@@ -1,4 +1,4 @@
-import { RateType } from "@prisma/client";
+import { Unit } from "@prisma/client";
 
 export function formatPhoneNumber(phoneNumber: string): string {
    return phoneNumber.replace(/^(\+535|535)?/, "");
@@ -69,46 +69,37 @@ export function formatCents(cents: number, locale: string = "en-US", currency: s
 }
 
 export const calculate_row_subtotal = (
-   rate_in_cents: number,
+   price_in_cents: number,
    weight: number,
    customs_fee_in_cents: number,
    charge_fee_in_cents: number,
    insurance_fee_in_cents: number,
-   delivery_fee_in_cents: number,
-   rate_type: string
+   unit: string
 ): number => {
-   const safeRateInCents = rate_in_cents || 0;
+   const safePriceInCents = price_in_cents || 0;
    const safeWeight = weight || 0;
    const safeCustomsFeeInCents = customs_fee_in_cents || 0;
    const safeChargeFeeInCents = charge_fee_in_cents || 0;
    const safeInsuranceFeeInCents = insurance_fee_in_cents || 0;
-   const safeDeliveryFeeInCents = delivery_fee_in_cents || 0;
 
-   if (rate_type === "WEIGHT") {
+   if (unit === "PER_LB") {
       return Math.ceil(
-         safeRateInCents * safeWeight +
-            safeCustomsFeeInCents +
-            safeChargeFeeInCents +
-            safeInsuranceFeeInCents +
-            safeDeliveryFeeInCents
+         safePriceInCents * safeWeight + safeCustomsFeeInCents + safeChargeFeeInCents + safeInsuranceFeeInCents
       );
    }
-   return Math.ceil(
-      safeRateInCents + safeCustomsFeeInCents + safeChargeFeeInCents + safeInsuranceFeeInCents + safeDeliveryFeeInCents
-   );
+   return Math.ceil(safePriceInCents + safeCustomsFeeInCents);
 };
 
 // Helper function for calculating order total (matches invoice calculation)
 export function calculateOrderTotal(items: any[]): number {
    return items.reduce((total, item) => {
       const itemSubtotal = calculate_row_subtotal(
-         item.rate_in_cents || 0,
+         item.price_in_cents || 0,
          item.weight || 0,
          item.customs_fee_in_cents || 0,
          item.charge_fee_in_cents || 0,
          item.insurance_fee_in_cents || 0,
-         item.delivery_fee_in_cents || 0,
-         (item.rate_type || RateType.WEIGHT) as string
+         (item.unit || Unit.PER_LB) as string
       );
       return total + itemSubtotal;
    }, 0);

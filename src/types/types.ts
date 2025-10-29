@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Request } from "express";
-import { AgencyType, FeeType, PaymentMethod, Roles } from "@prisma/client";
+import { AgencyType, FeeType, PaymentMethod, Roles, Unit } from "@prisma/client";
 
 // Role hierarchy types
 export interface RoleResponse {
@@ -61,6 +61,8 @@ export const ItemSchema = z.object({
       .min(1, "Item description cannot be empty."),
    weight: z.number({ required_error: "Item weight is required." }).positive("Item weight must be a positive number."),
    rate_id: z.number().positive(),
+   price_in_cents: z.number().positive(),
+   unit: z.nativeEnum(Unit).optional().default(Unit.PER_LB),
 });
 
 // Esquema para el objeto Customer cuando se envía completo
@@ -186,4 +188,18 @@ export function buildNameSearchFilter(words: string[]) {
          ],
       })),
    };
+}
+
+// Pricing Service Types
+export interface CreatePricingInput {
+   product_id: number;
+   service_id: number;
+   seller_agency_id: number;
+   buyer_agency_id: number;
+   cost_in_cents: number; // Goes to PricingAgreement.price_in_cents
+   price_in_cents: number; // Goes to ShippingRate.price_in_cents
+   name?: string;
+   min_weight?: number;
+   max_weight?: number;
+   is_active?: boolean;
 }

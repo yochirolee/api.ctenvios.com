@@ -42,8 +42,8 @@ export const ordersService = {
          service_id,
          agency_id,
       });
+      //calculate delivery fee for each item temporarily
       const finalTotal = calculateOrderTotal(items_hbl);
-      console.log("finalTotal", total_delivery_fee_in_cents);
       const item_delivery_fee = total_delivery_fee_in_cents ? total_delivery_fee_in_cents / items_hbl.length : 0;
 
       // 🚀 Remove rate_type before DB insert (matches invoice pattern)
@@ -89,8 +89,7 @@ export const ordersService = {
          }),
       ]);
 
-      // Resolve items with HBL codes (must happen after receiver resolution)
-
+    
       const orderData: Prisma.OrderUncheckedCreateInput = {
          customer_id: resolvedCustomer.id,
          receiver_id: resolvedReceiver.id,
@@ -210,7 +209,7 @@ export const ordersService = {
       const payment = await prisma.payment.findUnique({
          where: { id: payment_id },
          include: {
-            orders: true,
+            order: true,
          },
       });
 
@@ -220,8 +219,8 @@ export const ordersService = {
 
       // Calculate new totals after removing this payment
       const charge = payment.charge_in_cents || 0;
-      const newPaidAmount = payment.orders.paid_in_cents - payment.amount_in_cents - charge;
-      const newTotalAmount = payment.orders.total_in_cents - charge;
+      const newPaidAmount = payment.order.paid_in_cents - payment.amount_in_cents - charge;
+      const newTotalAmount = payment.order.total_in_cents - charge;
 
       // Determine new payment status
       let newPaymentStatus: PaymentStatus;

@@ -15,6 +15,11 @@ export const providers = {
       });
       return providers;
    },
+   create: async (provider: Omit<Provider, "id">) => {
+      return await prisma.provider.create({
+         data: provider,
+      });
+   },
 
    getById: async (id: number) => {
       const provider = await prisma.provider.findUnique({
@@ -22,26 +27,16 @@ export const providers = {
          include: {
             services: {
                include: {
-                  shipping_rates: {
-                     where: {
-                        is_base_rate: true,
-                     },
-                  },
+                  products: true,
                },
             },
          },
       });
       return provider;
    },
-   create: async (provider: Omit<Provider, "id">) => {
-      const newProvider = await prisma.provider.create({
-         data: provider,
-      });
-      return newProvider;
-   },
    update: async (id: number, provider: Omit<Provider, "id">) => {
       try {
-         const updatedProvider = await prisma.provider.update({
+         return await prisma.provider.update({
             where: { id },
             data: provider,
          });

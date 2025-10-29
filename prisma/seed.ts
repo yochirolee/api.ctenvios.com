@@ -1,5 +1,5 @@
 import { AgencyType, PrismaClient, Roles, CityType } from "@prisma/client";
-import { auth } from "../src/lib/auth.lib";
+import { auth } from "../src/lib/auth";
 import { customsRates, provincesWithCities } from "./seed.data";
 
 const prisma = new PrismaClient();
@@ -214,7 +214,7 @@ async function main(): Promise<void> {
       },
    ];
 
-   for (const rate of deliveryRates) {
+   /*    for (const rate of deliveryRates) {
       // Check if delivery rate exists
       const existingRate = await prisma.deliveryRate.findFirst({
          where: {
@@ -241,7 +241,7 @@ async function main(): Promise<void> {
       }
    }
    console.log(`✅ Delivery rates created: ${deliveryRates.length} total`);
-
+ */
    const session = await auth.api.signUpEmail({
       body: {
          email: "yleecruz@gmail.com",

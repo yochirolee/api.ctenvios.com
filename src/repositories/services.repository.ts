@@ -38,27 +38,50 @@ const services = {
          throw error;
       }
    },
-   getByAgencyId: async (agency_id: number) => {
+   getByAgencyId: async (agency_id: number,getActives: boolean = false) => {
+      
       const services = await prisma.service.findMany({
          select: {
             id: true,
             name: true,
             service_type: true,
-            provider: { select: { id: true, name: true } },
-            forwarder: { select: { id: true, name: true } },
+            is_active: true,
+            provider: {
+               select: {
+                  id: true,
+                  name: true,
+               },
+            },
             shipping_rates: {
                select: {
                   id: true,
-                  rate_in_cents: true,
-                  rate_type: true,
-                  min_weight: true,
-                  max_weight: true,
-                  length: true,
-                  width: true,
-                  height: true,
+                  name: true,
+                  price_in_cents: true,
+                  is_active: true,
+                  pricing_agreement: {
+                     select: {
+                        id: true,
+                        name: true,
+                        price_in_cents: true,
+                        product: {
+                           select: {
+                              id: true,
+                              name: true,
+                              description: true,
+                              unit: true,
+                           },
+                        },
+                     },
+                  },
+               },
+               where: {
+                  agency_id: agency_id,
                },
             },
          },
+
+         //if getActives is true, return only active services if false return all services
+         where: { is_active: getActives ? true : undefined },
       });
       return services;
    },
@@ -68,7 +91,7 @@ const services = {
          include: {
             provider: true,
             forwarder: true,
-            shipping_rates: true,
+            products: true,
          },
       });
       return services;

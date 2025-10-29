@@ -6,7 +6,8 @@ import AppError from "../utils/app.error";
 import { agencySchema } from "../types/types";
 import repository from "../repositories";
 import prisma from "../config/prisma_db";
-import { auth } from "../lib/auth.lib";
+import { auth } from "../lib/auth";
+import { pricingService } from "../services/pricing.service";
 
 // Create update schema by making all fields optional
 const agencyUpdateSchema = agencySchema.partial();
@@ -73,14 +74,14 @@ const agencies = {
       if (!permited_roles.includes(current_user.role)) {
          return res.status(403).json({ error: "You are not authorized to create agencies" });
       }
-      const current_agency = await prisma.agency.findUnique({
+      const parent_agency = await prisma.agency.findUnique({
          where: { id: current_user.agency_id },
       });
       if (
-         !current_agency ||
-         (current_agency.agency_type !== AgencyType.FORWARDER && current_agency.agency_type !== AgencyType.RESELLER)
+         !parent_agency ||
+         (parent_agency.agency_type !== AgencyType.FORWARDER && parent_agency.agency_type !== AgencyType.RESELLER)
       ) {
-         return res.status(404).json({ error: "This can not create an agency" });
+         return res.status(404).json({ error: "Agency not found or can not create a child agency" });
       }
       const result = create_agency_schema.safeParse(req.body);
       if (!result.success) {
@@ -110,125 +111,91 @@ const agencies = {
          });
       }
 
-      const { agency, user } = result.data;
+      const { agency: child_agency, user } = result.data;
 
-      if (agency.agency_type === AgencyType.FORWARDER) {
-         agency.parent_agency_id = undefined;
+      if (child_agency.agency_type === AgencyType.FORWARDER) {
+         child_agency.parent_agency_id = undefined;
       }
 
-      // Determine parent agency (from input or current user's agency)
-      const parent_agency_id = agency.parent_agency_id || current_user.agency_id;
+      // Find all services from parent agency with shipping_rates and pricing_agreements
+      const parent_services = await repository.services.getByAgencyId(parent_agency.id, false);
 
-      // Validate parent agency exists and get its basic info
-      const parent_agency = await prisma.agency.findUnique({
-         where: { id: parent_agency_id },
-         select: {
-            id: true,
-            forwarder_id: true,
-            agency_type: true,
+      const uniqueParentsServicesId = parent_services
+         .map((service) => service.id)
+         .filter((id): id is number => id !== null);
+
+      // Step 1: Create agency and connect services in transaction
+      let created_agency;
+      try {
+         created_agency = await prisma.agency.create({
+            data: {
+               ...child_agency,
+               parent_agency_id: parent_agency.id,
+               forwarder_id: parent_agency.forwarder_id,
+               services: {
+                  connect: uniqueParentsServicesId.map((service_id: number) => ({ id: service_id })),
+               },
+            },
+         });
+      } catch (error) {
+         console.error("Error creating agency:", error);
+         return res.status(500).json({
+            message: "Error creating agency",
+            error: error instanceof Error ? error.message : "Unknown error",
+         });
+      }
+      //create agency admin
+      const user_response = await auth.api.signUpEmail({
+         body: {
+            email: user.email,
+            password: user.password,
+            name: user.name,
+         },
+      });
+      if (!user_response.token) {
+         return res.status(400).json({ message: "User registration failed." });
+      }
+
+      // Update internal Prisma user record
+      await prisma.user.update({
+         where: { email: user.email },
+         data: {
+            agency_id: created_agency.id,
+            role: user.role,
          },
       });
 
-      if (!parent_agency) {
-         return res.status(404).json({ error: "Parent agency not found" });
-      }
+      // Step 2: Create pricing agreements and rates (outside main transaction to avoid nested transaction conflicts)
+      const rateCreationPromises = parent_services.flatMap((service) =>
+         service.shipping_rates.map((shipping_rate) =>
+            pricingService.createPricingWithRate({
+               product_id: shipping_rate.pricing_agreement.product.id,
+               service_id: service.id,
+               seller_agency_id: parent_agency.id,
+               buyer_agency_id: created_agency.id,
+               cost_in_cents: shipping_rate.pricing_agreement.price_in_cents,
+               price_in_cents: shipping_rate.price_in_cents,
+               name: shipping_rate.pricing_agreement.product.name,
+               is_active: shipping_rate.is_active,
+            })
+         )
+      );
 
-      // Get services from parent agency's rates to connect to new agency
-      const parent_rates = await prisma.shippingRate.findMany({
-         where: { agency_id: parent_agency.id },
-         select: { service_id: true },
-         distinct: ["service_id"],
-      });
-
-      // ✅ Validate parent has rates before creating child agency
-      if (parent_rates.length === 0) {
-         return res.status(400).json({
-            error: "Parent agency has no rates configured. Cannot create child agency.",
-            parent_agency_id: parent_agency.id,
-         });
-      }
-
-      const services_ids = parent_rates.map((rate) => rate.service_id).filter((id): id is number => id !== null);
-
-      // Step 1: Create user in auth system (outside transaction - cannot rollback HTTP calls)
       try {
-         await auth.api.signUpEmail({
-            body: {
-               email: user.email,
-               password: user.password,
-               name: user.name,
-            },
-         });
-      } catch (error) {
-         console.error("Error creating user in auth system:", error);
-         return res.status(500).json({
-            message: "Error creating user in authentication system",
-            error: error instanceof Error ? error.message : "Unknown error",
-         });
-      }
-
-      // Step 2: Create agency, rates, and link user in ONE atomic transaction
-      try {
-         const result = await prisma.$transaction(
-            async (tx) => {
-               // 1. Create the agency
-               const created_agency = await tx.agency.create({
-                  data: {
-                     ...agency,
-                     parent_agency_id: parent_agency.id,
-                     forwarder_id: parent_agency.forwarder_id,
-                     services: {
-                        connect: services_ids.map((service_id) => ({ id: service_id })),
-                     },
-                  },
-               });
-
-               // 2. Create rates for the new agency (within same transaction)
-               const ratesResult = await repository.shippingRates.createRatesForNewAgency(
-                  created_agency.id,
-                  created_agency.parent_agency_id,
-                  created_agency.forwarder_id,
-                  created_agency.commission_rate || 0,
-                  tx // ✅ Pass transaction context
-               );
-
-               // 3. Link user in our database with agency relationship
-               await tx.user.update({
-                  where: { email: user.email },
-                  data: {
-                     agency_id: created_agency.id,
-                     role: user.role,
-                     phone: user.phone,
-                     emailVerified: true,
-                     created_by: current_user.email,
-                  },
-               });
-
-               return {
-                  agency: created_agency,
-                  rates_created: ratesResult.createdRates.length,
-               };
-            },
-            {
-               maxWait: 10000, // 10 seconds max wait to start transaction
-               timeout: 30000, // 30 seconds max transaction time
-            }
-         );
-
-         console.log(`✅ Agency created with ${result.rates_created} inherited rates (inactive)`);
+         const rates_created = await Promise.all(rateCreationPromises);
 
          res.status(201).json({
-            ...result,
-            message: "Agency created successfully with inherited rates (inactive by default)",
+            agency: created_agency,
+            rates_created_count: rates_created.length,
+            message: "Agency and pricing agreements created successfully",
          });
       } catch (error) {
-         console.error("Error in agency creation transaction:", error);
+         console.error("Error creating pricing agreements:", error);
          return res.status(500).json({
             message:
-               "Error creating agency. User was created in auth system but agency/rates creation failed. Please contact support.",
+               "Agency created but some pricing agreements failed. Please review and create missing rates manually.",
             error: error instanceof Error ? error.message : "Unknown error",
-            user_email: user.email,
-            note: "You may need to manually clean up the auth user or retry agency creation.",
+            agency_id: created_agency.id,
          });
       }
    },
@@ -266,16 +233,37 @@ const agencies = {
    },
    getActivesServicesRates: async (req: Request, res: Response) => {
       const { id } = req.params;
-      const services = await repository.agencies.getActivesServicesRates(Number(id));
+      if (!id) {
+         throw new AppError("Agency ID is required", 400, [], "zod");
+      }
+      const agency = await repository.agencies.getById(Number(id));
+      if (!agency) {
+         throw new AppError("Agency not found", 404, [], "zod");
+      }
+      const getActives = agency.agency_type === AgencyType.FORWARDER || agency.agency_type === AgencyType.RESELLER ? true : false;
 
-      res.status(200).json(services);
-   },
-   //por ahora no se usa pero se deja para futuras implementaciones
-   getActivesShippingRates: async (req: Request, res: Response) => {
-      const { id, service_id } = req.params;
+      const services = await repository.services.getByAgencyId(Number(id), getActives);
 
-      const shipping_rates = await repository.agencies.getActivesShippingRates(Number(id), Number(service_id));
-      res.status(200).json(shipping_rates);
+      const services_with_rates = services.map((service) => {
+         return {
+            ...service,
+            shipping_rates: service.shipping_rates.map((rate) => {
+               return {
+                  id: rate.id,
+                  name: rate.pricing_agreement.product.name,
+                  description: rate.pricing_agreement.product.description,
+                  unit: rate.pricing_agreement.product.unit,
+                  price_in_cents: rate.price_in_cents,
+                  cost_in_cents: rate.pricing_agreement.price_in_cents,
+                  is_active: rate.is_active,
+               };
+            }),
+         };
+      });
+
+      console.log(services_with_rates);
+
+      res.status(200).json(services_with_rates);
    },
 };
 

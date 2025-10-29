@@ -7,7 +7,6 @@ import provinces from "./provinces.repository";
 import receivers from "./receivers.repository";
 import customsRates from "./customs.rates.repository";
 import { analytics } from "./analytics.repository";
-import shippingRates from "./shipping.rates.repository";
 import partners from "./partners.repository";
 import orders from "./orders.repository";
 import payments from "./payments.repository";
@@ -22,7 +21,6 @@ export const repository = {
    receivers,
    customsRates,
    analytics,
-   shippingRates,
    partners,
    orders,
    payments,

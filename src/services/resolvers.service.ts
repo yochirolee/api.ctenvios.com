@@ -195,64 +195,19 @@ export const resolvers = {
       agency_id: number;
    }): Promise<any[]> => {
       // 🚀 OPTIMIZATION: Extract unique rate IDs efficiently (single pass, no intermediate arrays)
-      const uniqueRateIds: number[] = [];
-      const seenRates = new Set<number>();
-
-      for (let i = 0; i < items.length; i++) {
-         const rateId = items[i].rate_id;
-         if (rateId && !seenRates.has(rateId)) {
-            seenRates.add(rateId);
-            uniqueRateIds.push(rateId);
-         }
-      }
 
       // 🚀 OPTIMIZATION: Parallelize HBL generation and rate fetching
-      const [allHblCodes, rates] = await Promise.all([
-         generateHBLFast(agency_id, service_id, items.length),
-         uniqueRateIds.length > 0
-            ? prisma.shippingRate.findMany({
-                 where: { id: { in: uniqueRateIds } },
-                 select: {
-                    id: true,
-                    rate_in_cents: true,
-                    cost_in_cents: true,
-                    rate_type: true,
-                    is_active: true,
-                 },
-              })
-            : Promise.resolve([]),
-      ]);
-
-      // Build rates map efficiently
-      const ratesMap = new Map();
-      for (let i = 0; i < rates.length; i++) {
-         ratesMap.set(rates[i].id, rates[i]);
-      }
+      const allHblCodes = await generateHBLFast(agency_id, service_id, items.length);
 
       // Pre-allocate and populate items array
       const items_hbl: any[] = new Array(items.length);
       for (let i = 0; i < items.length; i++) {
          const item = items[i];
-         const rate = item.rate_id ? ratesMap.get(item.rate_id) : null;
-
-         // 🔒 SECURITY: Validate rate from database
-         if (item.rate_id && !rate) {
-            throw new AppError(`Rate with ID ${item.rate_id} not found`, 404);
-         }
-
-         if (rate && !rate.is_active) {
-            throw new AppError(`Rate with ID ${item.rate_id} is not active`, 400);
-         }
-
-         // Extract rate values once
-         const cost_in_cents = rate?.cost_in_cents || 0;
 
          items_hbl[i] = {
             hbl: allHblCodes[i],
             description: item.description,
-            base_rate_in_cents: cost_in_cents,
-            rate_in_cents: rate?.rate_in_cents || 0,
-            cost_in_cents: cost_in_cents,
+            price_in_cents: item.price_in_cents,
             charge_fee_in_cents: item.charge_fee_in_cents || 0,
             delivery_fee_in_cents: item.delivery_fee_in_cents || 0,
             rate_id: item.rate_id,
@@ -262,7 +217,7 @@ export const resolvers = {
             weight: item.weight,
             service_id,
             agency_id,
-            rate_type: rate?.rate_type || RateType.WEIGHT,
+            unit: item.unit,
          };
       }
       return items_hbl;

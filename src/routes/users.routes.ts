@@ -1,5 +1,5 @@
 import { Router, Response } from "express";
-import { auth } from "../lib/auth.lib";
+import { auth } from "../lib/auth";
 import { fromNodeHeaders } from "better-auth/node";
 import prisma from "../config/prisma_db";
 import { authMiddleware } from "../middlewares/auth.middleware";
@@ -130,17 +130,15 @@ router.post("/sign-in/email", async (req, res) => {
    }
 
    try {
-      const { token } = await auth.api.signInEmail({
-         returnHeaders: true,
+      // signInEmail returns { token, user } when successful
+      const response = await auth.api.signInEmail({
          body: { email, password },
          headers: fromNodeHeaders(req.headers),
       });
 
-      // const { token } = user;
-
-      // Use the token to get the session
+      // Use the token to get the full session
       const sessionHeaders = new Headers();
-      sessionHeaders.set("Authorization", `Bearer ${token}`);
+      sessionHeaders.set("Authorization", `Bearer ${response.token}`);
 
       const session = await auth.api.getSession({
          headers: sessionHeaders,
@@ -148,7 +146,11 @@ router.post("/sign-in/email", async (req, res) => {
 
       res.status(200).json(session);
    } catch (error) {
-      res.status(500).json({ error: "Login failed" });
+      console.error("Sign-in error:", error);
+      res.status(500).json({
+         error: "Login failed",
+         message: error instanceof Error ? error.message : "Unknown error",
+      });
    }
 });
 

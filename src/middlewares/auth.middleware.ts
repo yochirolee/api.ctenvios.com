@@ -1,7 +1,7 @@
 import { fromNodeHeaders } from "better-auth/node";
 import { NextFunction, Response } from "express";
 import { Roles } from "@prisma/client";
-import { auth } from "../lib/auth.lib";
+import { auth } from "../lib/auth";
 
 export const authMiddleware = async (req: any, res: Response, next: NextFunction): Promise<void> => {
    try {

@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import prisma from "../config/prisma_db";
 import receivers_db from "../repositories/receivers.repository";
 import { generateInvoicePDF } from "../utils/generate-invoice-pdf";
-import { RateType, Roles, PaymentStatus, InvoiceStatus, InvoiceEventType } from "@prisma/client";
+import { Roles, PaymentStatus, Unit } from "@prisma/client";
 // Removed unused imports for shipping labels
 import { generateCTEnviosLabels, generateBulkCTEnviosLabels } from "../utils/generate-labels-pdf";
 import { z } from "zod";
@@ -26,14 +26,13 @@ const invoiceItemSchema = z.object({
    rate_id: z.number().positive().optional(),
    customs_id: z.number().optional(),
    product_id: z.number().positive().optional(),
-   cost_in_cents: z.number().min(0).optional().default(0), // 🔒 Backend resolves from rate_id
+   price_in_cents: z.number().min(0).optional().default(0), // 🔒 Backend resolves from rate_id
    charge_fee_in_cents: z.number().min(0).optional().default(0),
    delivery_fee_in_cents: z.number().min(0).optional().default(0),
    weight: z.number().positive(),
-   rate_in_cents: z.number().min(0).optional().default(0), // 🔒 Backend resolves from rate_id
    customs_fee_in_cents: z.number().min(0).optional().default(0),
    insurance_fee_in_cents: z.number().min(0).optional().default(0),
-   rate_type: z.nativeEnum(RateType).optional(), // 🔒 Backend resolves from rate_id
+   unit: z.nativeEnum(Unit).optional(), // 🔒 Backend resolves from rate_id
 });
 
 const newInvoiceSchema = z.object({
@@ -109,13 +108,13 @@ function calculate_subtotal(items: any[]): number {
    for (let i = 0; i < items.length; i++) {
       const item = items[i];
       const itemSubtotal = calculate_row_subtotal(
-         item.rate_in_cents || 0,
+         item.price_in_cents || 0,
          item.weight || 0,
          item.customs_fee_in_cents || 0,
          item.charge_fee_in_cents || 0,
          item.insurance_fee_in_cents || 0,
          item.delivery_fee_in_cents || 0,
-         item.rate_type as RateType
+         item.unit as Unit
       );
       total_in_cents += itemSubtotal;
    }
@@ -574,16 +573,7 @@ router.get("/:id/pdf", async (req, res) => {
             },
             agency: true,
             service: true,
-            items: {
-               include: {
-                  rate: {
-                     select: {
-                        rate_type: true,
-                     },
-                  },
-               },
-               orderBy: { hbl: "asc" },
-            },
+            items: true,
          },
       });
 
@@ -591,13 +581,14 @@ router.get("/:id/pdf", async (req, res) => {
          throw new AppError("Invoice not found", 404);
       }
 
-      // Convert Decimal fields to numbers for PDF generation
-      const invoiceForPDF = {
+      // Add charge_in_cents (calculated from payments or default to 0)
+      const invoiceWithCharge = {
          ...invoice,
+         charge_in_cents: 0,
       };
 
       // Generate PDF
-      const doc = await generateInvoicePDF(invoiceForPDF);
+      const doc = await generateInvoicePDF(invoiceWithCharge);
 
       // Set response headers for PDF
       res.setHeader("Content-Type", "application/pdf");
