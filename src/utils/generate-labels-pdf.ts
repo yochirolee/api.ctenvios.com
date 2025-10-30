@@ -301,7 +301,11 @@ async function generateCleanCTEnviosLabel(
    currentY += 85;
    doc.fontSize(10)
       .font(FONTS.REGULAR)
-      .text(item.description?.toUpperCase() || "", margin, currentY);
+      .text(item.description?.toUpperCase() || "", margin, currentY, {
+         width: labelWidth - margin * 2,
+         height: 45, // Limit height to ~3 lines
+         ellipsis: true,
+      });
    // Service section with border
 
    currentY += 50;
