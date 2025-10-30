@@ -238,7 +238,7 @@ function formatInvoiceData(invoice: OrderWithRelations) {
    })} ${date.toLocaleTimeString("es-ES", {
       hour: "2-digit",
       minute: "2-digit",
-      hour12: true,
+      hour12: false,
    })}`;
 
    const location = `${invoice.receiver.city?.name || ""} ${invoice.receiver.province?.name || ""}`.trim();
@@ -321,7 +321,7 @@ async function generatePageHeader(
    // Date - aligned to the right
    textStyle.style(FONTS.NORMAL, 9, COLORS.GRAY).text(`Fecha: ${formattedData.formattedDate}`, 450, 65, {
       align: "right",
-      width: 122,
+      width: 130,
    });
 
    // Add barcode if available

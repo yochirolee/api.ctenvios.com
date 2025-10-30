@@ -39,6 +39,7 @@ model User {
     orders        Order[]
     OrderHistory  OrderHistory[]
 
+    @@index([agency_id, role])
     @@map("user")
 }
 
@@ -97,7 +98,9 @@ model Customer {
     orders            Order[]
 
     @@unique([mobile, first_name, last_name])
-    @@index([agency_id, is_active])
+    @@index([agency_id, created_at(sort: Desc)]) // 🔥 MÁS IMPORTANTE
+    @@index([created_at(sort: Desc)]) // Para admins
+    @@index([id]) // Para JOINs
 }
 
 model Receiver {
@@ -123,7 +126,10 @@ model Receiver {
     city             City       @relation(fields: [city_id], references: [id])
     orders           Order[]
 
-    @@unique([mobile, ci, first_name, last_name])
+    @@index([mobile]) // 🔥 Búsqueda por móvil
+    @@index([ci]) // 🔥 Búsqueda por CI
+    @@index([first_name, last_name]) // 🔥 Búsqueda por nombre completo
+    @@index([agency_id]) // 🔥 Para JOINs
 }
 
 model Order {
@@ -152,6 +158,11 @@ model Order {
     status                 OrderStatus    @default(DRAFT)
     partner                Partner?       @relation(fields: [partner_id], references: [id])
     partner_id             Int?
+
+    @@index([agency_id, created_at(sort: Desc)]) // 🔥 MÁS IMPORTANTE
+    @@index([created_at(sort: Desc)]) // Para admins
+    @@index([customer_id]) // Para JOINs
+    @@index([receiver_id]) // Para JOINs
 }
 
 model Item {
@@ -186,6 +197,7 @@ model Item {
     order_id               Int
 
     @@index([order_id])
+    @@index([hbl])
     @@index([agency_id, created_at])
 }
 
