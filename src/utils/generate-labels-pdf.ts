@@ -521,8 +521,6 @@ async function generateProvinceLabel(
          width: labelWidth - margin * 2,
          align: "center",
       });
-
-   
    doc.fontSize(40)
       .font(FONTS.BOLD)
       .text(`${order.receiver.province?.id || ""} - ${order.receiver.city?.id || ""}`, margin, labelHeight - 60, {
