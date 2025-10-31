@@ -101,6 +101,8 @@ model Customer {
     @@index([agency_id, created_at(sort: Desc)]) // 🔥 MÁS IMPORTANTE
     @@index([created_at(sort: Desc)]) // Para admins
     @@index([id]) // Para JOINs
+    @@index([first_name, last_name]) // For name searches
+    @@index([mobile]) // For mobile searches
 }
 
 model Receiver {
@@ -314,6 +316,9 @@ model CustomsRates {
     items        Item[]
     agency       Agency?  @relation(fields: [agencyId], references: [id])
     agencyId     Int?
+
+    @@index([country_id, fee_type]) // For filtering by country and fee type
+    @@index([id]) // For pagination ordering
 }
 
 model RateTier {

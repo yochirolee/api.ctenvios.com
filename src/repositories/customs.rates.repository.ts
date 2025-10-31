@@ -3,11 +3,17 @@ import { Prisma } from "@prisma/client";
 
 export const customsRates = {
 	get: async (page: number, limit: number) => {
-		const total = await prisma.customsRates.count();
-		const rows = await prisma.customsRates.findMany({
-			take: limit,
-			skip: (page - 1) * limit,
-		});
+		// Parallelize count and findMany queries for better performance
+		const [total, rows] = await Promise.all([
+			prisma.customsRates.count(),
+			prisma.customsRates.findMany({
+				take: limit,
+				skip: (page - 1) * limit,
+				orderBy: {
+					id: "asc",
+				},
+			}),
+		]);
 		return { rows, total };
 	},
 	getById: async (id: number) => {

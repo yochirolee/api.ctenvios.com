@@ -4,7 +4,7 @@ config:
       timeout: 30
    defaults:
       headers:
-         Authorization: "Bearer qbbgruprcXiaDF9uQr7LODO85a6D6aE0" # Add a valid JWT token
+         Authorization: "Bearer p5TAuBi2u8lH3JUV9a7E3kNCPuPvDDV4"
    phases:
       # Simulate sudden traffic spikes
       - duration: 30
@@ -34,12 +34,17 @@ config:
          useOnlyRequestNames: true
 
 scenarios:
-   - name: "Spike Test - Simple Invoices"
+   # Initialize data from database before running any scenarios
+   - name: "Initialize Database Data"
+     weight: 1
+     flow:
+        - function: "initializeData"
+   - name: "Spike Test - Simple Orders"
      weight: 100
      flow:
-        - function: "generateInvoiceData"
+        - function: "generateOrderData"
         - post:
-             url: "/api/v1/invoices"
+             url: "/api/v1/orders"
              headers:
                 Content-Type: "application/json"
              json:

@@ -4,7 +4,7 @@ config:
       timeout: 30
    defaults:
       headers:
-         Authorization: "Bearer qbbgruprcXiaDF9uQr7LODO85a6D6aE0" # Add a valid JWT token
+         Authorization: "Bearer p5TAuBi2u8lH3JUV9a7E3kNCPuPvDDV4"
    phases:
       # Sustained high load over a long period
       - duration: 60
@@ -25,12 +25,17 @@ config:
          useOnlyRequestNames: true
 
 scenarios:
-   - name: "Endurance Invoice Creation"
+   # Initialize data from database before running any scenarios
+   - name: "Initialize Database Data"
+     weight: 1
+     flow:
+        - function: "initializeData"
+   - name: "Endurance Order Creation"
      weight: 100
      flow:
-        - function: "generateInvoiceData"
+        - function: "generateOrderData"
         - post:
-             url: "/api/v1/invoices"
+             url: "/api/v1/orders"
              headers:
                 Content-Type: "application/json"
              json:

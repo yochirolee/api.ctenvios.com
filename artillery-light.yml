@@ -4,7 +4,7 @@ config:
       timeout: 30
    defaults:
       headers:
-         Authorization: "Bearer qbbgruprcXiaDF9uQr7LODO85a6D6aE0" # Add a valid JWT token
+         Authorization: "Bearer p5TAuBi2u8lH3JUV9a7E3kNCPuPvDDV4"
    phases:
       - duration: 10
         arrivalRate: 2 # 2 users per second - light load
@@ -21,12 +21,17 @@ config:
          useOnlyRequestNames: true
 
 scenarios:
-   - name: "Invoice Creation Light Test"
+   # Initialize data from database before running any scenarios
+   - name: "Initialize Database Data"
+     weight: 1
+     flow:
+        - function: "initializeData"
+   - name: "Order Creation Light Test"
      weight: 100
      flow:
-        - function: "generateInvoiceData"
+        - function: "generateOrderData"
         - post:
-             url: "/api/v1/invoices"
+             url: "/api/v1/orders"
              headers:
                 Content-Type: "application/json"
              json:
@@ -42,5 +47,5 @@ scenarios:
                 - statusCode: [200, 201]
              capture:
                 - json: "$.id"
-                  as: "invoice_id"
+                  as: "order_id"
         - think: 1

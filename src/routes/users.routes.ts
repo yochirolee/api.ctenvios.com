@@ -12,24 +12,31 @@ router.get("/", authMiddleware, async (req: any, res: Response) => {
    //if user is root or administrator, return all users
    const { page = 1, limit = 25 } = req.query;
    if (user.role === Roles.ROOT || user.role === Roles.ADMINISTRATOR) {
-      const total = await prisma.user.count();
-      const rows = await prisma.user.findMany({
-         select: {
-            id: true,
-            email: true,
-            name: true,
-            role: true,
-            createdAt: true,
-            updatedAt: true,
-            agency: {
-               select: {
-                  id: true,
-                  name: true,
-                  agency_type: true,
+      const [total, rows] = await Promise.all([
+         prisma.user.count(),
+         prisma.user.findMany({
+            select: {
+               id: true,
+               email: true,
+               name: true,
+               role: true,
+               createdAt: true,
+               updatedAt: true,
+               agency: {
+                  select: {
+                     id: true,
+                     name: true,
+                     agency_type: true,
+                  },
                },
             },
-         },
-      });
+            skip: (parseInt(page as string) - 1) * (parseInt(limit as string) || 25),
+            take: parseInt(limit as string) || 25,
+            orderBy: {
+               createdAt: "desc",
+            },
+         }),
+      ]);
       res.status(200).json({ rows, total });
    } else {
       //return all users in the agency and children agencies

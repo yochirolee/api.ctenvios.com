@@ -23,7 +23,7 @@ const prisma: PrismaClient =
          },
       },
       transactionOptions: {
-         maxWait: 5000, // 5 seconds to wait for transaction to start
+         maxWait: 10000, // 10 seconds to wait for transaction to start (increased for stress tests)
          timeout: 20000, // 20 seconds for transaction to complete
          isolationLevel: "ReadCommitted", // Better performance for reads
       },

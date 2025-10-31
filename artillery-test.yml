@@ -1,11 +1,11 @@
 config:
-  target: "http://localhost:3000" # Adjust to your server URL
-  http:
-    timeout: 30
-  defaults:
-    headers:
-      Authorization: "Bearer qbbgruprcXiaDF9uQr7LODO85a6D6aE0" # Add a valid JWT token
-  phases:
+   target: "http://localhost:3000" # Adjust to your server URL
+   http:
+      timeout: 30
+   defaults:
+      headers:
+         Authorization: "Bearer p5TAuBi2u8lH3JUV9a7E3kNCPuPvDDV4"
+   phases:
       - duration: 30
         arrivalRate: 5 # 5 users per second
         name: "Warm up"
@@ -24,12 +24,17 @@ config:
          useOnlyRequestNames: true
 
 scenarios:
-   - name: "Invoice Creation Stress Test"
+   # Initialize data from database before running any scenarios
+   - name: "Initialize Database Data"
+     weight: 1
+     flow:
+        - function: "initializeData"
+   - name: "Order Creation Stress Test"
      weight: 80
      flow:
-        - function: "generateInvoiceData"
+        - function: "generateOrderData"
         - post:
-             url: "/api/v1/invoices"
+             url: "/api/v1/orders"
              headers:
                 Content-Type: "application/json"
              json:
@@ -46,15 +51,15 @@ scenarios:
                 - hasProperty: "id"
              capture:
                 - json: "$.id"
-                  as: "invoice_id"
+                  as: "order_id"
         - think: 1 # 1 second pause between requests
 
-   - name: "Complex Invoice Creation"
+   - name: "Complex Order Creation"
      weight: 20
      flow:
-        - function: "generateComplexInvoiceData"
+        - function: "generateComplexOrderData"
         - post:
-             url: "/api/v1/invoices"
+             url: "/api/v1/orders"
              headers:
                 Content-Type: "application/json"
              json:
@@ -69,5 +74,5 @@ scenarios:
                 - hasProperty: "id"
              capture:
                 - json: "$.id"
-                  as: "complex_invoice_id"
-        - think: 2 # 2 second pause for complex invoices
+                  as: "complex_order_id"
+        - think: 2 # 2 second pause for complex orders

@@ -3,15 +3,17 @@ import prisma from "../config/prisma_db";
 
 const customers = {
    get: async (page: number = 1, limit: number = 10): Promise<{ rows: Customer[]; total: number }> => {
-      // Ensure valid numeric values
-      const total = await prisma.customer.count();
-      const rows = await prisma.customer.findMany({
-         skip: (page - 1) * limit,
-         take: limit,
-         orderBy: {
-            first_name: "asc",
-         },
-      });
+      // Parallelize count and findMany queries for better performance
+      const [total, rows] = await Promise.all([
+         prisma.customer.count(),
+         prisma.customer.findMany({
+            skip: (page - 1) * limit,
+            take: limit,
+            orderBy: {
+               first_name: "asc",
+            },
+         }),
+      ]);
       return { rows, total };
    },
    search: async (query: string, page: number = 1, limit: number = 10): Promise<Customer[]> => {

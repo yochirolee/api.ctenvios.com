@@ -5,10 +5,8 @@ import controllers from "../controllers";
 import prisma from "../config/prisma_db";
 import { z } from "zod";
 import AppError from "../utils/app.error";
-import { RateType } from "@prisma/client";
-import { services } from "../services";
+import { Unit } from "@prisma/client";
 import { validate } from "../middlewares/validate.middleware";
-import { createOrderSchema } from "../types/types";
 
 const router = Router();
 
@@ -153,23 +151,23 @@ router.get("/admin/:id/stats", authMiddleware, async (req, res, next) => {
 // PARTNER API ROUTES - External Integration
 // ============================================
 
-const invoiceItemSchema = z.object({
+const orderItemSchema = z.object({
    description: z.string().min(1),
-   rate_id: z.number().positive(),
+   price_in_cents: z.number().positive(),
    weight: z.number().positive(),
-   rate_type: z.nativeEnum(RateType).optional(),
+   unit: z.nativeEnum(Unit).optional().default(Unit.PER_LB),
 });
 
-const partnerInvoiceSchema = z.object({
+const partnerOrderSchema = z.object({
    customer_id: z.number().positive(),
    receiver_id: z.number().positive(),
    service_id: z.number().positive(),
-   items: z.array(invoiceItemSchema).min(1),
+   items: z.array(orderItemSchema).min(1),
 });
 
 /**
- * POST /partners/api/invoices
- * Create invoice via Partner API
+ * POST /partners/api/orders
+ * Create order via Partner API
  * Requires API key authentication
  */
 /**
@@ -181,7 +179,7 @@ router.post(
    "/orders",
    partnerAuthMiddleware,
    partnerLogMiddleware,
-   validate({ body: createOrderSchema }),
+   validate({ body: partnerOrderSchema }),
    controllers.partners.createOrder
 );
 
@@ -193,8 +191,8 @@ router.post(
 router.get("/rates", partnerAuthMiddleware, partnerLogMiddleware, controllers.partners.getRates);
 
 /**
- * GET /partners/api/invoices/:id
- * Get invoice details via Partner API
+ * GET /partners/api/orders/:id
+ * Get order details via Partner API
  * Requires API key authentication
  */
 router.get("/invoices/:id", partnerAuthMiddleware, partnerLogMiddleware, async (req: any, res) => {
@@ -207,11 +205,11 @@ router.get("/invoices/:id", partnerAuthMiddleware, partnerLogMiddleware, async (
       }
 
       if (!id || isNaN(parseInt(id))) {
-         throw new AppError("Valid invoice ID is required", 400);
+         throw new AppError("Valid order ID is required", 400);
       }
 
-      // Get invoice and verify it belongs to partner
-      const invoice = await prisma.invoice.findFirst({
+      // Get order and verify it belongs to partner
+      const order = await prisma.order.findFirst({
          where: {
             id: parseInt(id),
             agency_id: partner.agency_id,
@@ -246,24 +244,28 @@ router.get("/invoices/:id", partnerAuthMiddleware, partnerLogMiddleware, async (
                   hbl: true,
                   description: true,
                   weight: true,
-                  rate_in_cents: true,
-                  status: true,
+                  price_in_cents: true,
+                  charge_fee_in_cents: true,
+                  delivery_fee_in_cents: true,
+                  insurance_fee_in_cents: true,
+                  customs_fee_in_cents: true,
+                  unit: true,
                },
                orderBy: { hbl: "asc" },
             },
          },
       });
 
-      if (!invoice) {
-         throw new AppError("Invoice not found", 404);
+      if (!order) {
+         throw new AppError("Order not found", 404);
       }
 
       res.status(200).json({
          status: "success",
-         data: invoice,
+         data: order,
       });
    } catch (error: any) {
-      console.error("Partner API get invoice error:", error);
+      console.error("Partner API get order error:", error);
 
       if (error instanceof AppError) {
          return res.status(error.statusCode).json({
@@ -274,7 +276,7 @@ router.get("/invoices/:id", partnerAuthMiddleware, partnerLogMiddleware, async (
 
       res.status(500).json({
          status: "error",
-         message: "Error retrieving invoice",
+         message: "Error retrieving order",
          error: error.message || error,
       });
    }
@@ -311,7 +313,7 @@ router.get("/tracking/:hbl", partnerAuthMiddleware, partnerLogMiddleware, async 
             status: true,
             created_at: true,
             updated_at: true,
-            invoice: {
+            order: {
                select: {
                   id: true,
                   status: true,

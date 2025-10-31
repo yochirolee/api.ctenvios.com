@@ -532,8 +532,8 @@ function addOptimizedTableHeaders(doc: PDFKit.PDFDocument, y: number, textStyle:
    // Add border
    doc.strokeColor(COLORS.BORDER_GRAY)
       .lineWidth(0.3)
-      .moveTo(25, y + 10)
-      .lineTo(572, y + 10)
+      .moveTo(25, y + 12)
+      .lineTo(572, y + 12)
       .stroke();
 
    return y + 10;
@@ -649,7 +649,7 @@ function renderTotalsSection(
 
       textStyle.style(font, size, COLORS.BLACK).text(total.label, 380, currentY, { width: 80, align: "right" });
 
-      textStyle.style(font, size, valueColor).text(total.value, 520, currentY, { width: 50, align: "right" });
+      textStyle.style(font, size, valueColor).text(total.value, 520, currentY, { width: 60, align: "right" });
 
       currentY += 15;
    });

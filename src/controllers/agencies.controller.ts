@@ -179,7 +179,7 @@ const agencies = {
       });
 
       // Create pricing agreements and rates for child agency
-      const rateCreationPromises = parent_services.flatMap((service) =>
+     /*  const rateCreationPromises = parent_services.flatMap((service) =>
          service.shipping_rates.map((shipping_rate) =>
             pricingService.createPricingWithRate({
                product_id: shipping_rate.pricing_agreement.product.id,
@@ -192,13 +192,13 @@ const agencies = {
                is_active: shipping_rate.is_active,
             })
          )
-      );
+      ); */
 
-      const rates_created = await Promise.all(rateCreationPromises);
+     // const rates_created = await Promise.all(rateCreationPromises);
 
       res.status(201).json({
          agency: created_agency,
-         rates_created_count: rates_created.length,
+        // rates_created_count: rates_created.length,
          message: "Agency and pricing agreements created successfully",
       });
    },

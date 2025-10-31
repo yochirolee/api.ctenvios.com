@@ -1,5 +1,4 @@
-import { PrismaClient } from "@prisma/client";
-const prisma = new PrismaClient();
+import prisma from "../config/prisma_db";
 
 export async function generateHBLFast(agencyId: number, serviceId: number, cantidad: number): Promise<string[]> {
    const today = new Date();
@@ -41,8 +40,11 @@ export async function generateHBLFast(agencyId: number, serviceId: number, canti
 
          return codigos;
       },
-      { timeout: 10000 }
-   ); // Timeout mas corto
+      {
+         timeout: 20000, // 20 seconds to match Prisma client config
+         maxWait: 10000, // 10 seconds to wait for transaction start (increased for stress tests)
+      }
+   );
 
    return result;
 }

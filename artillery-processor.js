@@ -1,26 +1,25 @@
 /**
- * Artillery processor for invoice creation stress testing
- * Simplified version with clean progress tracking
+ * Artillery processor for order creation stress testing
+ * Fetches real data from database to avoid foreign key errors
  */
 
 const { faker } = require("@faker-js/faker");
+const { PrismaClient } = require("@prisma/client");
 
-// Real production data pools for accurate stress testing
+const prisma = new PrismaClient();
+
+// Real production data pools - populated by initializeData()
 const sampleAgencies = [1, 2]; // Both agencies for testing
 
-// Users by agency for realistic testing
-const usersByAgency = {
-	1: ["R5KTYKBbQhiSSoA8iT7KD3BnGSwJ376Q"], // Add more users for agency 1 if available
-	2: ["7mciYfrdmVDL7aUpfp92SdbJ1juvX2Cg"], // Add users for agency 2 here - you'll need to populate this with real user IDs
-};
-
-// Fallback users if no agency-specific users are available
-const fallbackUsers = ["R5KTYKBbQhiSSoA8iT7KD3BnGSwJ376Q"];
-
-const sampleCustomers = Array.from({ length: 200 }, (_, i) => i + 1); // More customers for realistic load
-const sampleReceivers = Array.from({ length: 200 }, (_, i) => i + 1); // More receivers for realistic load
+// Data arrays to be populated from database
+let sampleCustomers = [];
+let sampleReceivers = [];
+let sampleUsers = [];
+let usersByAgency = { 1: [], 2: [] };
 const sampleServices = [1]; // Available services
-const sampleRateIds = Array.from({ length: 200 }, (_, i) => i + 1); // More rate IDs
+
+// Data initialization flag
+let dataInitialized = false;
 
 // Simple tracking variables
 let requestCount = 0;
@@ -29,24 +28,100 @@ let agency2Count = 0;
 let testStartTime = Date.now();
 
 /**
- * Generate a single item for an invoice
+ * Initialize data from database
+ * This function fetches real customers, receivers, and users to avoid foreign key errors
+ */
+async function initializeData(context, events, done) {
+	// Only initialize once
+	if (dataInitialized) {
+		return done();
+	}
+
+	try {
+		console.log("🔄 Initializing Artillery data from database...");
+
+		// Fetch real customers
+		const customers = await prisma.customer.findMany({
+			take: 50,
+			orderBy: { id: "asc" },
+		});
+
+		// Fetch real receivers
+		const receivers = await prisma.receiver.findMany({
+			take: 50,
+			orderBy: { id: "asc" },
+		});
+
+		// Fetch real users from both agencies
+		const users = await prisma.user.findMany({
+			where: {
+				agency_id: { in: [1, 2] },
+			},
+			take: 20,
+		});
+
+		// Populate data arrays
+		sampleCustomers = customers.map((c) => c.id);
+		sampleReceivers = receivers.map((r) => r.id);
+		sampleUsers = users.map((u) => u.id);
+
+		// Organize users by agency
+		users.forEach((user) => {
+			if (user.agency_id === 1) {
+				usersByAgency[1].push(user.id);
+			} else if (user.agency_id === 2) {
+				usersByAgency[2].push(user.id);
+			}
+		});
+
+		console.log("✅ Artillery data initialized:");
+		console.log(`   - Customers: ${sampleCustomers.length}`);
+		console.log(`   - Receivers: ${sampleReceivers.length}`);
+		console.log(`   - Users: ${sampleUsers.length}`);
+		console.log(`   - Agency 1 Users: ${usersByAgency[1].length}`);
+		console.log(`   - Agency 2 Users: ${usersByAgency[2].length}`);
+
+		// Validate we have data
+		if (sampleCustomers.length === 0) {
+			throw new Error("No customers found in database. Please seed customer data first.");
+		}
+		if (sampleReceivers.length === 0) {
+			throw new Error("No receivers found in database. Please seed receiver data first.");
+		}
+		if (sampleUsers.length === 0) {
+			throw new Error("No users found in database for agencies 1 or 2.");
+		}
+
+		dataInitialized = true;
+		await prisma.$disconnect();
+		return done();
+	} catch (error) {
+		console.error("❌ Failed to initialize Artillery data:", error);
+		await prisma.$disconnect();
+		throw error;
+	}
+}
+
+/**
+ * Generate a single item for an order
  */
 function generateItem() {
 	return {
 		description: faker.commerce.productName(),
-		rate_in_cents: faker.number.int({ min: 100, max: 5000 }), // $1 - $50
+		price_in_cents: faker.number.int({ min: 100, max: 5000 }), // $1 - $50
 		rate_id: 1, // Use rate_id = 1 which we know exists
-		customs_id: 1, // Same as rate_id
+		charge_fee_in_cents: 0,
 		insurance_fee_in_cents: faker.number.int({ min: 0, max: 500 }), // $0 - $5
 		customs_fee_in_cents: 0, // Set to 0 like in real example
+		delivery_fee_in_cents: 0,
 		weight: faker.number.int({ min: 1, max: 20 }), // Integer weight
 	};
 }
 
 /**
- * Generate standard invoice data (3-10 items)
+ * Generate standard order data (3-10 items)
  */
-function generateInvoiceData(context, events, done) {
+function generateOrderData(context, events, done) {
 	const itemCount = faker.number.int({ min: 3, max: 10 });
 	const items = Array.from({ length: itemCount }, () => generateItem());
 
@@ -61,7 +136,7 @@ function generateInvoiceData(context, events, done) {
 	const user_id =
 		agencyUsers && agencyUsers.length > 0
 			? faker.helpers.arrayElement(agencyUsers)
-			: faker.helpers.arrayElement(fallbackUsers);
+			: faker.helpers.arrayElement(sampleUsers);
 
 	// Track agency distribution
 	if (agency_id === 1) agency1Count++;
@@ -91,9 +166,9 @@ function generateInvoiceData(context, events, done) {
 }
 
 /**
- * Generate complex invoice data (8-20 items)
+ * Generate complex order data (8-20 items)
  */
-function generateComplexInvoiceData(context, events, done) {
+function generateComplexOrderData(context, events, done) {
 	const itemCount = faker.number.int({ min: 8, max: 20 });
 	const items = Array.from({ length: itemCount }, () => generateItem());
 
@@ -108,9 +183,9 @@ function generateComplexInvoiceData(context, events, done) {
 	const user_id =
 		agencyUsers && agencyUsers.length > 0
 			? faker.helpers.arrayElement(agencyUsers)
-			: faker.helpers.arrayElement(fallbackUsers);
+			: faker.helpers.arrayElement(sampleUsers);
 
-	// Track agency distribution for complex invoices
+	// Track agency distribution for complex orders
 	if (agency_id === 1) agency1Count++;
 	if (agency_id === 2) agency2Count++;
 
@@ -138,6 +213,7 @@ function generateComplexInvoiceData(context, events, done) {
 }
 
 module.exports = {
-	generateInvoiceData,
-	generateComplexInvoiceData,
+	initializeData,
+	generateOrderData,
+	generateComplexOrderData,
 };
