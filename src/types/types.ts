@@ -56,6 +56,10 @@ export const customsRatesSchema = z.object({
 ////NEW ORDER SCHEMA
 // Esquema para un solo item en la factura
 export const ItemSchema = z.object({
+   charge_fee_in_cents: z.number().optional().default(0),
+   customs_fee_in_cents: z.number().optional().default(0),
+   insurance_fee_in_cents: z.number().optional().default(0),
+   delivery_fee_in_cents: z.number().optional().default(0),
    description: z
       .string({ required_error: "Item description is required." })
       .min(1, "Item description cannot be empty."),

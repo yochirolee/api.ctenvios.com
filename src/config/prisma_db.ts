@@ -16,10 +16,16 @@ declare global {
 const prisma: PrismaClient =
    global.prisma ||
    new PrismaClient({
-      log: process.env.NODE_ENV === "production" ? ["error", "warn"] : ["query", "error", "warn"],
+      log: process.env.NODE_ENV === "production" ? ["error", "warn"] : ["error", "warn"],
+      datasources: {
+         db: {
+            url: process.env.DATABASE_URL,
+         },
+      },
       transactionOptions: {
-         maxWait: 10000, // 10 seconds to wait for transaction to start
-         timeout: 30000, // 30 seconds for transaction to complete
+         maxWait: 5000, // 5 seconds to wait for transaction to start
+         timeout: 20000, // 20 seconds for transaction to complete
+         isolationLevel: "ReadCommitted", // Better performance for reads
       },
       errorFormat: "pretty",
    });

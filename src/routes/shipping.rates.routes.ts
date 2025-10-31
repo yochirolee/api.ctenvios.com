@@ -22,4 +22,5 @@ const createShippingRateSchema = z.object({
 });
 
 shippingRatesRoutes.post("/", validate({ body: createShippingRateSchema }), shippingRatesController.create);
+shippingRatesRoutes.get("/service/:service_id/agency/:agency_id", shippingRatesController.getByServiceIdAndAgencyId);
 export default shippingRatesRoutes;

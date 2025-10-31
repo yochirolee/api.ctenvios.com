@@ -220,13 +220,13 @@ model Product {
     created_at         DateTime           @default(now())
     updated_at         DateTime           @updatedAt
     pricing_agreements PricingAgreement[]
+    shipping_rates     ShippingRate[]
 
     @@unique([provider_id, service_id, name])
 }
 
 model PricingAgreement {
     id               Int            @id @default(autoincrement())
-    name             String?
     seller_agency_id Int
     buyer_agency_id  Int
     product_id       Int
@@ -241,13 +241,12 @@ model PricingAgreement {
     updated_at       DateTime       @updatedAt
     shipping_rates   ShippingRate[]
 
-    @@unique([seller_agency_id, buyer_agency_id, product_id])
-    @@index([seller_agency_id, buyer_agency_id, product_id, is_active])
+    @@unique([seller_agency_id, buyer_agency_id, product_id, service_id])
+    @@index([seller_agency_id, buyer_agency_id, product_id, service_id, is_active])
 }
 
 model ShippingRate {
     id                   Int              @id @default(autoincrement())
-    name                 String?
     service_id           Int
     service              Service          @relation(fields: [service_id], references: [id])
     agency_id            Int
@@ -263,8 +262,11 @@ model ShippingRate {
     created_at           DateTime         @default(now())
     updated_at           DateTime         @updatedAt
     items                Item[]
+    product_id           Int
+    product              Product          @relation(fields: [product_id], references: [id])
 
     @@index([agency_id, service_id, scope, is_active])
+    @@index([service_id, is_active])
 }
 
 /**

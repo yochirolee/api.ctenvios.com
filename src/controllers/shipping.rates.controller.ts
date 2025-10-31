@@ -29,5 +29,10 @@ export const shippingRatesController = {
          data: result,
       });
    },
+   getByServiceIdAndAgencyId: async (req: Request, res: Response) => {
+      const { service_id, agency_id } = req.params;
+      const result = await pricingService.getRatesByServiceIdAndAgencyId(Number(service_id), Number(agency_id));
+      res.status(200).json(result);
+   },
    //create a rate for the current agency and is child of the parent agency
 };

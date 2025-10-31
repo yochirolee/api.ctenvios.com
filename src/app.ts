@@ -3,6 +3,7 @@ import helmet from "helmet";
 import cors from "cors";
 import router from "./routes/router";
 import { errorMiddleware } from "./middlewares/error.middleware";
+import { performanceMonitor } from "./middlewares/performance.middleware";
 import morgan from "morgan";
 import compression from "compression";
 

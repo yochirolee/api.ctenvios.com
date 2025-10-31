@@ -27,11 +27,20 @@ export const agencies = {
    },
    getUsers: async (id: number) => {
       const users = await prisma.user.findMany({
+         select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            role: true,
+         },
          where: { agency_id: id },
+         orderBy: {
+            name: "asc",
+         },
       });
       return users;
    },
-
 
    update: async (id: number, agency: Prisma.AgencyUpdateInput) => {
       const updatedAgency = await prisma.agency.update({

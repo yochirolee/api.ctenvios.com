@@ -10,6 +10,7 @@ import { analytics } from "./analytics.repository";
 import partners from "./partners.repository";
 import orders from "./orders.repository";
 import payments from "./payments.repository";
+import products from "./products.repository";
 
 export const repository = {
    agencies,
@@ -24,6 +25,7 @@ export const repository = {
    partners,
    orders,
    payments,
+   products,
 };
 
 export default repository;

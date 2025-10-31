@@ -11,6 +11,45 @@ interface PricingResult {
 }
 
 export const pricingService = {
+   getRatesByServiceIdAndAgencyId: async (service_id: number, agency_id: number): Promise<any[]> => {
+      const rates = await prisma.shippingRate.findMany({
+         where: { service_id, agency_id },
+         select: {
+            id: true,
+            price_in_cents: true,
+            is_active: true,
+            product: {
+               select: {
+                  id: true,
+                  name: true,
+                  description: true,
+                  unit: true,
+               },
+            },
+            pricing_agreement: {
+               select: {
+                  id: true,
+
+                  price_in_cents: true,
+               },
+            },
+         },
+      });
+      if (rates.length === 0) {
+         return [];
+      }
+      return rates.map((rate) => {
+         return {
+            id: rate.id,
+            name: rate.product.name,
+            description: rate.product.description,
+            unit: rate.product.unit,
+            price_in_cents: rate.price_in_cents,
+            cost_in_cents: rate.pricing_agreement.price_in_cents,
+            is_active: rate.is_active,
+         };
+      });
+   },
    /**
     * Creates a PricingAgreement and associated ShippingRate atomically
     * Handles both external agreements (seller != buyer) and internal agreements (seller == buyer)
@@ -93,10 +132,11 @@ export const pricingService = {
          // 5. Check for existing PricingAgreement (handle unique constraint)
          const existingAgreement = await tx.pricingAgreement.findUnique({
             where: {
-               seller_agency_id_buyer_agency_id_product_id: {
+               seller_agency_id_buyer_agency_id_product_id_service_id: {
                   seller_agency_id,
                   buyer_agency_id,
                   product_id,
+                  service_id,
                },
             },
          });
@@ -111,7 +151,6 @@ export const pricingService = {
          // 6. Create PricingAgreement
          const agreement = await tx.pricingAgreement.create({
             data: {
-               name: name || product.name,
                seller_agency_id,
                buyer_agency_id,
                product_id,
@@ -125,7 +164,7 @@ export const pricingService = {
          // 7. Create ShippingRate linked to the agreement
          const rate = await tx.shippingRate.create({
             data: {
-               name: name || `Rate: ${product.name}`,
+               product_id,
                service_id,
                agency_id: buyer_agency_id, // Buyer agency uses this rate
                pricing_agreement_id: agreement.id,

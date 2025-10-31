@@ -77,6 +77,7 @@ const orders = {
       });
    },
    create: async (orderData: Prisma.OrderUncheckedCreateInput) => {
+     
       return await prisma.order.create({
          data: orderData,
          include: {
@@ -95,6 +96,7 @@ const orders = {
                   rate_id: true,
                   price_in_cents: true,
                   unit: true,
+                  delivery_fee_in_cents: true,
                },
             },
          },

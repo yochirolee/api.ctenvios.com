@@ -2,70 +2,47 @@ import { Router, Response } from "express";
 import prisma from "../config/prisma_db";
 import { services } from "../services";
 import StatusCodes from "../common/https-status-codes";
+import z from "zod";
+import { Unit } from "@prisma/client";
+import productController from "../controllers/product.controller";
+import { validate } from "../middlewares/validate.middleware";
 
 const products_routes = Router();
 
-products_routes.get("/", async (req: any, res: Response) => {
-   const products = await prisma.product.findMany({
-      select: {
-         id: true,
-         name: true,
-         description: true,
-         unit: true,
-         length: true,
-         width: true,
-         height: true,
-      },
-   });
-   res.status(200).json(products);
+const createProductSchema = z.object({
+   id: z.number().optional(),
+   provider_id: z.number(),
+   service_id: z.number(),
+   name: z.string(),
+   description: z.string(),
+   unit: z.nativeEnum(Unit),
+   length: z.number().optional(),
+   width: z.number().optional(),
+   height: z.number().optional(),
+   is_active: z.boolean(),
 });
 
-products_routes.post("/", async (req: any, res: any) => {
-   try {
-      const { name, description, service_id, unit, length, width, height } = req.body;
-
-      const providerAgencyId = req.user.agency_id; // Obtenido del token de autenticación
-
-      // --- VALIDACIÓN ---
-      if (!name || !service_id || !unit) {
-         return res.status(400).json({ error: "Nombre, servicio y unidad son obligatorios." });
-      }
-
-      // Opcional: Verificar si ya existe un producto con el mismo nombre para ese servicio
-      const existingProduct = await prisma.product.findUnique({
-         where: {
-            provider_id_service_id_name: {
-               name: name,
-               service_id: service_id,
-               provider_id: providerAgencyId,
-            },
-         },
-      });
-
-      if (existingProduct) {
-         return res.status(409).json({ error: "Ya existe un producto con este nombre para el servicio seleccionado." });
-      }
-
-      // --- CREACIÓN ---
-      const newProduct = await prisma.product.create({
-         data: {
-            name,
-            description,
-            unit,
-            length,
-            width,
-            height,
-            service: { connect: { id: service_id } },
-            provider: { connect: { id: providerAgencyId } },
-         },
-      });
-
-      return res.status(201).json(newProduct);
-   } catch (error) {
-      console.error("Error al crear el producto:", error);
-      return res.status(500).json({ error: "Error interno del servidor." });
-   }
+const updateProductSchema = z.object({
+   name: z.string().optional(),
+   description: z.string().optional(),
+   unit: z.nativeEnum(Unit).optional(),
+   length: z.number().optional(),
+   width: z.number().optional(),
+   height: z.number().optional(),
+   is_active: z.boolean().optional(),
 });
+
+products_routes.get("/", productController.getAll);
+
+products_routes.post("/", validate({ body: createProductSchema }), productController.create);
+
+products_routes.get("/", productController.getAll);
+
+products_routes.get("/:id", productController.getById);
+
+products_routes.put("/:id", validate({ body: updateProductSchema }), productController.update);
+
+products_routes.delete("/:id", productController.delete);
 
 // Create pricing agreement and shipping rate for a product
 //this has to be moved to shipping rates routes and controller
