@@ -122,7 +122,7 @@ export const ordersController = {
                            city: { select: { name: true } },
                         },
                      },
-                     service: { select: { id: true, name: true } },
+                     service: { select: { id: true, service_type: true } },
                      agency: { select: { id: true, name: true } },
                      user: { select: { id: true, name: true } },
                      _count: { select: { items: true } },

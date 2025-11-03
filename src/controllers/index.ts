@@ -9,6 +9,7 @@ import customsRates from "./customs.rates.controller";
 import { analytics } from "./analytics.controller";
 import partners from "./partners.controller";
 import orders from "./orders.controller";
+import shippingRates from "./shipping.rates.controller";
 
 const controllers = {
    agencies,
@@ -22,6 +23,7 @@ const controllers = {
    analytics,
    partners,
    orders,
+   shippingRates,
 };
 
 export default controllers;

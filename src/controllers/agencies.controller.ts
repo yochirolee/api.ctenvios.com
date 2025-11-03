@@ -179,7 +179,7 @@ const agencies = {
       });
 
       // Create pricing agreements and rates for child agency
-     /*  const rateCreationPromises = parent_services.flatMap((service) =>
+      /*  const rateCreationPromises = parent_services.flatMap((service) =>
          service.shipping_rates.map((shipping_rate) =>
             pricingService.createPricingWithRate({
                product_id: shipping_rate.pricing_agreement.product.id,
@@ -194,11 +194,11 @@ const agencies = {
          )
       ); */
 
-     // const rates_created = await Promise.all(rateCreationPromises);
+      // const rates_created = await Promise.all(rateCreationPromises);
 
       res.status(201).json({
          agency: created_agency,
-        // rates_created_count: rates_created.length,
+         // rates_created_count: rates_created.length,
          message: "Agency and pricing agreements created successfully",
       });
    },
@@ -259,21 +259,66 @@ const agencies = {
       const parent = await repository.agencies.getParent(agencyId);
       res.status(200).json(parent);
    },
-   getServices: async (req: Request, res: Response): Promise<void> => {
+   getServicesWithRates: async (req: Request, res: Response): Promise<void> => {
+      const { id } = req.params;
+
+      const agencyId = Number(id);
+
+      if (isNaN(agencyId) || agencyId <= 0) {
+         throw new AppError("Invalid agency ID", 400, [], "validation");
+      }
+      const services_with_rates = await repository.services.getServicesWithRates(agencyId);
+      if (!services_with_rates) {
+         throw new AppError("No services found", 404, [], "not_found");
+      }
+      const formatted_services_with_rates = services_with_rates.map((service) => {
+         return {
+            ...service,
+            shipping_rates:
+               service.shipping_rates.map((rate) => {
+                  return {
+                     id: rate.id,
+                     name: rate.product.name,
+                     description: rate.product.description,
+                     unit: rate.product.unit,
+                     price_in_cents: rate.price_in_cents,
+                     cost_in_cents: rate.pricing_agreement.price_in_cents,
+                     is_active: rate.is_active,
+                  };
+               }) || [],
+         };
+      });
+      res.status(200).json(formatted_services_with_rates);
+   },
+   getActiveServicesWithRates: async (req: Request, res: Response): Promise<void> => {
       const { id } = req.params;
       const agencyId = Number(id);
 
       if (isNaN(agencyId) || agencyId <= 0) {
          throw new AppError("Invalid agency ID", 400, [], "validation");
       }
-
-      const services = await repository.services.getByAgencyId(agencyId);
-      res.status(200).json(services);
-   },
-   getShippingRates: async (req: Request, res: Response): Promise<void> => {
-      const { service_id, agency_id } = req.params;
-      const rates = await pricingService.getRatesByServiceIdAndAgencyId(Number(service_id), Number(agency_id));
-      res.status(200).json(rates);
+      const services_with_rates = await repository.services.getActiveServicesWithRates(agencyId);
+      if (!services_with_rates) {
+         throw new AppError("No services found", 404, [], "not_found");
+      }
+      const formatted_services_with_rates = services_with_rates.map((service) => {
+         return {
+            ...service,
+            shipping_rates:
+               service.shipping_rates.map((rate) => {
+                  return {
+                     id: rate.id,
+                     name: rate.product.name,
+                     description: rate.product.description,
+                     unit: rate.product.unit,
+                     price_in_cents: rate.price_in_cents,
+                     cost_in_cents: rate.pricing_agreement.price_in_cents,
+                     is_active: rate.is_active,
+                  };
+               }) || [],
+         };
+      });
+      res.status(200).json(formatted_services_with_rates);
    },
 };
 

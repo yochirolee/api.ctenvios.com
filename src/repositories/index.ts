@@ -11,6 +11,7 @@ import partners from "./partners.repository";
 import orders from "./orders.repository";
 import payments from "./payments.repository";
 import products from "./products.repository";
+import shippingRates from "./shipping.rates.repository";
 
 export const repository = {
    agencies,
@@ -26,6 +27,7 @@ export const repository = {
    orders,
    payments,
    products,
+   shippingRates,
 };
 
 export default repository;

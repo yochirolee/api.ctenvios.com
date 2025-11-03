@@ -62,7 +62,6 @@ export const pricingService = {
          buyer_agency_id,
          cost_in_cents,
          price_in_cents,
-         name,
          is_active = true,
       } = input;
 
@@ -180,6 +179,7 @@ export const pricingService = {
 
       return result;
    },
+
 
    /**
     * Gets all pricing agreements for a specific product

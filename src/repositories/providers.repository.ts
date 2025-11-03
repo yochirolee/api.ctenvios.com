@@ -26,8 +26,8 @@ export const providers = {
          where: { id },
          include: {
             services: {
-               include: {
-                  products: true,
+               orderBy: {
+                  name: "asc",
                },
             },
          },
@@ -40,7 +40,6 @@ export const providers = {
             where: { id },
             data: provider,
          });
-         return updatedProvider;
       } catch (error) {
          console.error("Error updating provider:", error);
          throw error;

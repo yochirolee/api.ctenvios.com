@@ -1,5 +1,5 @@
 import prisma from "../config/prisma_db";
-import { Prisma } from "@prisma/client";
+import { Prisma, ShippingRate } from "@prisma/client";
 
 export const agencies = {
    getAll: async () => {
@@ -41,6 +41,9 @@ export const agencies = {
       });
       return users;
    },
+
+
+ 
 
    update: async (id: number, agency: Prisma.AgencyUpdateInput) => {
       const updatedAgency = await prisma.agency.update({
