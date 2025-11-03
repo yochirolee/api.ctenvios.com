@@ -101,6 +101,7 @@ const services = {
 
             shipping_rates: {
                where: { agency_id: agency_id },
+               orderBy: { id: "desc" },
                select: {
                   id: true,
                   price_in_cents: true,

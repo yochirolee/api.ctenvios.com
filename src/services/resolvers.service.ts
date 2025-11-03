@@ -1,4 +1,4 @@
-import { Customer, Receiver, Province, City, Prisma, Item, RateType } from "@prisma/client";
+import { Customer, Receiver, Province, City, Prisma, } from "@prisma/client";
 import prisma from "../config/prisma_db";
 import AppError from "../utils/app.error";
 import repository from "../repositories";

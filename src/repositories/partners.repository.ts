@@ -31,7 +31,7 @@ export const partners = {
             updated_at: true,
             _count: {
                select: {
-                  invoices: true,
+                  orders: true,
                   partner_logs: true,
                },
             },
@@ -88,7 +88,6 @@ export const partners = {
             updated_at: true,
             _count: {
                select: {
-                  orders: true,
                   partner_logs: true,
                   api_keys: true,
                },
