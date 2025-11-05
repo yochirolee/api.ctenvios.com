@@ -97,6 +97,7 @@ export const ordersController = {
                   where: whereClause,
                   select: {
                      id: true,
+                     partner_order_id: true,
                      created_at: true,
                      total_in_cents: true,
                      paid_in_cents: true,
