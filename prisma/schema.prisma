@@ -307,6 +307,7 @@ model CustomsRates {
     country      Country  @relation(fields: [country_id], references: [id])
     chapter      String? // RESTAURADO
     custom_value Float? // RESTAURADO
+    price_in_cup Float? // RESTAURADO
     fee_type     FeeType  @default(UNIT)
     fee_in_cents Int      @default(0)
     min_weight   Float? // RESTAURADO

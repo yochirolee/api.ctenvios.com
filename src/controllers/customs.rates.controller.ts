@@ -17,6 +17,11 @@ const customsRates = {
       const rate = await repository.customsRates.getById(Number(id));
       res.status(200).json(rate);
    },
+   search: async (req: Request, res: Response) => {
+      const { query, page, limit } = req.query;
+      const { rows, total } = await repository.customsRates.search(query as string, parseInt(page as string) || 1, parseInt(limit as string) || 25);
+      res.status(200).json({ rows, total });
+   },
    create: async (req: Request, res: Response) => {
       const schema = customsRatesSchema.safeParse(req.body);
       if (!schema.success) {

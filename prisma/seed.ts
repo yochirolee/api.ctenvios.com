@@ -179,7 +179,7 @@ async function main(): Promise<void> {
    });
    console.log(`✅ Maritime service updated with carrier`);
 
-   // Create base delivery rates for carrier
+ /*   // Create base delivery rates for carrier
    console.log("📦 Creating delivery rates...");
    const deliveryRates = [
       {
@@ -212,7 +212,7 @@ async function main(): Promise<void> {
          rate_in_cents: 1500, // $15 USD
          is_base_rate: true,
       },
-   ];
+   ]; */
 
    /*    for (const rate of deliveryRates) {
       // Check if delivery rate exists

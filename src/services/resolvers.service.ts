@@ -189,7 +189,6 @@ export const resolvers = {
       const allHblCodes = await generateHBLFast(agency_id, service_id, items.length);
 
       const rates = await pricingService.getRatesByServiceIdAndAgencyId(service_id, agency_id);
-      
 
       // Pre-allocate and populate items array
       const items_hbl: any[] = new Array(items.length);
@@ -209,7 +208,7 @@ export const resolvers = {
             weight: item.weight,
             service_id,
             agency_id,
-            unit: rate?.unit || Unit.PER_LB,
+            unit: item.unit || rate?.unit || Unit.PER_LB,
          };
       }
       return items_hbl;

@@ -133,7 +133,7 @@ function syncOrderToCTEnvios($conn, $cod_envio, $agency_id = null) {
     
  
     // 3. Get items with their rates
-    $sql = "SELECT descripcion, peso, tarifa, medida_tarifa, precio, empaquetado
+    $sql = "SELECT descripcion, peso, tarifa, medida_tarifa, precio, empaquetado,tipo_producto
             FROM orden_envio_emp_det
             WHERE cod_envio = ?";
     $stmt = $conn->prepare($sql);
@@ -155,7 +155,12 @@ function syncOrderToCTEnvios($conn, $cod_envio, $agency_id = null) {
         $medida_tarifa = $row['medida_tarifa'];
         $precio = (float) $row['precio'];
         $empaquetado = (float) ($row['empaquetado'] ?? 0);
-        
+        $tipo_producto = $row['tipo_producto'];
+        if ($tipo_producto < 10) {
+            $unit = 'PER_LB';
+        } else {
+            $unit = 'FIXED';
+        }
         // In your system: tarifa is the RATE per unit (e.g., $5.00/lb)
         // In CTEnvios API: price_in_cents is also the RATE per unit (e.g., 500 cents/lb)
         // So we just convert tarifa to cents
@@ -182,7 +187,7 @@ function syncOrderToCTEnvios($conn, $cod_envio, $agency_id = null) {
             'weight' => $weight,
             'rate_id' => 1,
             'price_in_cents' => $price_in_cents,
-            'unit' => 'PER_LB',
+            'unit' => $unit,
             'insurance_fee_in_cents' => $insurance_cents,
             'charge_fee_in_cents' => $charge_cents
             
