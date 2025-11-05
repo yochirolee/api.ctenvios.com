@@ -112,9 +112,8 @@ function syncOrderToCTEnvios($conn, $cod_envio, $agency_id = null) {
     }
     
     // 2b. Get fees from orden_envio (delivery, seguro, cargo)
-    $sql = "SELECT COALESCE(SUM(delivery), 0) as total_delivery,
-                   COALESCE(SUM(seguro), 0) as total_seguro,
-                   COALESCE(SUM(cargo), 0) as total_cargo
+    // Note: orden_envio stores totals, not per-envio
+    $sql = "SELECT delivery, seguro, cargo_extra as cargo
             FROM orden_envio
             WHERE cod_envio = ?";
     $stmt = $conn->prepare($sql);
@@ -123,14 +122,16 @@ function syncOrderToCTEnvios($conn, $cod_envio, $agency_id = null) {
     $fees_data = $stmt->get_result()->fetch_assoc();
     $stmt->close();
     
-    $delivery_fee = (float) ($fees_data['total_delivery'] ?? 0);
-    $seguro_fee = (float) ($fees_data['total_seguro'] ?? 0);
-    $cargo_fee = (float) ($fees_data['total_cargo'] ?? 0);
+    $delivery_fee = (float) ($fees_data['delivery'] ?? 0);
+    $seguro_fee = (float) ($fees_data['seguro'] ?? 0);
+    $cargo_fee = (float) ($fees_data['cargo'] ?? 0);
     
+   
     $delivery_fee_cents = (int) round($delivery_fee * 100);
     $seguro_fee_cents = (int) round($seguro_fee * 100);
     $cargo_fee_cents = (int) round($cargo_fee * 100);
     
+ 
     // 3. Get items with their rates
     $sql = "SELECT descripcion, peso, tarifa, medida_tarifa, precio, empaquetado
             FROM orden_envio_emp_det

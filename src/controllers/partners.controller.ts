@@ -1,4 +1,4 @@
-import { Response,  } from "express";
+import { Response } from "express";
 import { z } from "zod";
 import { Roles } from "@prisma/client";
 import AppError from "../utils/app.error";
@@ -379,8 +379,17 @@ const partners = {
    },
    //Order creation for partners
    createOrder: async (req: any, res: Response): Promise<void> => {
-      const { customer_id, receiver_id, customer, receiver, service_id, items } = req.body;
-
+      const {
+         customer_id,
+         receiver_id,
+         customer,
+         receiver,
+         service_id,
+         items,
+         total_delivery_fee_in_cents,
+         requires_home_delivery,
+      } = req.body;
+      const user = req.user;
       // Get agency user (needed for order creation)
       const agencyUser = await prisma.user.findFirst({
          where: { agency_id: req.partner.agency_id },
@@ -399,6 +408,8 @@ const partners = {
          items,
          user_id: agencyUser.id,
          agency_id: req.partner.agency_id,
+         total_delivery_fee_in_cents,
+         requires_home_delivery,
       });
 
       res.status(200).json({
