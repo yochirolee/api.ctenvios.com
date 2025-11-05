@@ -136,6 +136,7 @@ model Receiver {
 
 model Order {
     id                     Int            @id @default(autoincrement())
+    partner_order_id       String?
     customer_id            Int
     customer               Customer       @relation(fields: [customer_id], references: [id])
     receiver_id            Int

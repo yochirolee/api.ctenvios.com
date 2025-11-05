@@ -225,6 +225,7 @@ function syncOrderToCTEnvios($conn, $cod_envio, $agency_id = null) {
     
     // 8. Build API payload
     $payload = [
+        'partner_order_id' => (string) $cod_envio,  // Store old system order ID
         'customer' => array_filter([
             'first_name' => $customer_parsed['first_name'],
             'middle_name' => $customer_parsed['middle_name'],

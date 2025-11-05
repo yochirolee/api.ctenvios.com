@@ -380,6 +380,7 @@ const partners = {
    //Order creation for partners
    createOrder: async (req: any, res: Response): Promise<void> => {
       const {
+         partner_order_id,
          customer_id,
          receiver_id,
          customer,
@@ -400,6 +401,7 @@ const partners = {
          throw new AppError("No user found for partner's agency", 500);
       }
       const orderResult = await services.orders.create({
+         partner_order_id,
          customer_id,
          receiver_id,
          customer,

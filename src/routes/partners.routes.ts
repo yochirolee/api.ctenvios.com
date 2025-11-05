@@ -161,6 +161,7 @@ const partnerOrderItemSchema = z.object({
 });
 
 const partnerOrderSchema = z.object({
+   partner_order_id: z.string().optional(),
    customer_id: z.number().optional(),
    customer: createCustomerSchema.optional(),
    receiver_id: z.number().optional(),

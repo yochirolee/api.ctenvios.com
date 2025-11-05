@@ -7,6 +7,7 @@ import prisma from "../config/prisma_db";
 import { pricingService } from "./pricing.service";
 
 interface OrderCreateInput {
+   partner_order_id?: string;
    customer_id?: number;
    receiver_id?: number;
    customer?: Partial<Customer>;
@@ -26,6 +27,7 @@ export const ordersService = {
     * Partners: provides customer and receiver data (with location names)
     */
    create: async ({
+      partner_order_id,
       customer_id,
       receiver_id,
       customer,
@@ -53,6 +55,7 @@ export const ordersService = {
       // 🚀 OPTIMIZATION: Fast path for frontend (IDs provided, no lookups needed)
       if (customer_id && receiver_id) {
          const orderData: Prisma.OrderUncheckedCreateInput = {
+            partner_order_id,
             customer_id,
             receiver_id,
             service_id,
@@ -91,6 +94,7 @@ export const ordersService = {
      
 
       const orderData: Prisma.OrderUncheckedCreateInput = {
+         partner_order_id,
          customer_id: resolvedCustomer.id,
          receiver_id: resolvedReceiver.id,
          service_id,
