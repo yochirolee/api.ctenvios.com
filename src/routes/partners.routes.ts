@@ -167,6 +167,8 @@ const partnerOrderSchema = z.object({
    receiver: createReceiverSchema.optional(),
    service_id: z.number().positive(),
    items: z.array(partnerOrderItemSchema).min(1),
+   total_delivery_fee_in_cents: z.number().int().min(0).optional().default(0),
+   requires_home_delivery: z.boolean().optional().default(true),
 });
 
 /**

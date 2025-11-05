@@ -14,14 +14,16 @@ This guide explains how to integrate your legacy PHP system (SolvedCargo) with t
 
 ## Authentication
 
-The Partner API uses API Key authentication. Include the key in the `X-API-Key` header:
+The Partner API uses API Key authentication. Include the key in the `Authorization` header as a Bearer token:
 
 ```php
 $headers = [
     'Content-Type: application/json',
-    'X-API-Key: ctenv_live_your_api_key_here'
+    'Authorization: Bearer ctenv_live_your_api_key_here'
 ];
 ```
+
+**Important**: Use `Authorization: Bearer YOUR_KEY`, not `X-API-Key`.
 
 ## API Endpoint
 

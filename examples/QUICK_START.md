@@ -130,8 +130,8 @@ php examples/test-partner-api.php
 ### Step 2: Get Your Rate IDs
 
 ```bash
-curl -H "X-API-Key: your_key_here" \
-  "https://api.ctenvios.com/api/v1/partners/rates?service_id=11"
+curl -H "Authorization: Bearer your_key_here" \
+  "https://api.ctenvios.com/api/v1/partners/rates?service_id=1"
 ```
 
 ### Step 3: Test with Postman
@@ -140,7 +140,7 @@ curl -H "X-API-Key: your_key_here" \
 2. URL: `https://api.ctenvios.com/api/v1/partners/orders`
 3. Headers:
    -  `Content-Type: application/json`
-   -  `X-API-Key: your_key_here`
+   -  `Authorization: Bearer your_key_here`
 4. Body: Use the corrected JSON from above
 
 ### Step 4: Integrate with Your PHP System

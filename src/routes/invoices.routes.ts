@@ -3,7 +3,6 @@ import prisma from "../config/prisma_db";
 import { generateInvoicePDF } from "../utils/generate-invoice-pdf";
 
 import { generateCTEnviosLabels,  } from "../utils/generate-labels-pdf";
-import { z } from "zod";
 import AppError from "../utils/app.error";
 
 const router = Router();

@@ -88,11 +88,7 @@ export const ordersService = {
          }),
       ]);
 
-      console.log("Slow path order created");
-
-      const rates = await pricingService.getRatesByServiceIdAndAgencyId(service_id, agency_id);
-
-      console.log("rates", rates);
+     
 
       const orderData: Prisma.OrderUncheckedCreateInput = {
          customer_id: resolvedCustomer.id,

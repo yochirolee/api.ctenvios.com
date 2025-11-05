@@ -40,7 +40,7 @@ function getRatesFromAPI($service_id = null) {
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_HTTPHEADER => [
-            'X-API-Key: ' . API_KEY,
+            'Authorization: Bearer ' . API_KEY,
             'Content-Type: application/json'
         ]
     ]);
@@ -323,7 +323,7 @@ function createOrderInCTEnvios($conn, $codigo) {
         CURLOPT_POST => true,
         CURLOPT_POSTFIELDS => json_encode($payload),
         CURLOPT_HTTPHEADER => [
-            'X-API-Key: ' . API_KEY,
+            'Authorization: Bearer ' . API_KEY,
             'Content-Type: application/json'
         ]
     ]);
@@ -372,7 +372,7 @@ function getOrderDetails($order_id) {
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_HTTPHEADER => [
-            'X-API-Key: ' . API_KEY,
+            'Authorization: Bearer ' . API_KEY,
             'Content-Type: application/json'
         ]
     ]);
@@ -398,7 +398,7 @@ function trackPackage($hbl) {
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_HTTPHEADER => [
-            'X-API-Key: ' . API_KEY,
+            'Authorization: Bearer ' . API_KEY,
             'Content-Type: application/json'
         ]
     ]);

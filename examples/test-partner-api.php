@@ -37,7 +37,7 @@ function makeApiRequest($endpoint, $method = 'GET', $data = null) {
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_HTTPHEADER => [
-            'X-API-Key: ' . API_KEY,
+            'Authorization: Bearer ' . API_KEY,
             'Content-Type: application/json'
         ]
     ]);
@@ -45,6 +45,10 @@ function makeApiRequest($endpoint, $method = 'GET', $data = null) {
     if ($method === 'POST' && $data) {
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Authorization: Bearer ' . API_KEY,
+            'Content-Type: application/json'
+        ]);
     }
     
     $response = curl_exec($ch);
