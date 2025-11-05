@@ -1,10 +1,11 @@
-import { Request, Response, NextFunction } from "express";
+import { Response,  } from "express";
 import { z } from "zod";
 import { Roles } from "@prisma/client";
 import AppError from "../utils/app.error";
 import repository from "../repositories";
 import prisma from "../config/prisma_db";
 import { services } from "../services";
+import { pricingService } from "../services/pricing.service";
 
 const partnerCreateSchema = z.object({
    name: z.string().min(1, "Name is required"),
@@ -421,7 +422,7 @@ const partners = {
       }
 
       // Get rates with optional service filter
-      const rates = await repository.shippingRates.getRates(agency_id, service_id);
+      const rates = await pricingService.getRatesByServiceIdAndAgencyId(service_id ?? 0, agency_id ?? 0);
 
       res.status(200).json({
          status: "success",

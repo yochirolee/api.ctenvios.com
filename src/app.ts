@@ -17,6 +17,7 @@ const corsOptions = {
          "http://localhost:3000",
          "https://api-ctenvios-com.vercel.app",
          "https://dev.ctenvios.com",
+         "https://systemcaribetravel.com/",
       ];
 
       // Allow requests with no origin (like mobile apps, Postman, etc.)

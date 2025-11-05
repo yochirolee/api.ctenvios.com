@@ -1,10 +1,10 @@
-import { Customer, Prisma, PaymentMethod, PaymentStatus, OrderStatus } from "@prisma/client";
+import { Customer, Prisma, PaymentMethod, PaymentStatus, OrderStatus, Unit } from "@prisma/client";
 import { services } from ".";
 import repository from "../repositories";
 import { calculateOrderTotal, formatCents } from "../utils/utils";
 import { PAYMENT_CONFIG } from "../config/payment.config";
 import prisma from "../config/prisma_db";
-import { calculateTotalDeliveryFee } from "../utils/deliveryFeeCalculator";
+import { pricingService } from "./pricing.service";
 
 interface OrderCreateInput {
    customer_id?: number;
@@ -44,11 +44,10 @@ export const ordersService = {
       });
       //calculate delivery fee for each item temporarily
       const finalTotal = calculateOrderTotal(items_hbl);
+
       const item_delivery_fee = total_delivery_fee_in_cents ? total_delivery_fee_in_cents / items_hbl.length : 0;
 
-      // 🚀 Remove rate_type before DB insert (matches invoice pattern)
       for (let i = 0; i < items_hbl.length; i++) {
-         delete items_hbl[i].rate_type;
          items_hbl[i].delivery_fee_in_cents = item_delivery_fee;
       }
       // 🚀 OPTIMIZATION: Fast path for frontend (IDs provided, no lookups needed)
@@ -89,13 +88,19 @@ export const ordersService = {
          }),
       ]);
 
-    
+      console.log("Slow path order created");
+
+      const rates = await pricingService.getRatesByServiceIdAndAgencyId(service_id, agency_id);
+
+      console.log("rates", rates);
+
       const orderData: Prisma.OrderUncheckedCreateInput = {
          customer_id: resolvedCustomer.id,
          receiver_id: resolvedReceiver.id,
          service_id,
          user_id,
          agency_id,
+         status: OrderStatus.CREATED,
          requires_home_delivery,
          items: {
             create: items_hbl,

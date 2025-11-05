@@ -1,8 +1,9 @@
-import { Customer, Receiver, Province, City, Prisma, } from "@prisma/client";
+import { Customer, Receiver, Province, City, Prisma, Unit } from "@prisma/client";
 import prisma from "../config/prisma_db";
 import AppError from "../utils/app.error";
 import repository from "../repositories";
 import { generateHBLFast } from "../utils/generate-hbl";
+import { pricingService } from "./pricing.service";
 
 interface ReceiverWithLocationNames extends Omit<Receiver, "province_id" | "city_id"> {
    province?: string;
@@ -77,62 +78,50 @@ export const resolvers = {
       if (receiver?.ci) {
          // Check if receiver exists by CI
          const existingReceiver = await repository.receivers.getByCi(receiver.ci);
-         if (existingReceiver) {
-            return existingReceiver;
-         }
-
-         // 🚀 OPTIMIZATION: Parallelize province and city resolution
-         let province_id = receiver.province_id;
-         let city_id = receiver.city_id;
-
-         // If both province and city are provided as names, resolve them in parallel
-         if (
-            receiver.province &&
-            typeof receiver.province === "string" &&
-            receiver.city &&
-            typeof receiver.city === "string"
-         ) {
-            const resolvedProvinceId = await resolvers.resolveProvinceId(receiver.province);
-            city_id = await resolvers.resolveCityId(receiver.city, resolvedProvinceId);
-            province_id = resolvedProvinceId;
-         } else {
-            // If only province is provided as string name, resolve to ID
-            if (receiver.province && typeof receiver.province === "string") {
-               province_id = await resolvers.resolveProvinceId(receiver.province);
-            }
-
-            // If only city is provided as string name, resolve to ID
-            if (receiver.city && typeof receiver.city === "string" && province_id) {
-               city_id = await resolvers.resolveCityId(receiver.city, province_id);
-            }
-         }
-
-         // Validate required location fields
-         if (!province_id || !city_id) {
-            throw new AppError("Province and city are required for creating a new receiver", 400);
-         }
-
-         // Create new receiver with resolved IDs
-         const receiverData: Prisma.ReceiverUncheckedCreateInput = {
-            first_name: receiver.first_name,
-            middle_name: receiver.middle_name || null,
-            last_name: receiver.last_name,
-            second_last_name: receiver.second_last_name || null,
-            ci: receiver.ci,
-            passport: receiver.passport || null,
-            email: receiver.email || null,
-            mobile: receiver.mobile || null,
-            phone: receiver.phone || null,
-            address: receiver.address,
-            province_id: province_id,
-            city_id: city_id,
-         };
-
-         const newReceiver = await repository.receivers.create(receiverData);
-         return newReceiver as Receiver & { province: Province; city: City };
+         if (existingReceiver) return existingReceiver;
       }
 
-      throw new AppError("Either receiver_id or receiver data with CI is required", 400);
+      console.log("receiver", receiver);
+
+      if (!receiver) {
+         throw new AppError("Receiver data is required", 400);
+      }
+
+      // If both province and city are provided as names, resolve them in parallel
+      if (
+         receiver.province &&
+         typeof receiver.province === "string" &&
+         receiver.city &&
+         typeof receiver.city === "string"
+      ) {
+         const resolvedProvinceId = await resolvers.resolveProvinceId(receiver.province);
+         receiver.province_id = resolvedProvinceId;
+         receiver.city_id = await resolvers.resolveCityId(receiver.city, resolvedProvinceId);
+      }
+
+      // Validate required location fields
+      if (!receiver.province_id || !receiver.city_id) {
+         throw new AppError("Province and city are required for creating a new receiver", 400);
+      }
+
+      // Create new receiver with resolved IDs
+      const receiverData: Prisma.ReceiverUncheckedCreateInput = {
+         first_name: receiver.first_name,
+         middle_name: receiver.middle_name || null,
+         last_name: receiver.last_name,
+         second_last_name: receiver.second_last_name || null,
+         ci: receiver.ci,
+         passport: receiver.passport || null,
+         email: receiver.email || null,
+         mobile: receiver.mobile || null,
+         phone: receiver.phone || null,
+         address: receiver.address,
+         province_id: receiver.province_id,
+         city_id: receiver.city_id,
+      };
+
+      const newReceiver = await repository.receivers.create(receiverData);
+      return newReceiver as Receiver & { province: Province; city: City };
    },
 
    resolveCustomer: async ({
@@ -199,15 +188,18 @@ export const resolvers = {
       // 🚀 OPTIMIZATION: Parallelize HBL generation and rate fetching
       const allHblCodes = await generateHBLFast(agency_id, service_id, items.length);
 
+      const rates = await pricingService.getRatesByServiceIdAndAgencyId(service_id, agency_id);
+      
+
       // Pre-allocate and populate items array
       const items_hbl: any[] = new Array(items.length);
       for (let i = 0; i < items.length; i++) {
          const item = items[i];
-
+         const rate = rates.find((rate) => rate.id === item.rate_id);
          items_hbl[i] = {
             hbl: allHblCodes[i],
             description: item.description,
-            price_in_cents: item.price_in_cents,
+            price_in_cents: item.price_in_cents || rate?.price_in_cents || 0,
             charge_fee_in_cents: item.charge_fee_in_cents || 0,
             delivery_fee_in_cents: item.delivery_fee_in_cents || 0,
             rate_id: item.rate_id,
@@ -217,7 +209,7 @@ export const resolvers = {
             weight: item.weight,
             service_id,
             agency_id,
-            unit: item.unit,
+            unit: rate?.unit || Unit.PER_LB,
          };
       }
       return items_hbl;

@@ -7,6 +7,7 @@ import { z } from "zod";
 import AppError from "../utils/app.error";
 import { Unit } from "@prisma/client";
 import { validate } from "../middlewares/validate.middleware";
+import { createCustomerSchema, createReceiverSchema } from "../types/types";
 
 const router = Router();
 
@@ -151,18 +152,21 @@ router.get("/admin/:id/stats", authMiddleware, async (req, res, next) => {
 // PARTNER API ROUTES - External Integration
 // ============================================
 
-const orderItemSchema = z.object({
+const partnerOrderItemSchema = z.object({
    description: z.string().min(1),
-   price_in_cents: z.number().positive(),
+   rate_id: z.number().positive(),
    weight: z.number().positive(),
+   price_in_cents: z.number().optional(),
    unit: z.nativeEnum(Unit).optional().default(Unit.PER_LB),
 });
 
 const partnerOrderSchema = z.object({
-   customer_id: z.number().positive(),
-   receiver_id: z.number().positive(),
+   customer_id: z.number().optional(),
+   customer: createCustomerSchema.optional(),
+   receiver_id: z.number().optional(),
+   receiver: createReceiverSchema.optional(),
    service_id: z.number().positive(),
-   items: z.array(orderItemSchema).min(1),
+   items: z.array(partnerOrderItemSchema).min(1),
 });
 
 /**
@@ -195,7 +199,7 @@ router.get("/rates", partnerAuthMiddleware, partnerLogMiddleware, controllers.pa
  * Get order details via Partner API
  * Requires API key authentication
  */
-router.get("/invoices/:id", partnerAuthMiddleware, partnerLogMiddleware, async (req: any, res) => {
+router.get("/orders/:id", partnerAuthMiddleware, partnerLogMiddleware, async (req: any, res) => {
    try {
       const partner = req.partner;
       const { id } = req.params;

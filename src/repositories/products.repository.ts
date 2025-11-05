@@ -1,4 +1,4 @@
-import { Product } from "@prisma/client";
+import { Product, Prisma } from "@prisma/client";
 import prisma from "../config/prisma_db";
 
 export const products = {
@@ -8,8 +8,8 @@ export const products = {
    create: async (product: Product) => {
       return await prisma.product.create({ data: product });
    },
-   getById: async (id: number) => {
-      return await prisma.product.findUnique({ where: { id } });
+   getById: async (id: number, include: Prisma.ProductInclude) => {
+      return await prisma.product.findUnique({ where: { id }, include });
    },
    update: async (id: number, product: Product) => {
       return await prisma.product.update({ where: { id: Number(id) }, data: product });

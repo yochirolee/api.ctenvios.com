@@ -77,7 +77,6 @@ const orders = {
       });
    },
    create: async (orderData: Prisma.OrderUncheckedCreateInput) => {
-     
       return await prisma.order.create({
          data: orderData,
          include: {
