@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { repository } from "../repositories";
 
-export const analytics = {
+const analytics = {
    getSalesReport: async (req: Request, res: Response): Promise<void> => {
       let { year, agencyId, startDate, endDate } = req.query;
 
@@ -31,4 +31,54 @@ export const analytics = {
 
       res.status(200).json(report);
    },
+   getSalesReportByAgency: async (req: Request, res: Response): Promise<void> => {
+      let { year, agencyId, startDate, endDate } = req.query;
+
+      const yearNum = Number(year);
+      const agencyIdNum = agencyId ? Number(agencyId) : 0;
+
+      const report = await repository.analytics.getSalesReport(
+         yearNum,
+         agencyIdNum,
+         startDate ? new Date(startDate as string) : undefined,
+         endDate ? new Date(endDate as string) : undefined
+      );
+
+      res.status(200).json(report);
+   },
+
+   getDailySalesByAgency: async (req: Request, res: Response): Promise<void> => {
+      let { year, startDate, endDate } = req.query;
+
+      // Default to current year if not provided
+      if (!year) {
+         const currentYear = new Date().getFullYear().toString();
+         year = currentYear;
+      }
+
+      const yearNum = Number(year);
+
+      // Parse optional date parameters
+      const parsedStartDate = startDate ? new Date(startDate as string) : undefined;
+      const parsedEndDate = endDate ? new Date(endDate as string) : undefined;
+
+      // Default date range if not provided
+      const defaultStartDate = new Date(`${yearNum}-01-01`);
+      const defaultEndDate = new Date(`${yearNum}-12-31`);
+
+      const report = await repository.analytics.getDailySalesByAgency(
+         yearNum,
+         parsedStartDate || defaultStartDate,
+         parsedEndDate || defaultEndDate
+      );
+
+      res.status(200).json(report);
+   },
+
+   getTodaySalesByAgency: async (req: Request, res: Response): Promise<void> => {
+      const report = await repository.analytics.getTodaySalesByAgency();
+      res.status(200).json(report);
+   },
 };
+
+export default analytics;

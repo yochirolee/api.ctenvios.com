@@ -11,14 +11,21 @@ $AGENCY_CONFIG = [
         'api_key' => 'ct_test_XLMfw9ZoI2xVE1x7kMVtvymPSE4pC0zrGf1QmiN0S3M',
         'ctenvios_agency_id' => 2,  // Agency ID in CTEnvios system
         'rate_per_lb' => 199,        // Default rate if not in database
-        'name' => 'Agency 2'
+        'name' => 'CTEnvios'
     ],
     208 => [
         'api_key' => 'ct_test_iDxFQrs3xmzYjpbgASG0Y7ghZrh7zeQjie__rBa9Gas',  // Replace with actual key
         'ctenvios_agency_id' => 208, // Agency ID in CTEnvios system
         'rate_per_lb' => 199,
-        'name' => 'Agency 208'
+        'name' => 'RapidVia Services'
+    ],
+    129 => [
+        'api_key' => 'ct_test_BlH--2IMiT-F08Js7sch9p9jV9u-g-m3B5j7QbBRXhw',  // Replace with actual key
+        'ctenvios_agency_id' => 129, // Agency ID in CTEnvios system
+        'rate_per_lb' => 175,
+        'name' => 'Cuba Encarga'
     ]
+
     // Add more agencies as needed
 ];
 
@@ -111,9 +118,49 @@ function syncOrderToCTEnvios($conn, $cod_envio, $agency_id = null) {
         return ['success' => false, 'error' => 'Receiver not found'];
     }
     
-    // 2b. Get fees from orden_envio (delivery, seguro, cargo)
-    // Note: orden_envio stores totals, not per-envio
-    $sql = "SELECT delivery, seguro, cargo_extra as cargo
+    // 2b. Calculate delivery fee based on province and municipality
+    $provincia = $receiver_data['provincia'] ?? '';
+    $municipio = $receiver_data['ciudad'] ?? '';
+    
+    // Default delivery fee
+    $delivery_fee = 18;
+    
+    switch ($provincia) {
+        case "La Habana":
+            $delivery_fee = 6;
+            break;
+        case "Artemisa":
+            $delivery_fee = 6;
+            break;
+        case "Mayabeque":
+            $delivery_fee = 6;
+            break;
+        case "Villa Clara":
+            if ($municipio == "Santa Clara") {
+                $delivery_fee = 12;
+            } else {
+                // Apply default logic
+                $delivery_fee = (strtolower($provincia) == strtolower($municipio)) ? 12 : 18;
+            }
+            break;
+        case "Granma":
+            if ($municipio == "Bayamo") {
+                $delivery_fee = 12;
+            } else {
+                // Apply default logic
+                $delivery_fee = (strtolower($provincia) == strtolower($municipio)) ? 12 : 18;
+            }
+            break;
+        default:
+            if (strtolower($provincia) == strtolower($municipio))
+                $delivery_fee = 12;
+            else 
+                $delivery_fee = 18;
+            break;
+    }
+    
+    // Get other fees from orden_envio (seguro, cargo)
+    $sql = "SELECT seguro, cargo_extra as cargo
             FROM orden_envio
             WHERE cod_envio = ?";
     $stmt = $conn->prepare($sql);
@@ -122,15 +169,14 @@ function syncOrderToCTEnvios($conn, $cod_envio, $agency_id = null) {
     $fees_data = $stmt->get_result()->fetch_assoc();
     $stmt->close();
     
-    $delivery_fee = (float) ($fees_data['delivery'] ?? 0);
     $seguro_fee = (float) ($fees_data['seguro'] ?? 0);
     $cargo_fee = (float) ($fees_data['cargo'] ?? 0);
-    
    
     $delivery_fee_cents = (int) round($delivery_fee * 100);
     $seguro_fee_cents = (int) round($seguro_fee * 100);
     $cargo_fee_cents = (int) round($cargo_fee * 100);
     
+     
  
     // 3. Get items with their rates
     $sql = "SELECT descripcion, peso, tarifa, medida_tarifa, precio, empaquetado,tipo_producto

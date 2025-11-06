@@ -101,6 +101,10 @@ const orders = {
          },
       });
    },
+   
+   delete: async (id: number) => {
+      return await prisma.order.delete({ where: { id } });
+   },
 };
 
 export default orders;
