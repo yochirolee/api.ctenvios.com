@@ -207,7 +207,7 @@ function syncOrderToCTEnvios($conn, $cod_envio, $agency_id = null) {
         } else {
             $unit = 'FIXED';
         }
-        // In your system: tarifa is the RATE per unit (e.g., $5.00/lb)
+           // In your system: tarifa is the RATE per unit (e.g., $5.00/lb)
         // In CTEnvios API: price_in_cents is also the RATE per unit (e.g., 500 cents/lb)
         // So we just convert tarifa to cents
         $price_in_cents = (int) round($tarifa * 100);
@@ -215,6 +215,28 @@ function syncOrderToCTEnvios($conn, $cod_envio, $agency_id = null) {
         // Distribute insurance and extra charges across items
         $insurance_cents = 0;
         $charge_cents = 0;
+
+        
+        if ($tipo_producto == 7 && $agency_id == 129) {
+            $unit='FIXED';
+            switch ($weight) {
+                case $weight <= 6.6:
+                    $price_in_cents = 1400;
+                    break;
+                case $weight > 6.6 && $weight <= 11:
+                    $price_in_cents = 2200;
+                    break;
+                case $weight > 11 && $weight <= 22:
+                    $price_in_cents = 45;
+                    break;
+                case $weight > 15.9 && $weight <= 44:
+                    $price_in_cents = 79;
+                    break;
+               
+            }
+
+        }
+     
         
         if ($item_index == 0) {
             // Add all fees to first item

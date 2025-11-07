@@ -162,7 +162,7 @@ async function generateCleanCTEnviosLabel(
    // Date moved below Caribe Travel Express
 
    // TRANSCARGO beside both squares - right aligned
-   doc.fontSize(18)
+   doc.fontSize(14)
       .font(FONTS.BOLD)
       .fillColor("#000000")
       .text(`${order.service.provider.name.toUpperCase()}`, margin + 140, currentY + 10, {
