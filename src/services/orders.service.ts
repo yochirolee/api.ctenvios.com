@@ -1,10 +1,9 @@
-import { Customer, Prisma, PaymentMethod, PaymentStatus, OrderStatus, Unit } from "@prisma/client";
+import { Customer, Prisma, PaymentMethod, PaymentStatus, Status, Unit } from "@prisma/client";
 import { services } from ".";
 import repository from "../repositories";
 import { calculateOrderTotal, formatCents } from "../utils/utils";
 import { PAYMENT_CONFIG } from "../config/payment.config";
 import prisma from "../config/prisma_db";
-import { pricingService } from "./pricing.service";
 
 interface OrderCreateInput {
    partner_order_id?: string;
@@ -61,7 +60,7 @@ export const ordersService = {
             service_id,
             user_id,
             agency_id,
-            status: OrderStatus.CREATED,
+            status: Status.CREATED,
             requires_home_delivery,
             items: {
                create: items_hbl,
@@ -91,8 +90,6 @@ export const ordersService = {
          }),
       ]);
 
-     
-
       const orderData: Prisma.OrderUncheckedCreateInput = {
          partner_order_id,
          customer_id: resolvedCustomer.id,
@@ -100,7 +97,7 @@ export const ordersService = {
          service_id,
          user_id,
          agency_id,
-         status: OrderStatus.CREATED,
+         status: Status.CREATED,
          requires_home_delivery,
          items: {
             create: items_hbl,
@@ -161,13 +158,13 @@ export const ordersService = {
       let newPaymentStatus: PaymentStatus;
       if (totalPaidAfterPayment >= newTotalWithCharge) {
          newPaymentStatus = PaymentStatus.PAID;
-         order_to_pay.status = OrderStatus.PAID;
+         order_to_pay.status = Status.PAID;
       } else if (totalPaidAfterPayment > 0) {
          newPaymentStatus = PaymentStatus.PARTIALLY_PAID;
-         order_to_pay.status = OrderStatus.PARTIALLY_PAID;
+         order_to_pay.status = Status.PARTIALLY_PAID;
       } else {
          newPaymentStatus = PaymentStatus.PENDING;
-         order_to_pay.status = OrderStatus.DRAFT;
+         order_to_pay.status = Status.CREATED;
       }
 
       // Execute payment transaction

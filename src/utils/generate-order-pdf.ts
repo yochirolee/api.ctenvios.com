@@ -2,26 +2,13 @@ import PDFKit from "pdfkit";
 import * as bwipjs from "bwip-js";
 import { promises as fs } from "fs";
 import * as path from "path";
-import { Order, Customer, Receiver, Agency, Service, Item, Unit } from "@prisma/client";
+import { Unit } from "@prisma/client";
+import type { OrderPdfDetails } from "../repositories/orders.repository";
 import { formatName } from "./capitalize";
 import { calculate_row_subtotal, formatCents } from "./utils";
 
-interface OrderWithRelations extends Order {
-   customer: Customer;
-   receiver: Receiver & {
-      province?: { name: string };
-      city?: { name: string };
-   };
-   total_in_cents: number;
-   paid_in_cents: number;
-   charge_in_cents: number;
-   agency: Agency;
-   service: Service;
-   items: Item[];
-}
-
 // Pre-calculate all financial totals
-function calculateOrderTotals(order: OrderWithRelations) {
+function calculateOrderTotals(order: OrderPdfDetails) {
    const subtotal_in_cents = order.items.reduce(
       (acc, item) =>
          acc +
@@ -37,11 +24,14 @@ function calculateOrderTotals(order: OrderWithRelations) {
    );
    const total_delivery_fee_in_cents = order.items.reduce((acc, item) => acc + (item.delivery_fee_in_cents || 0), 0);
    const total_insurance_in_cents = order.items.reduce((acc, item) => acc + (item.insurance_fee_in_cents || 0), 0);
-   const total_charge_in_cents = order.items.reduce((acc, item) => acc + (item.charge_fee_in_cents || 0), 0);
+   const items_charge_in_cents = order.items.reduce((acc, item) => acc + (item.charge_fee_in_cents || 0), 0);
 
+   const payments_charge_in_cents = order.payments.reduce((acc, payment) => acc + (payment.charge_in_cents || 0), 0);
+
+   const items_fee_amount = formatCents(items_charge_in_cents);
+   const payments_fee_amount = formatCents(payments_charge_in_cents);
    const subtotal = formatCents(subtotal_in_cents);
    const totalWeight = order.items.reduce((acc, item) => acc + item.weight, 0);
-   const chargeAmount = formatCents(total_charge_in_cents);
    const insuranceAmount = formatCents(total_insurance_in_cents);
    const deliveryFeeAmount = formatCents(total_delivery_fee_in_cents);
    const paidAmount = formatCents(order.paid_in_cents);
@@ -51,7 +41,8 @@ function calculateOrderTotals(order: OrderWithRelations) {
    return {
       subtotal,
       totalWeight,
-      chargeAmount,
+      items_fee_amount,
+      payments_fee_amount,
       insuranceAmount,
       deliveryFeeAmount,
       paidAmount,
@@ -95,6 +86,9 @@ const COLORS = {
    WHITE: "#ffffff",
 } as const;
 
+const ASSETS_PATH = path.join(process.cwd(), "assets");
+const DEFAULT_LOGO_FILENAME = "ctelogo.png";
+
 const LAYOUT = {
    PAGE_HEIGHT: 792,
    PAGE_WIDTH: 612,
@@ -116,7 +110,7 @@ function registerCustomFonts(doc: PDFKit.PDFDocument): void {
    }
 }
 
-export const generateOrderPDF = async (order: OrderWithRelations): Promise<PDFKit.PDFDocument> => {
+export const generateOrderPDF = async (order: OrderPdfDetails): Promise<PDFKit.PDFDocument> => {
    try {
       const doc = new PDFKit({ margin: 0, size: "letter" });
       registerCustomFonts(doc);
@@ -127,12 +121,9 @@ export const generateOrderPDF = async (order: OrderWithRelations): Promise<PDFKi
    }
 };
 
-async function generateModernOrder(doc: PDFKit.PDFDocument, order: OrderWithRelations) {
+async function generateModernOrder(doc: PDFKit.PDFDocument, order: OrderPdfDetails) {
    // Pre-load assets
-   const [logoBuffer, barcodeBuffer] = await Promise.all([
-      loadLogo(order.agency.logo ?? undefined),
-      generateBarcode(order.id),
-   ]);
+   const [logoBuffer, barcodeBuffer] = await Promise.all([loadLogo(), generateBarcode(order.id)]);
 
    // Pre-calculate values
    const calculations = calculateOrderTotals(order);
@@ -161,9 +152,8 @@ async function generateModernOrder(doc: PDFKit.PDFDocument, order: OrderWithRela
 
 // Optimized asset loading with caching
 async function loadLogo(logoUrl?: string): Promise<Buffer | null> {
-   if (!logoUrl) return null;
-
-   const cacheKey = logoUrl;
+   const source = logoUrl?.trim() || DEFAULT_LOGO_FILENAME;
+   const cacheKey = source;
    if (logoCache.has(cacheKey)) {
       return logoCache.get(cacheKey)!;
    }
@@ -171,22 +161,25 @@ async function loadLogo(logoUrl?: string): Promise<Buffer | null> {
    try {
       let logoBuffer: Buffer;
 
-      if (logoUrl.startsWith("http://") || logoUrl.startsWith("https://")) {
-         const response = await fetch(logoUrl);
+      if (source.startsWith("http://") || source.startsWith("https://")) {
+         const response = await fetch(source);
          if (!response.ok) {
             throw new Error(`Failed to fetch logo from URL: ${response.status} ${response.statusText}`);
          }
          const arrayBuffer = await response.arrayBuffer();
          logoBuffer = Buffer.from(arrayBuffer);
       } else {
-         const logoPath = path.join(process.cwd(), "assets", logoUrl);
+         const logoPath = path.isAbsolute(source) ? source : path.join(ASSETS_PATH, source);
          logoBuffer = await fs.readFile(logoPath);
       }
 
       logoCache.set(cacheKey, logoBuffer);
       return logoBuffer;
    } catch (error) {
-      console.log(`Logo ${logoUrl} could not be loaded:`, error);
+      console.log(`Logo ${source} could not be loaded:`, error);
+      if (source !== DEFAULT_LOGO_FILENAME) {
+         return loadLogo(DEFAULT_LOGO_FILENAME);
+      }
       return null;
    }
 }
@@ -216,7 +209,7 @@ async function generateBarcode(orderId: number): Promise<Buffer | null> {
 }
 
 // Pre-format all string data
-function formatOrderData(order: OrderWithRelations) {
+function formatOrderData(order: OrderPdfDetails) {
    const senderName = formatName(
       order.customer.first_name,
       order.customer.middle_name,
@@ -247,17 +240,23 @@ function formatOrderData(order: OrderWithRelations) {
    const location = `${order.receiver.city?.name || ""} ${order.receiver.province?.name || ""}`.trim();
    const fullAddress = location ? `${order.receiver.address}, ${location}` : order.receiver.address;
 
+   const totalWeightValue = order.items.reduce((acc, item) => acc + item.weight, 0);
+   const totalWeightLabel = `${totalWeightValue.toFixed(2)} lbs`;
+   const itemsCount = `${order.items.length}`;
+
    return {
       senderName,
       recipientName,
       formattedDate,
       fullAddress,
+      totalWeightLabel,
+      itemsCount,
    };
 }
 
 async function generateModernHeader(
    doc: PDFKit.PDFDocument,
-   order: OrderWithRelations,
+   order: OrderPdfDetails,
    logoBuffer: Buffer | null,
    formattedData: ReturnType<typeof formatOrderData>
 ): Promise<number> {
@@ -270,12 +269,11 @@ async function generateModernHeader(
 
    if (logoBuffer) {
       // Draw light border around logo
-      doc.strokeColor(COLORS.BORDER).lineWidth(1).roundedRect(logoX, logoY, 48, 48, 8).stroke();
 
-      doc.image(logoBuffer, logoX + 6, logoY + 6, { width: 36, height: 36 });
+      doc.image(logoBuffer, logoX, logoY + 6, { width: 48, height: 36 });
    } else {
       // Draw placeholder with light background and border
-      const companyInitial = order.agency.name.charAt(0).toUpperCase();
+      const companyInitial = order.agency.name?.charAt(0).toUpperCase() || "";
       doc.fillColor(COLORS.MUTED).roundedRect(logoX, logoY, 48, 48, 8).fill();
       doc.strokeColor(COLORS.BORDER).lineWidth(1).roundedRect(logoX, logoY, 48, 48, 8).stroke();
 
@@ -287,13 +285,13 @@ async function generateModernHeader(
 
    // Company name next to logo
    const companyNameY = logoY + 6;
-   textStyle.style(FONTS.BOLD, 18, "#0d4fa3").text(order.agency.name, logoX + 60, companyNameY);
+   textStyle.style(FONTS.BOLD, 18, "#0d4fa3").text(order.agency.name || "", logoX + 60, companyNameY);
 
    // Company info below name with proper spacing
    const addressY = logoY + 28;
    textStyle
-      .style(FONTS.REGULAR, 9, COLORS.MUTED_FOREGROUND)
-      .text(`${order.agency.address} • ${order.agency.phone}`, logoX + 60, addressY);
+      .style(FONTS.REGULAR, 8, COLORS.MUTED_FOREGROUND)
+      .text(`${order.agency.address || ""} • ${order.agency.phone || ""}`, logoX + 60, addressY);
 
    // Right side - Order number and date aligned with left side
    const rightX = LAYOUT.PAGE_WIDTH - 260;
@@ -301,17 +299,26 @@ async function generateModernHeader(
    // Order title - on same line as agency name
    textStyle.style(FONTS.BOLD, 18, COLORS.FOREGROUND).text(`Order ${order.id}`, rightX, companyNameY, {
       align: "right",
-      width: 230,
+      width: 240,
       lineBreak: false,
    });
 
    // Date - on same line as address
    textStyle
-      .style(FONTS.REGULAR, 9, COLORS.MUTED_FOREGROUND)
+      .style(FONTS.REGULAR, 8, COLORS.MUTED_FOREGROUND)
       .text(`Fecha: ${formattedData.formattedDate}`, rightX, addressY, {
          align: "right",
-         width: 230,
+         width: 240,
       });
+
+   // Order stats (items and weight) on a single line below the date
+   const statsX = rightX;
+   const statsY = addressY + 12;
+   const statsWidth = 240;
+   const statsLine = `Weight: ${formattedData.totalWeightLabel}   •   Items: ${formattedData.itemsCount}`;
+   textStyle
+      .style(FONTS.SEMIBOLD, 10, COLORS.FOREGROUND)
+      .text(statsLine, statsX, statsY, { width: statsWidth, align: "right" });
 
    // Draw bottom border for header section
    doc.strokeColor(COLORS.BORDER).lineWidth(1).moveTo(0, headerHeight).lineTo(LAYOUT.PAGE_WIDTH, headerHeight).stroke();
@@ -321,7 +328,7 @@ async function generateModernHeader(
 
 async function generateBarcodeSection(
    doc: PDFKit.PDFDocument,
-   order: OrderWithRelations,
+   order: OrderPdfDetails,
    barcodeBuffer: Buffer | null,
    calculations: ReturnType<typeof calculateOrderTotals>,
    startY: number
@@ -329,27 +336,33 @@ async function generateBarcodeSection(
    const textStyle = new TextStyler(doc);
    const sectionHeight = 35;
    const barcodeHeight = 22;
+   const transportLetter = order.service.service_type === "MARITIME" ? "M" : "A";
+   const transportSquareSize = 30;
+   const transportSquarePadding = 10;
 
    // Summary information on the left - vertically centered
    const summaryX = 20;
    const summaryY = startY + (sectionHeight - 10) / 2; // Center text vertically (10 is approximate text height)
 
-   textStyle
-      .style(FONTS.SEMIBOLD, 10, COLORS.FOREGROUND)
-      .text(`${order.service.name} - `, summaryX, summaryY, { continued: true });
-   textStyle.style(FONTS.SEMIBOLD, 10, "#0d4fa3").text(`${order.service.service_type}`, summaryX, summaryY);
+   const squareX = summaryX;
+   const squareY = startY + (sectionHeight - transportSquareSize) / 2;
 
-   textStyle.style(FONTS.REGULAR, 10, COLORS.MUTED_FOREGROUND).text("Items:", summaryX + 200, summaryY);
-   textStyle.style(FONTS.SEMIBOLD, 10, "#0d4fa3").text(`${order.items.length}`, summaryX + 238, summaryY);
+      doc.strokeColor(COLORS.FOREGROUND)
+      .lineWidth(1.5)
+      .rect(squareX, squareY, transportSquareSize, transportSquareSize)
+      .stroke();
 
-   textStyle.style(FONTS.REGULAR, 10, COLORS.MUTED_FOREGROUND).text("Weight:", summaryX + 285, summaryY);
-   textStyle
-      .style(FONTS.SEMIBOLD, 10, "#0d4fa3")
-      .text(`${calculations.totalWeight.toFixed(2)} lbs`, summaryX + 330, summaryY);
+   doc.fontSize(transportSquareSize - 8)
+      .font(FONTS.BOLD)
+      .fillColor(COLORS.FOREGROUND)
+      .text(transportLetter, squareX, squareY + 3, { width: transportSquareSize, align: "center" });
+
+   const serviceLabelX = squareX + transportSquareSize + transportSquarePadding;
+   textStyle.style(FONTS.SEMIBOLD, 10, COLORS.FOREGROUND).text(order.service.name, serviceLabelX, summaryY);
 
    // Barcode on the right side - vertically centered and aligned with Order text
    if (barcodeBuffer) {
-      const barcodeX = LAYOUT.PAGE_WIDTH - 140; // Align with Order text right edge (30pt margin)
+      const barcodeX = LAYOUT.PAGE_WIDTH - 130; // Align with Order text right edge (30pt margin)
       const barcodeY = startY + (sectionHeight - barcodeHeight) / 2; // Equal top and bottom margins
 
       doc.image(barcodeBuffer, barcodeX, barcodeY, { width: 110, height: barcodeHeight });
@@ -360,7 +373,7 @@ async function generateBarcodeSection(
 
 function generateContactGrid(
    doc: PDFKit.PDFDocument,
-   order: OrderWithRelations,
+   order: OrderPdfDetails,
    formattedData: ReturnType<typeof formatOrderData>,
    startY: number
 ): number {
@@ -375,34 +388,38 @@ function generateContactGrid(
 
    // Left column - Sender (Remitente)
    textStyle
-      .style(FONTS.SEMIBOLD, 9, COLORS.MUTED_FOREGROUND)
+      .style(FONTS.SEMIBOLD, 7, COLORS.MUTED_FOREGROUND)
       .text("REMITENTE", leftX, currentY, { characterSpacing: 0.5 });
 
    currentY += 15;
-   textStyle.style(FONTS.SEMIBOLD, 10, COLORS.FOREGROUND).text(formattedData.senderName, leftX, currentY, {
+   textStyle.style(FONTS.SEMIBOLD, 9, COLORS.FOREGROUND).text(formattedData.senderName || "", leftX, currentY, {
       width: 240,
    });
 
    currentY += 14;
    if (order.customer.mobile) {
-      textStyle.style(FONTS.REGULAR, 9, COLORS.MUTED_FOREGROUND).text(`Tel: ${order.customer.mobile}`, leftX, currentY);
+      textStyle
+         .style(FONTS.REGULAR, 8, COLORS.MUTED_FOREGROUND)
+         .text(`Tel: ${order.customer.mobile || ""}`, leftX, currentY);
       currentY += 12;
    }
 
    if (order.customer.address) {
-      textStyle.style(FONTS.REGULAR, 9, COLORS.MUTED_FOREGROUND).text(`${order.customer.address}`, leftX, currentY, {
-         width: 240,
-      });
+      textStyle
+         .style(FONTS.REGULAR, 8, COLORS.MUTED_FOREGROUND)
+         .text(`Dir: ${order.customer.address || ""}`, leftX, currentY, {
+            width: 240,
+         });
    }
 
    // Right column - Recipient (Destinatario)
    let recipientY = startY + 25;
    textStyle
-      .style(FONTS.SEMIBOLD, 9, COLORS.MUTED_FOREGROUND)
+      .style(FONTS.SEMIBOLD, 7, COLORS.MUTED_FOREGROUND)
       .text("DESTINATARIO", rightX, recipientY, { characterSpacing: 0.5 });
 
    recipientY += 15;
-   textStyle.style(FONTS.SEMIBOLD, 10, COLORS.FOREGROUND).text(formattedData.recipientName, rightX, recipientY, {
+   textStyle.style(FONTS.SEMIBOLD, 9, COLORS.FOREGROUND).text(formattedData.recipientName || "", rightX, recipientY, {
       width: 240,
    });
 
@@ -411,25 +428,27 @@ function generateContactGrid(
       const phoneText = `Tel: ${order.receiver.mobile || ""}${
          order.receiver.mobile && order.receiver.phone ? " - " : ""
       }${order.receiver.phone || ""}`;
-      textStyle.style(FONTS.REGULAR, 9, COLORS.MUTED_FOREGROUND).text(phoneText, rightX, recipientY);
+      textStyle.style(FONTS.REGULAR, 8, COLORS.MUTED_FOREGROUND).text(phoneText, rightX, recipientY);
       recipientY += 12;
    }
 
    if (order.receiver.ci) {
-      textStyle.style(FONTS.REGULAR, 9, COLORS.MUTED_FOREGROUND).text(`CI: ${order.receiver.ci}`, rightX, recipientY);
+      textStyle.style(FONTS.REGULAR, 8, COLORS.MUTED_FOREGROUND).text(`CI: ${order.receiver.ci}`, rightX, recipientY);
       recipientY += 12;
    }
 
-   textStyle.style(FONTS.REGULAR, 9, COLORS.MUTED_FOREGROUND).text(formattedData.fullAddress, rightX, recipientY, {
-      width: 240,
-   });
+   textStyle
+      .style(FONTS.REGULAR, 8, COLORS.MUTED_FOREGROUND)
+      .text(`Dir: ${formattedData.fullAddress || ""}`, rightX, recipientY, {
+         width: 240,
+      });
 
    return startY + sectionHeight;
 }
 
 async function generateModernTable(
    doc: PDFKit.PDFDocument,
-   order: OrderWithRelations,
+   order: OrderPdfDetails,
    calculations: ReturnType<typeof calculateOrderTotals>,
    startY: number,
    logoBuffer: Buffer | null,
@@ -639,8 +658,8 @@ function renderModernTotals(
 ) {
    let currentY = startY;
 
-   const labelX = 330;
-   const valueX = 470;
+   const labelX = 320;
+   const valueX = 485;
    const labelWidth = 120;
    const valueWidth = 110;
 
@@ -648,7 +667,8 @@ function renderModernTotals(
       { label: "Subtotal:", value: calculations.subtotal, size: 9 },
       { label: "Delivery:", value: calculations.deliveryFeeAmount, size: 9 },
       { label: "Seguro:", value: calculations.insuranceAmount, size: 9 },
-      { label: "Cargo:", value: calculations.chargeAmount, size: 9 },
+      { label: "Cargo:", value: calculations.items_fee_amount, size: 9 },
+      { label: "Payment Fee:", value: calculations.payments_fee_amount, size: 9 },
       { label: "Descuento:", value: "$0.00", size: 9, color: COLORS.MUTED_FOREGROUND },
    ];
 
@@ -713,7 +733,7 @@ function renderModernTotals(
    });
 }
 
-function addModernFooterToAllPages(doc: PDFKit.PDFDocument, order: OrderWithRelations, totalPages: number) {
+function addModernFooterToAllPages(doc: PDFKit.PDFDocument, order: OrderPdfDetails, totalPages: number) {
    const range = doc.bufferedPageRange();
    const textStyle = new TextStyler(doc);
 

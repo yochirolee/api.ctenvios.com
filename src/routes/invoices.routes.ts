@@ -4,6 +4,7 @@ import { generateInvoicePDF } from "../utils/generate-invoice-pdf";
 import { generateOrderPDF } from "../utils/generate-order-pdf";
 import { generateCTEnviosLabels } from "../utils/generate-labels-pdf";
 import AppError from "../utils/app.error";
+import repository from "../repositories";
 
 const router = Router();
 
@@ -81,34 +82,14 @@ router.get("/:id/pdf", async (req, res) => {
       }
 
       // Fetch order with all required relations
-      const order = await prisma.order.findUnique({
-         where: { id: parseInt(id) },
-         include: {
-            customer: true,
-            receiver: {
-               include: {
-                  province: true,
-                  city: true,
-               },
-            },
-            agency: true,
-            service: true,
-            items: true,
-         },
-      });
-
+    const order=await repository.orders.getByIdWithDetails(parseInt(id));
       if (!order) {
          throw new AppError("Order not found", 404);
       }
 
-      // Add charge_in_cents (calculated from payments or default to 0)
-      const orderWithCharge = {
-         ...order,
-         charge_in_cents: 0,
-      };
 
       // Generate modern order PDF
-      const doc = await generateOrderPDF(orderWithCharge);
+      const doc = await generateOrderPDF(order);
 
       // Set response headers for PDF
       res.setHeader("Content-Type", "application/pdf");

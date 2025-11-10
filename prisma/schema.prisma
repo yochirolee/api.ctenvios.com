@@ -44,36 +44,39 @@ model User {
 }
 
 model Agency {
-    id               Int            @id @default(autoincrement())
-    name             String
-    address          String
-    contact          String
-    phone            String
-    email            String         @unique
-    logo             String?
-    website          String?
-    created_at       DateTime       @default(now())
-    updated_at       DateTime       @updatedAt
-    forwarder_id     Int
-    forwarder        Forwarder      @relation(fields: [forwarder_id], references: [id])
-    parent_agency_id Int?
-    parent_agency    Agency?        @relation("AgencyHierarchy", fields: [parent_agency_id], references: [id], onDelete: SetNull)
-    child_agencies   Agency[]       @relation("AgencyHierarchy")
-    services         Service[]
-    users            User[]
-    products         Product[]
-    shipping_rates   ShippingRate[]
-    customs_rates    CustomsRates[]
-    surcharges       Surcharge[]
-    customers        Customer[]
-    receivers        Receiver[]
-    items            Item[]
-    counters         Counter[]
-    partners         Partner[]
-    agency_type      AgencyType     @default(AGENCY)
-    is_active        Boolean        @default(false)
-    commission_rate  Float?         @default(0.0)
-    orders           Order[]
+    id                 Int            @id @default(autoincrement())
+    name               String
+    address            String
+    contact            String
+    phone              String
+    email              String         @unique
+    logo               String?
+    website            String?
+    created_at         DateTime       @default(now())
+    updated_at         DateTime       @updatedAt
+    forwarder_id       Int
+    forwarder          Forwarder      @relation(fields: [forwarder_id], references: [id])
+    parent_agency_id   Int?
+    parent_agency      Agency?        @relation("AgencyHierarchy", fields: [parent_agency_id], references: [id], onDelete: SetNull)
+    child_agencies     Agency[]       @relation("AgencyHierarchy")
+    services           Service[]
+    users              User[]
+    products           Product[]
+    shipping_rates     ShippingRate[]
+    customs_rates      CustomsRates[]
+    surcharges         Surcharge[]
+    customers          Customer[]
+    receivers          Receiver[]
+    items              Item[]
+    counters           Counter[]
+    partners           Partner[]
+    agency_type        AgencyType     @default(AGENCY)
+    is_active          Boolean        @default(false)
+    commission_rate    Float?         @default(0.0)
+    orders             Order[]
+    dispatch_receivers Dispatch[]     @relation("DispatchReceiver")
+    dispatch_senders   Dispatch[]     @relation("DispatchSender")
+    Dispatch           Dispatch[]
 
     @@index([forwarder_id, is_active])
     @@index([parent_agency_id])
@@ -158,7 +161,7 @@ model Order {
     payment_status         PaymentStatus  @default(PENDING)
     discounts              Discount[]
     stage                  OrderStage     @default(BILLING)
-    status                 OrderStatus    @default(DRAFT)
+    status                 Status         @default(CREATED)
     partner                Partner?       @relation(fields: [partner_id], references: [id])
     partner_id             Int?
 
@@ -195,13 +198,38 @@ model Item {
     customs_rates          CustomsRates? @relation(fields: [customs_rates_id], references: [id])
     agency_id              Int
     agency                 Agency        @relation(fields: [agency_id], references: [id], onDelete: Cascade)
-    status                 String        @default("PENDING")
+    status                 Status        @default(CREATED)
     order                  Order         @relation(fields: [order_id], references: [id], onDelete: Cascade)
     order_id               Int
+    dispatch_id            Int?
+    dispatch               Dispatch?     @relation(fields: [dispatch_id], references: [id])
 
     @@index([order_id])
     @@index([hbl])
     @@index([agency_id, created_at])
+}
+
+// --- MODELOS DE DESPACHO ---
+model Dispatch {
+    id                 Int            @id @default(autoincrement())
+    sender_agency_id   Int
+    sender_agency      Agency         @relation("DispatchSender", fields: [sender_agency_id], references: [id])
+    receiver_agency_id Int
+    receiver_agency    Agency         @relation("DispatchReceiver", fields: [receiver_agency_id], references: [id])
+    status             DispatchStatus @default(CREATED)
+    items              Item[]
+    created_at         DateTime       @default(now())
+    updated_at         DateTime       @updatedAt
+    agency_id          Int
+    agency             Agency         @relation(fields: [agency_id], references: [id], onDelete: Cascade)
+}
+
+enum DispatchStatus {
+    CREATED
+    DISPATCHED
+    PENDING_PAYMENT
+    PAID
+    CANCELLED
 }
 
 // --- INICIO DE LA ARQUITECTURA DE PRECIOS UNIFICADA ---
@@ -538,7 +566,7 @@ model OrderHistory {
     order          Order          @relation(fields: [order_id], references: [id], onDelete: Cascade)
     user_id        String
     user           User           @relation(fields: [user_id], references: [id])
-    status         OrderStatus
+    status         Status
     changed_fields Json
     type           OrderEventType @default(SYSTEM_ACTION)
     comment        String?
@@ -732,7 +760,7 @@ enum OrderStage {
     EXCEPTION
 }
 
-enum OrderStatus {
+enum Status {
     DRAFT
     CREATED
     PARTIALLY_PAID
@@ -753,6 +781,7 @@ enum OrderStatus {
     HELD_BY_CUSTOMS
     RELEASED_FROM_CUSTOMS
     OUT_FOR_DELIVERY
+    // ¡NUEVO! Para el escenario de "3 de 4 entregados"
     PARTIALLY_DELIVERED
     DELIVERED
     FAILED_DELIVERY
@@ -761,6 +790,7 @@ enum OrderStatus {
     REFUNDED
     ON_HOLD
     ISSUE_REPORTED
+    // (Opcional) PARTIALLY_CANCELLED, si necesitas ese nivel de granularidad
 }
 
 enum CityType {
