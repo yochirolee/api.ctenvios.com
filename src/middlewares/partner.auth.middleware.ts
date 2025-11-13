@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import repository from "../repositories";
-import AppError from "../utils/app.error";
+import { AppError } from "../common/app-errors";
+import HttpStatusCodes from "../common/https-status-codes";
 
 interface AuthenticatedPartner {
    id: number;
@@ -39,25 +40,25 @@ export const partnerAuthMiddleware = async (req: PartnerRequest, res: Response, 
       const authHeader = req.headers.authorization;
 
       if (!authHeader) {
-         throw new AppError("API key is required. Please provide an API key in the Authorization header.", 401);
+         throw new AppError(HttpStatusCodes.UNAUTHORIZED, "API key is required. Please provide an API key in the Authorization header.");
       }
 
       // Support both "Bearer TOKEN" and direct token formats
       const apiKey = authHeader.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
 
       if (!apiKey || apiKey.trim() === "") {
-         throw new AppError("Invalid API key format", 401);
+         throw new AppError(HttpStatusCodes.UNAUTHORIZED, "Invalid API key format");
       }
 
       // Validate API key and get partner
       const partner = await repository.partners.getByApiKey(apiKey.trim());
 
       if (!partner) {
-         throw new AppError("Invalid API key or partner not found", 401);
+         throw new AppError(HttpStatusCodes.UNAUTHORIZED, "Invalid API key or partner not found");
       }
 
       if (!partner.is_active) {
-         throw new AppError("Partner account is inactive. Please contact support.", 403);
+         throw new AppError(HttpStatusCodes.FORBIDDEN, "Partner account is inactive. Please contact support.");
       }
 
       // Check rate limiting (requests per hour)
@@ -65,7 +66,7 @@ export const partnerAuthMiddleware = async (req: PartnerRequest, res: Response, 
          const stats = await repository.partners.getStats(partner.id);
 
          if (stats.requests_last_hour >= partner.rate_limit) {
-            throw new AppError(`Rate limit exceeded. You are limited to ${partner.rate_limit} requests per hour.`, 429);
+            throw new AppError(HttpStatusCodes.TOO_MANY_REQUESTS, `Rate limit exceeded. You are limited to ${partner.rate_limit} requests per hour.`);
          }
       }
 
@@ -77,7 +78,7 @@ export const partnerAuthMiddleware = async (req: PartnerRequest, res: Response, 
       console.error("Partner authentication error:", error);
 
       if (error instanceof AppError) {
-         res.status(error.statusCode).json({
+         res.status(error.status).json({
             status: "error",
             message: error.message,
          });

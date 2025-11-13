@@ -27,7 +27,8 @@ function calculateOrderTotals(order: OrderPdfDetails) {
    const items_charge_in_cents = order.items.reduce((acc, item) => acc + (item.charge_fee_in_cents || 0), 0);
 
    const payments_charge_in_cents = order.payments.reduce((acc, payment) => acc + (payment.charge_in_cents || 0), 0);
-
+   const discount_in_cents = order.discounts.reduce((acc, discount) => acc + (discount.discount_in_cents || 0), 0);
+   const discount_amount = formatCents(discount_in_cents);
    const items_fee_amount = formatCents(items_charge_in_cents);
    const payments_fee_amount = formatCents(payments_charge_in_cents);
    const subtotal = formatCents(subtotal_in_cents);
@@ -48,6 +49,7 @@ function calculateOrderTotals(order: OrderPdfDetails) {
       paidAmount,
       totalAmount,
       balance,
+      discount_amount,
    };
 }
 
@@ -347,7 +349,7 @@ async function generateBarcodeSection(
    const squareX = summaryX;
    const squareY = startY + (sectionHeight - transportSquareSize) / 2;
 
-      doc.strokeColor(COLORS.FOREGROUND)
+   doc.strokeColor(COLORS.FOREGROUND)
       .lineWidth(1.5)
       .rect(squareX, squareY, transportSquareSize, transportSquareSize)
       .stroke();
@@ -669,7 +671,7 @@ function renderModernTotals(
       { label: "Seguro:", value: calculations.insuranceAmount, size: 9 },
       { label: "Cargo:", value: calculations.items_fee_amount, size: 9 },
       { label: "Payment Fee:", value: calculations.payments_fee_amount, size: 9 },
-      { label: "Descuento:", value: "$0.00", size: 9, color: COLORS.MUTED_FOREGROUND },
+      { label: "Descuento:", value: calculations.discount_amount, size: 9, color: COLORS.MUTED_FOREGROUND },
    ];
 
    totals.forEach((total) => {

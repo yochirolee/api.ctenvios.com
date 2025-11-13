@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Request } from "express";
-import { AgencyType, FeeType, PaymentMethod, Roles, Unit } from "@prisma/client";
+import { AgencyType, DiscountType, FeeType, PaymentMethod, Roles, Unit } from "@prisma/client";
 
 // Role hierarchy types
 export interface RoleResponse {
@@ -165,6 +165,13 @@ export const searchSchema = z.object({
    search: z.string().optional().default(""),
    startDate: z.string().optional(),
    endDate: z.string().optional(),
+});
+
+//discount schema
+export const discountSchema = z.object({
+   type: z.nativeEnum(DiscountType),
+   description: z.string().optional(),
+   discount_in_cents: z.number().positive(),
 });
 
 //buildNameSearchFilter

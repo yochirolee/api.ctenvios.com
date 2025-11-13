@@ -4,7 +4,7 @@ import { AppError } from "../common/app-errors";
 import HttpStatusCodes from "../common/https-status-codes";
 
 interface ErrorResponse {
-   error: string;
+   message: string;
    source?: "prisma" | "zod" | "application" | "system";
    code?: string;
    details?: unknown;
@@ -219,8 +219,9 @@ export const errorMiddleware = (err: Error, _req: Request, res: Response, _next:
    // Handle custom AppError
    if (err instanceof AppError) {
       const response: ErrorResponse = {
-         error: err.message,
+         message: err.message,
          source: "application",
+         code: err.status.toString(),
       };
       res.status(err.status).json(response);
       return;
@@ -230,7 +231,7 @@ export const errorMiddleware = (err: Error, _req: Request, res: Response, _next:
    if (err instanceof Prisma.PrismaClientKnownRequestError) {
       const { status, message, code } = handlePrismaError(err);
       const response: ErrorResponse = {
-         error: message,
+         message: message,
          source: "prisma",
          code,
       };
@@ -275,7 +276,7 @@ export const errorMiddleware = (err: Error, _req: Request, res: Response, _next:
       // If we found specific field errors, return them
       if (errors.length > 0) {
          const response: ErrorResponse = {
-            error: "Validation failed",
+            message: "Validation failed",
             source: "prisma",
             code: "VALIDATION_ERROR",
             errors,
@@ -286,7 +287,7 @@ export const errorMiddleware = (err: Error, _req: Request, res: Response, _next:
 
       // Otherwise return generic error with details in development
       const response: ErrorResponse = {
-         error: "Invalid data provided for database operation",
+         message: "Invalid data provided for database operation",
          source: "prisma",
          code: "VALIDATION_ERROR",
          details: process.env.NODE_ENV === "development" ? errorMessage : undefined,
@@ -298,7 +299,7 @@ export const errorMiddleware = (err: Error, _req: Request, res: Response, _next:
    // Handle Prisma Initialization Errors (connection issues)
    if (err instanceof Prisma.PrismaClientInitializationError) {
       const response: ErrorResponse = {
-         error: "Database connection error",
+         message: "Database connection error",
          source: "prisma",
          code: "DB_CONNECTION_ERROR",
       };
@@ -309,7 +310,7 @@ export const errorMiddleware = (err: Error, _req: Request, res: Response, _next:
    // Handle Prisma Rust Panic Errors (rare crashes)
    if (err instanceof Prisma.PrismaClientRustPanicError) {
       const response: ErrorResponse = {
-         error: "Critical database error occurred",
+         message: "Critical database error occurred",
          source: "prisma",
          code: "DB_PANIC_ERROR",
       };
@@ -319,7 +320,7 @@ export const errorMiddleware = (err: Error, _req: Request, res: Response, _next:
 
    // Handle generic errors
    const response: ErrorResponse = {
-      error: err.message || "Internal server error",
+      message: err.message || "Internal server error",
       source: "system",
    };
    res.status(HttpStatusCodes.INTERNAL_SERVER_ERROR).json(response);

@@ -1,9 +1,10 @@
 import { Customer, Receiver, Province, City, Prisma, Unit } from "@prisma/client";
 import prisma from "../config/prisma_db";
-import AppError from "../utils/app.error";
+import { AppError } from "../common/app-errors";
 import repository from "../repositories";
 import { generateHBLFast } from "../utils/generate-hbl";
 import { pricingService } from "./pricing.service";
+import HttpStatusCodes from "../common/https-status-codes";
 
 interface ReceiverWithLocationNames extends Omit<Receiver, "province_id" | "city_id"> {
    province?: string;
@@ -29,7 +30,7 @@ export const resolvers = {
       });
 
       if (!province) {
-         throw new AppError(`Province '${provinceName}' not found`, 404);
+         throw new AppError(HttpStatusCodes.NOT_FOUND, `Province '${provinceName}' not found`);
       }
 
       return province.id;
@@ -53,7 +54,7 @@ export const resolvers = {
       });
 
       if (!city) {
-         throw new AppError(`City '${cityName}' not found in the specified province`, 404);
+         throw new AppError(HttpStatusCodes.NOT_FOUND, `City '${cityName}' not found in the specified province`);
       }
 
       return city.id;
@@ -69,7 +70,7 @@ export const resolvers = {
       if (receiver_id) {
          const existingReceiver = await repository.receivers.getById(receiver_id);
          if (!existingReceiver) {
-            throw new AppError(`Receiver with ID ${receiver_id} not found`, 404);
+            throw new AppError(HttpStatusCodes.NOT_FOUND, `Receiver with ID ${receiver_id} not found`);
          }
          return existingReceiver;
       }
@@ -84,7 +85,7 @@ export const resolvers = {
       console.log("receiver", receiver);
 
       if (!receiver) {
-         throw new AppError("Receiver data is required", 400);
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Receiver data is required");
       }
 
       // If both province and city are provided as names, resolve them in parallel
@@ -101,7 +102,7 @@ export const resolvers = {
 
       // Validate required location fields
       if (!receiver.province_id || !receiver.city_id) {
-         throw new AppError("Province and city are required for creating a new receiver", 400);
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Province and city are required for creating a new receiver");
       }
 
       // Create new receiver with resolved IDs
@@ -135,14 +136,14 @@ export const resolvers = {
       if (customer_id) {
          const existingCustomer = await repository.customers.getById(customer_id as number);
          if (!existingCustomer) {
-            throw new AppError(`Customer with ID ${customer_id} not found`, 404);
+            throw new AppError(HttpStatusCodes.NOT_FOUND, `Customer with ID ${customer_id} not found`);
          }
          return existingCustomer as Customer;
       }
 
       // Scenario 2: Partners provide customer data
       if (!customer) {
-         throw new AppError("Customer information is required", 400);
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Customer information is required");
       }
 
       // Check if customer exists by mobile and name
@@ -172,7 +173,7 @@ export const resolvers = {
          return newCustomer as Customer;
       }
 
-      throw new AppError("Customer mobile, first_name, and last_name are required", 400);
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Customer mobile, first_name, and last_name are required");
    },
    resolveItemsWithHbl: async ({
       items,

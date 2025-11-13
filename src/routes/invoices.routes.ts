@@ -3,8 +3,11 @@ import prisma from "../config/prisma_db";
 import { generateInvoicePDF } from "../utils/generate-invoice-pdf";
 import { generateOrderPDF } from "../utils/generate-order-pdf";
 import { generateCTEnviosLabels } from "../utils/generate-labels-pdf";
-import AppError from "../utils/app.error";
+import { AppError } from "../common/app-errors";
 import repository from "../repositories";
+import { generateHblPdf } from "../utils/generate-hbl-pdf";
+import { orderWithRelationsInclude } from "../types/order-with-relations";
+import HttpStatusCodes from "../common/https-status-codes";
 
 const router = Router();
 
@@ -14,7 +17,7 @@ router.get("/:id/order-pdf", async (req, res) => {
       const { id } = req.params;
 
       if (!id || isNaN(parseInt(id))) {
-         throw new AppError("Invalid invoice ID", 400);
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid invoice ID");
       }
 
       // Fetch invoice with all required relations
@@ -35,7 +38,7 @@ router.get("/:id/order-pdf", async (req, res) => {
       });
 
       if (!invoice) {
-         throw new AppError("Invoice not found", 404);
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Invoice not found");
       }
 
       // Add charge_in_cents (calculated from payments or default to 0)
@@ -58,15 +61,9 @@ router.get("/:id/order-pdf", async (req, res) => {
       console.error("PDF generation error:", error);
 
       if (error instanceof AppError) {
-         res.status(error.statusCode).json({
+         res.status(error.status).json({
             status: "error",
             message: error.message,
-         });
-      } else {
-         res.status(500).json({
-            status: "error",
-            message: "Error generating PDF",
-            error: process.env.NODE_ENV === "development" ? error : undefined,
          });
       }
    }
@@ -78,15 +75,14 @@ router.get("/:id/pdf", async (req, res) => {
       const { id } = req.params;
 
       if (!id || isNaN(parseInt(id))) {
-         throw new AppError("Invalid order ID", 400);
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid order ID");
       }
 
       // Fetch order with all required relations
-    const order=await repository.orders.getByIdWithDetails(parseInt(id));
+      const order = await repository.orders.getByIdWithDetails(parseInt(id));
       if (!order) {
-         throw new AppError("Order not found", 404);
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Order not found");
       }
-
 
       // Generate modern order PDF
       const doc = await generateOrderPDF(order);
@@ -102,7 +98,7 @@ router.get("/:id/pdf", async (req, res) => {
       console.error("Modern order PDF generation error:", error);
 
       if (error instanceof AppError) {
-         res.status(error.statusCode).json({
+            res.status(error.status).json({
             status: "error",
             message: error.message,
          });
@@ -121,40 +117,21 @@ router.get("/:id/labels", async (req, res) => {
       const { id } = req.params;
 
       if (!id || isNaN(parseInt(id))) {
-         throw new AppError("Invalid invoice ID", 400);
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid invoice ID");
       }
 
       // Fetch invoice with all required relations
       const invoice = await prisma.order.findUnique({
          where: { id: parseInt(id) },
-         include: {
-            customer: true,
-            receiver: {
-               include: {
-                  province: true,
-                  city: true,
-               },
-            },
-
-            agency: true,
-            service: {
-               include: {
-                  provider: true,
-                  forwarder: true,
-               },
-            },
-            items: {
-               orderBy: { hbl: "asc" },
-            },
-         },
+         include: orderWithRelationsInclude,
       });
 
       if (!invoice) {
-         throw new AppError("Invoice not found", 404);
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Invoice not found");
       }
 
       if (!invoice.items || invoice.items.length === 0) {
-         throw new AppError("No items found for this invoice", 400);
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "No items found for this invoice");
       }
 
       // Generate CTEnvios labels
@@ -171,7 +148,7 @@ router.get("/:id/labels", async (req, res) => {
       console.error("label generation error:", error);
 
       if (error instanceof AppError) {
-         res.status(error.statusCode).json({
+         res.status(error.status).json({
             status: "error",
             message: error.message,
          });
@@ -185,4 +162,40 @@ router.get("/:id/labels", async (req, res) => {
    }
 });
 
+router.get("/:id/hbl-pdf", async (req, res) => {
+   try {
+      const { id } = req.params;
+      if (!id || isNaN(parseInt(id))) {
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid invoice ID");
+      }
+
+      // Fetch invoice with all required relations
+      const order = await repository.orders.getByIdWithDetails(parseInt(id));
+
+      if (!order) {
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Order not found");
+      }
+
+      // Generate HBL PDF
+      const doc = await generateHblPdf(order);
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `inline; filename="hbl-${order.id}.pdf"`);
+      doc.pipe(res);
+      doc.end();
+   } catch (error) {
+      console.error("HBL PDF generation error:", error);
+      if (error instanceof AppError) {
+         res.status(error.status).json({
+            status: "error",
+            message: error.message,
+         });
+      } else {
+         res.status(500).json({
+            status: "error",
+            message: "Error generating HBL PDF",
+            error: process.env.NODE_ENV === "development" ? error : undefined,
+         });
+      }
+   }
+});
 export default router;

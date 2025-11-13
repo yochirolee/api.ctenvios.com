@@ -99,7 +99,7 @@ export function calculateOrderTotal(items: any[]): number {
          item.customs_fee_in_cents || 0,
          item.charge_fee_in_cents || 0,
          item.insurance_fee_in_cents || 0,
-         (item.unit || Unit.PER_LB) as string
+         item.unit || "PER_LB"
       );
       return total + itemSubtotal;
    }, 0);

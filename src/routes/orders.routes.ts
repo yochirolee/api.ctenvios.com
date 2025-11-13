@@ -3,7 +3,7 @@ import { Router } from "express";
 import { validate } from "../middlewares/validate.middleware";
 import { authMiddleware } from "../middlewares/auth.middleware";
 import controllers from "../controllers";
-import { createOrderSchema, paymentSchema, searchSchema } from "../types/types";
+import { createOrderSchema, paymentSchema, searchSchema, discountSchema } from "../types/types";
 
 const router = Router();
 
@@ -16,7 +16,30 @@ router.get("/:id", authMiddleware, controllers.orders.getById);
 // POST /orders - Create new order
 router.post("/", authMiddleware, validate({ body: createOrderSchema }), controllers.orders.create);
 
-// POST /orders/payment - Create new payment
+// POST /orders/:id/discounts - Add discount to order (MUST be before /:id routes)
+router.post(
+   "/:id/discounts",
+   authMiddleware,
+   validate({
+      body: discountSchema,
+      params: z.object({ id: z.string().transform(Number).pipe(z.number().positive()) }),
+   }),
+   controllers.orders.addDiscount
+);
+
+// DELETE /orders/:id/discounts/:discount_id - Delete discount from order
+router.delete(
+   "/:id/discounts",
+   authMiddleware,
+   validate({
+      params: z.object({
+         id: z.string().transform(Number).pipe(z.number().positive()),
+      }),
+   }),
+   controllers.orders.removeDiscount
+);
+
+// POST /orders/:id/payments - Create new payment
 router.post(
    "/:id/payments",
    authMiddleware,
@@ -27,11 +50,15 @@ router.post(
    controllers.orders.payOrder
 );
 
-// DELETE /orders/payment/:id - Delete payment
+// DELETE /orders/:id/payments - Delete payment
 router.delete(
    "/:id/payments",
    validate({ params: z.object({ id: z.string().transform(Number).pipe(z.number().positive()) }) }),
    authMiddleware,
    controllers.orders.removePayment
 );
+
+// DELETE /orders/:id - Delete order
+router.delete("/:id", authMiddleware, controllers.orders.delete);
+
 export default router;

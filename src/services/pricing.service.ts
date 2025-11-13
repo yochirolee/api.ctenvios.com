@@ -1,8 +1,8 @@
 import { PricingAgreement, ShippingRate, RateScope } from "@prisma/client";
 import prisma from "../config/prisma_db";
-import AppError from "../utils/app.error";
+import { AppError } from "../common/app-errors";
 import { CreatePricingInput } from "../types/types";
-import StatusCodes from "../common/https-status-codes";
+import HttpStatusCodes from "../common/https-status-codes";
 
 interface PricingResult {
    agreement: PricingAgreement;
@@ -50,10 +50,7 @@ export const pricingService = {
          };
       });
    },
-   /**
-    * Creates a PricingAgreement and associated ShippingRate atomically
-    * Handles both external agreements (seller != buyer) and internal agreements (seller == buyer)
-    */
+
    createPricingWithRate: async (input: CreatePricingInput): Promise<PricingResult> => {
       const {
          product_id,
@@ -67,15 +64,15 @@ export const pricingService = {
 
       // Validate required fields
       if (!product_id || !service_id || !seller_agency_id || !buyer_agency_id) {
-         throw new AppError("Missing required fields", StatusCodes.BAD_REQUEST);
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Missing required fields");
       }
 
       if (cost_in_cents === undefined || cost_in_cents < 0) {
-         throw new AppError("cost_in_cents must be a non-negative number", StatusCodes.BAD_REQUEST);
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "cost_in_cents must be a non-negative number");
       }
 
       if (price_in_cents === undefined || price_in_cents < 0) {
-         throw new AppError("price_in_cents must be a non-negative number", StatusCodes.BAD_REQUEST);
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "price_in_cents must be a non-negative number");
       }
 
       // Determine if this is an internal agreement
@@ -90,11 +87,11 @@ export const pricingService = {
          });
 
          if (!product) {
-            throw new AppError(`Product with id ${product_id} not found`, StatusCodes.NOT_FOUND);
+            throw new AppError(HttpStatusCodes.NOT_FOUND, `Product with id ${product_id} not found`);
          }
 
          if (!product.is_active) {
-            throw new AppError(`Product with id ${product_id} is not active`, StatusCodes.BAD_REQUEST);
+            throw new AppError(HttpStatusCodes.BAD_REQUEST, `Product with id ${product_id} is not active`);
          }
 
          // 2. Validate service exists
@@ -103,11 +100,11 @@ export const pricingService = {
          });
 
          if (!service) {
-            throw new AppError(`Service with id ${service_id} not found`, StatusCodes.NOT_FOUND);
+            throw new AppError(HttpStatusCodes.NOT_FOUND, `Service with id ${service_id} not found`);
          }
 
          if (!service.is_active) {
-            throw new AppError(`Service with id ${service_id} is not active`, StatusCodes.BAD_REQUEST);
+            throw new AppError(HttpStatusCodes.BAD_REQUEST, `Service with id ${service_id} is not active`);
          }
 
          // 3. Validate seller agency exists
@@ -116,7 +113,7 @@ export const pricingService = {
          });
 
          if (!sellerAgency) {
-            throw new AppError(`Seller agency with id ${seller_agency_id} not found`, StatusCodes.NOT_FOUND);
+            throw new AppError(HttpStatusCodes.NOT_FOUND, `Seller agency with id ${seller_agency_id} not found`);
          }
 
          // 4. Validate buyer agency exists
@@ -125,7 +122,7 @@ export const pricingService = {
          });
 
          if (!buyerAgency) {
-            throw new AppError(`Buyer agency with id ${buyer_agency_id} not found`, StatusCodes.NOT_FOUND);
+            throw new AppError(HttpStatusCodes.NOT_FOUND, `Buyer agency with id ${buyer_agency_id} not found`);
          }
 
          // 5. Check for existing PricingAgreement (handle unique constraint)
@@ -141,10 +138,7 @@ export const pricingService = {
          });
 
          if (existingAgreement) {
-            throw new AppError(
-               `Pricing agreement already exists for seller ${seller_agency_id}, buyer ${buyer_agency_id}, and product ${product_id}`,
-               StatusCodes.CONFLICT
-            );
+               throw new AppError(HttpStatusCodes.CONFLICT, `Pricing agreement already exists for seller ${seller_agency_id}, buyer ${buyer_agency_id}, and product ${product_id}`);
          }
 
          // 6. Create PricingAgreement
@@ -179,7 +173,6 @@ export const pricingService = {
 
       return result;
    },
-
 
    /**
     * Gets all pricing agreements for a specific product

@@ -1,8 +1,9 @@
 import { Request, RequestHandler, Response } from "express";
 import repository from "../repositories";
-import AppError from "../utils/app.error";
+import { AppError } from "../common/app-errors";
 import { Prisma, Customer } from "@prisma/client";
 import capitalize from "../utils/capitalize";
+import HttpStatusCodes from "../common/https-status-codes";
 
 export const customers = {
    get: (async (req: Request, res: Response) => {
@@ -16,7 +17,7 @@ export const customers = {
 
    search: (async (req: Request, res: Response) => {
       if (!req.query.query) {
-         throw new AppError("Query is required", 400);
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Query is required");
       }
       const { page, limit } = req.query;
 
@@ -49,14 +50,14 @@ export const customers = {
          const customer = await repository.customers.create(new_customer as Prisma.CustomerCreateInput);
          res.status(201).json(customer);
       } catch (error: any) {
-         res.status(400).json({ error: "Error creating customer" });
+         throw new AppError(HttpStatusCodes.INTERNAL_SERVER_ERROR, "Error creating customer");
       }
    }) as RequestHandler,
 
    getById: (async (req: Request, res: Response) => {
       const { id } = req.params;
       if (!id) {
-         throw new AppError("Customer ID is required", 400);
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Customer ID is required");
       }
       const customer = await repository.customers.getById(parseInt(id));
       res.status(200).json(customer);
@@ -66,7 +67,7 @@ export const customers = {
       const { id } = req.params;
       const { page, limit } = req.query;
       if (!id) {
-         throw new AppError("Customer ID is required", 400);
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Customer ID is required");
       }
       const receivers = await repository.customers.getReceivers(
          parseInt(id),
@@ -86,7 +87,7 @@ export const customers = {
    edit: (async (req: Request, res: Response) => {
       const { id } = req.params;
       if (!id || isNaN(parseInt(id))) {
-         throw new AppError("Customer ID is required", 400);
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Customer ID is required");
       }
       const customer = await repository.customers.edit(parseInt(id), req.body);
       res.status(200).json(customer);

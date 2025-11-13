@@ -1,9 +1,12 @@
-import { Customer, Prisma, PaymentMethod, PaymentStatus, Status, Unit } from "@prisma/client";
+import { Customer, Prisma, PaymentMethod, PaymentStatus, Status, Unit, DiscountType } from "@prisma/client";
 import { services } from ".";
 import repository from "../repositories";
 import { calculateOrderTotal, formatCents } from "../utils/utils";
 import { PAYMENT_CONFIG } from "../config/payment.config";
 import prisma from "../config/prisma_db";
+import StatusCodes from "../common/https-status-codes";
+
+import { AppError } from "../common/app-errors";
 
 interface OrderCreateInput {
    partner_order_id?: string;
@@ -117,18 +120,18 @@ export const ordersService = {
    payOrder: async (order_id: number, paymentData: Prisma.PaymentCreateInput, user_id: string): Promise<any> => {
       // Validate amount
       if (!paymentData.amount_in_cents || paymentData.amount_in_cents <= 0) {
-         throw new Error("Payment amount must be greater than 0");
+         throw new AppError(StatusCodes.BAD_REQUEST, "Payment amount must be greater than 0");
       }
 
       // Get order with full details
       const order_to_pay = await repository.orders.getById(order_id);
       if (!order_to_pay) {
-         throw new Error("Order not found");
+         throw new AppError(StatusCodes.NOT_FOUND, "Order not found");
       }
 
       // Check if order is already paid
       if (order_to_pay.payment_status === PaymentStatus.PAID) {
-         throw new Error("Order is already paid");
+         throw new AppError(StatusCodes.BAD_REQUEST, "Order is already paid");
       }
 
       // Calculate charge for card payments
@@ -147,8 +150,9 @@ export const ordersService = {
 
       // Validate payment doesn't exceed total
       if (totalPaidAfterPayment > newTotalWithCharge) {
-         throw new Error(
-            `Payment amount ($${formatCents(paymentData.amount_in_cents)}) exceeds remaining balance ($${formatCents(
+         throw new AppError(
+            StatusCodes.BAD_REQUEST,
+            `Payment amount (${formatCents(paymentData.amount_in_cents)}) exceeds remaining balance (${formatCents(
                newTotalWithCharge - order_to_pay.paid_in_cents
             )})`
          );
@@ -216,7 +220,7 @@ export const ordersService = {
       });
 
       if (!payment) {
-         throw new Error("Payment not found");
+         throw new AppError(StatusCodes.NOT_FOUND, "Payment not found");
       }
 
       // Calculate new totals after removing this payment
@@ -262,6 +266,77 @@ export const ordersService = {
          return updatedOrder;
       });
 
+      return result;
+   },
+   addDiscount: async (order_id: number, discountData: Prisma.DiscountCreateInput, user_id: string): Promise<any> => {
+      const order = await repository.orders.getById(order_id);
+      if (!order) {
+         throw new AppError(StatusCodes.NOT_FOUND, "Order not found");
+      }
+      let total_discount_in_cents = 0;
+      if (discountData.type === DiscountType.RATE) {
+         total_discount_in_cents = order.items.reduce((acc, item) => {
+            if (item.unit === Unit.PER_LB) {
+               return (
+                  acc +
+                  Math.ceil(item.price_in_cents * item.weight - item.weight * (discountData?.discount_in_cents || 1))
+               );
+            }
+            return acc;
+         }, 0);
+      }
+      if (discountData.type === DiscountType.CASH) {
+         if ((discountData?.discount_in_cents ?? 0) > order.total_in_cents) {
+            throw new AppError(StatusCodes.BAD_REQUEST, "Discount amount cannot be greater than order total");
+         }
+         total_discount_in_cents = discountData.discount_in_cents ?? 0;
+      }
+
+      const result = await prisma.$transaction(async (tx) => {
+         // Update order
+         await tx.discount.create({
+            data: {
+               type: discountData.type,
+               description: discountData.description,
+               rate: discountData.discount_in_cents,
+               discount_in_cents: total_discount_in_cents,
+               order_id: order_id,
+               user_id: user_id,
+            },
+         });
+         const updatedOrder = await tx.order.update({
+            where: { id: order_id },
+            data: {
+               total_in_cents: order.total_in_cents - total_discount_in_cents,
+            },
+         });
+         return updatedOrder;
+      });
+
+      return result;
+   },
+   removeDiscount: async (discount_id: number): Promise<any> => {
+      const discount_to_remove = await prisma.discount.findUnique({
+         where: { id: discount_id },
+      });
+      if (!discount_to_remove) {
+         throw new AppError(StatusCodes.NOT_FOUND, "Discount not found");
+      }
+
+      const result = await prisma.$transaction(async (tx) => {
+         await tx.discount.delete({
+            where: { id: discount_id },
+         });
+         const updatedOrder = await tx.order.update({
+            where: { id: discount_to_remove.order_id },
+            data: {
+               total_in_cents: {
+                  increment: discount_to_remove.discount_in_cents,
+               },
+            },
+         });
+         return updatedOrder;
+      });
       return result;
    },
 };

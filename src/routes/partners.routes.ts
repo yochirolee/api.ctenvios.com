@@ -4,10 +4,11 @@ import { partnerAuthMiddleware, partnerLogMiddleware } from "../middlewares/part
 import controllers from "../controllers";
 import prisma from "../config/prisma_db";
 import { z } from "zod";
-import AppError from "../utils/app.error";
+import { AppError } from "../common/app-errors";
 import { Unit } from "@prisma/client";
 import { validate } from "../middlewares/validate.middleware";
 import { createCustomerSchema, createReceiverSchema } from "../types/types";
+import HttpStatusCodes from "../common/https-status-codes";
 
 const router = Router();
 
@@ -208,11 +209,11 @@ router.get("/orders/:id", partnerAuthMiddleware, partnerLogMiddleware, async (re
       const { id } = req.params;
 
       if (!partner) {
-         throw new AppError("Partner authentication required", 401);
+         throw new AppError(HttpStatusCodes.UNAUTHORIZED, "Partner authentication required");
       }
 
       if (!id || isNaN(parseInt(id))) {
-         throw new AppError("Valid order ID is required", 400);
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Valid order ID is required");
       }
 
       // Get order and verify it belongs to partner
@@ -264,7 +265,7 @@ router.get("/orders/:id", partnerAuthMiddleware, partnerLogMiddleware, async (re
       });
 
       if (!order) {
-         throw new AppError("Order not found", 404);
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Order not found");
       }
 
       res.status(200).json({
@@ -275,7 +276,7 @@ router.get("/orders/:id", partnerAuthMiddleware, partnerLogMiddleware, async (re
       console.error("Partner API get order error:", error);
 
       if (error instanceof AppError) {
-         return res.status(error.statusCode).json({
+         return res.status(error.status).json({
             status: "error",
             message: error.message,
          });
@@ -300,11 +301,11 @@ router.get("/tracking/:hbl", partnerAuthMiddleware, partnerLogMiddleware, async 
       const { hbl } = req.params;
 
       if (!partner) {
-         throw new AppError("Partner authentication required", 401);
+         throw new AppError(HttpStatusCodes.UNAUTHORIZED, "Partner authentication required");
       }
 
       if (!hbl) {
-         throw new AppError("HBL tracking number is required", 400);
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "HBL tracking number is required");
       }
 
       // Get item with invoice info
@@ -340,7 +341,7 @@ router.get("/tracking/:hbl", partnerAuthMiddleware, partnerLogMiddleware, async 
       });
 
       if (!item) {
-         throw new AppError("Tracking number not found", 404);
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Tracking number not found");
       }
 
       res.status(200).json({
@@ -351,7 +352,7 @@ router.get("/tracking/:hbl", partnerAuthMiddleware, partnerLogMiddleware, async 
       console.error("Partner API tracking error:", error);
 
       if (error instanceof AppError) {
-         return res.status(error.statusCode).json({
+            return res.status(error.status).json({
             status: "error",
             message: error.message,
          });

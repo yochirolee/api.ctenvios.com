@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { pricingService } from "../services/pricing.service";
-import { AppError } from "../utils/app.error";
-import StatusCodes from "../common/https-status-codes";
+import { AppError } from "../common/app-errors";
+import HttpStatusCodes from "../common/https-status-codes";
 import prisma from "../config/prisma_db";
 
 const shippingRates = {
@@ -47,7 +47,7 @@ const shippingRates = {
          });
 
          if (!agreement) {
-            throw new AppError("Agreement not found", StatusCodes.NOT_FOUND);
+            throw new AppError(HttpStatusCodes.NOT_FOUND, "Agreement not found");
          }
 
          // 3. Update the pricing agreement cost

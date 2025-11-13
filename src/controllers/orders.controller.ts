@@ -5,6 +5,8 @@ import { buildNameSearchFilter } from "../types/types";
 import { Roles } from "@prisma/client";
 import prisma from "../config/prisma_db";
 import repository from "../repositories";
+import { AppError } from "../common/app-errors";
+import HttpStatusCodes from "../common/https-status-codes";
 export const ordersController = {
    /**
     * Creates an order from frontend or partner API
@@ -255,7 +257,7 @@ export const ordersController = {
          res.status(200).json({ rows, total: count });
       } catch (error) {
          console.error("Search error:", error);
-         res.status(500).json({ message: "Error searching orders", error });
+         throw new AppError(HttpStatusCodes.INTERNAL_SERVER_ERROR, "Error searching orders");
       }
    },
    getById: async (req: any, res: Response, next: NextFunction): Promise<void> => {
@@ -264,14 +266,14 @@ export const ordersController = {
          const orderId = parseInt(id);
 
          if (isNaN(orderId)) {
-            res.status(400).json({ message: "Invalid order ID" });
+            throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid order ID");
             return;
          }
 
          const order = await repository.orders.getByIdWithDetails(orderId);
 
          if (!order) {
-            res.status(404).json({ message: "Order not found" });
+            throw new AppError(HttpStatusCodes.NOT_FOUND, "Order not found");
             return;
          }
 
@@ -285,9 +287,7 @@ export const ordersController = {
          const paymentData = req.body;
          const order_id = parseInt(req.params.id);
          const user = req.user;
-
          const result = await services.orders.payOrder(order_id, paymentData, user.id);
-
          res.status(201).json(result);
       } catch (error) {
          next(error);
@@ -297,6 +297,46 @@ export const ordersController = {
       try {
          const payment_id = parseInt(req.params.id);
          const result = await services.orders.removePayment(payment_id);
+         res.status(200).json(result);
+      } catch (error) {
+         next(error);
+      }
+   },
+   //DISCOUNTS
+   addDiscount: async (req: any, res: Response, next: NextFunction): Promise<void> => {
+      try {
+         const user = req.user;
+         if (!user) {
+            throw new AppError(HttpStatusCodes.UNAUTHORIZED, "Unauthorized");
+         }
+         const { id } = req.params;
+         const orderId = parseInt(id);
+         const discountData = req.body;
+         const result = await services.orders.addDiscount(orderId, discountData, user.id);
+         res.status(200).json(result);
+      } catch (error) {
+         next(error);
+      }
+   },
+   removeDiscount: async (req: any, res: Response, next: NextFunction): Promise<void> => {
+      try {
+         const user = req.user;
+         if (!user) {
+               throw new AppError(HttpStatusCodes.UNAUTHORIZED, "Unauthorized");
+         }
+         const { id } = req.params;
+         const discountId = parseInt(id);
+         const result = await services.orders.removeDiscount(discountId);
+         res.status(200).json(result);
+      } catch (error) {
+         next(error);
+      }
+   },
+   delete: async (req: any, res: Response, next: NextFunction): Promise<void> => {
+      try {
+         const { id } = req.params;
+         const orderId = parseInt(id);
+         const result = await repository.orders.delete(orderId);
          res.status(200).json(result);
       } catch (error) {
          next(error);

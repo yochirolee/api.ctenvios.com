@@ -1,13 +1,13 @@
 import { Request, Response } from "express";
 import { z } from "zod";
 import { AgencyType, Prisma, Roles } from "@prisma/client";
-import AppError from "../utils/app.error";
-
+import { AppError } from "../common/app-errors";
 import { agencySchema } from "../types/types";
 import repository from "../repositories";
 import prisma from "../config/prisma_db";
 import { auth } from "../lib/auth";
 import { pricingService } from "../services/pricing.service";
+import HttpStatusCodes from "../common/https-status-codes";
 
 // Extend Express Request type for authenticated requests
 interface AuthenticatedRequest extends Request {
@@ -53,12 +53,12 @@ const agencies = {
       const { user } = req as AuthenticatedRequest;
 
       if (!user.agency_id) {
-         throw new AppError("User must be associated with an agency", 400, [], "auth");
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must be associated with an agency");
       }
 
       const user_agency = await repository.agencies.getById(user.agency_id);
       if (!user_agency) {
-         throw new AppError("Agency not found", 404, [], "not_found");
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Agency not found");
       }
 
       const canViewAll =
@@ -76,12 +76,12 @@ const agencies = {
       const agencyId = Number(id);
 
       if (isNaN(agencyId) || agencyId <= 0) {
-         throw new AppError("Invalid agency ID", 400, [], "validation");
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid agency ID");
       }
 
       const agency = await repository.agencies.getById(agencyId);
       if (!agency) {
-         throw new AppError("Agency not found", 404, [], "not_found");
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Agency not found");
       }
 
       res.status(200).json(agency);
@@ -92,7 +92,7 @@ const agencies = {
       const agencyId = Number(id);
 
       if (isNaN(agencyId) || agencyId <= 0) {
-         throw new AppError("Invalid agency ID", 400, [], "validation");
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid agency ID");
       }
 
       const users = await repository.agencies.getUsers(agencyId);
@@ -103,11 +103,11 @@ const agencies = {
 
       // Authorization check
       if (!(AGENCY_CREATION_ROLES as readonly Roles[]).includes(current_user.role)) {
-         throw new AppError("You are not authorized to create agencies", 403, [], "auth");
+         throw new AppError(HttpStatusCodes.FORBIDDEN, "You are not authorized to create agencies");
       }
 
       if (!current_user.agency_id) {
-         throw new AppError("User must be associated with an agency", 400, [], "auth");
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must be associated with an agency");
       }
 
       // Validate parent agency
@@ -116,19 +116,19 @@ const agencies = {
       });
 
       if (!parent_agency) {
-         throw new AppError("Parent agency not found", 404, [], "not_found");
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Parent agency not found");
       }
 
       const canCreateChild =
          parent_agency.agency_type === AgencyType.FORWARDER || parent_agency.agency_type === AgencyType.RESELLER;
 
       if (!canCreateChild) {
-         throw new AppError("Only FORWARDER and RESELLER agencies can create child agencies", 403, [], "business_rule");
+         throw new AppError(HttpStatusCodes.FORBIDDEN, "Only FORWARDER and RESELLER agencies can create child agencies");
       }
       // Validate request body
       const result = create_agency_schema.safeParse(req.body);
       if (!result.success) {
-         throw new AppError("Invalid agency data", 400, result.error.flatten().fieldErrors, "zod");
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid agency data");
       }
 
       const { agency: child_agency, user } = result.data;
@@ -166,7 +166,7 @@ const agencies = {
       });
 
       if (!user_response.token) {
-         throw new AppError("Failed to register agency admin user", 500, [], "external_service");
+         throw new AppError(HttpStatusCodes.INTERNAL_SERVER_ERROR, "Failed to register agency admin user");
       }
 
       // Associate user with agency
@@ -208,7 +208,7 @@ const agencies = {
       const agencyId = Number(id);
 
       if (isNaN(agencyId) || agencyId <= 0) {
-         throw new AppError("Invalid agency ID", 400, [], "validation");
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid agency ID");
       }
 
       const result = agencyUpdateSchema.safeParse(req.body) as z.SafeParseReturnType<
@@ -217,7 +217,7 @@ const agencies = {
       >;
 
       if (!result.success) {
-         throw new AppError("Invalid agency data", 400, result.error.flatten().fieldErrors, "zod");
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid agency data");
       }
 
       const agency = await repository.agencies.update(agencyId, result.data);
@@ -229,7 +229,7 @@ const agencies = {
       const agencyId = Number(id);
 
       if (isNaN(agencyId) || agencyId <= 0) {
-         throw new AppError("Invalid agency ID", 400, [], "validation");
+            throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid agency ID");
       }
 
       const agency = await repository.agencies.delete(agencyId);
@@ -241,7 +241,7 @@ const agencies = {
       const agencyId = Number(id);
 
       if (isNaN(agencyId) || agencyId <= 0) {
-         throw new AppError("Invalid agency ID", 400, [], "validation");
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid agency ID");
       }
 
       const children = await repository.agencies.getChildren(agencyId);
@@ -253,7 +253,7 @@ const agencies = {
       const agencyId = Number(id);
 
       if (isNaN(agencyId) || agencyId <= 0) {
-         throw new AppError("Invalid agency ID", 400, [], "validation");
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid agency ID");
       }
 
       const parent = await repository.agencies.getParent(agencyId);
@@ -265,11 +265,11 @@ const agencies = {
       const agencyId = Number(id);
 
       if (isNaN(agencyId) || agencyId <= 0) {
-         throw new AppError("Invalid agency ID", 400, [], "validation");
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid agency ID");
       }
       const services_with_rates = await repository.services.getServicesWithRates(agencyId);
       if (!services_with_rates) {
-         throw new AppError("No services found", 404, [], "not_found");
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "No services found");
       }
       const formatted_services_with_rates = services_with_rates.map((service) => {
          return {
@@ -295,11 +295,11 @@ const agencies = {
       const agencyId = Number(id);
 
       if (isNaN(agencyId) || agencyId <= 0) {
-         throw new AppError("Invalid agency ID", 400, [], "validation");
+               throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid agency ID");
       }
       const services_with_rates = await repository.services.getActiveServicesWithRates(agencyId);
       if (!services_with_rates) {
-         throw new AppError("No services found", 404, [], "not_found");
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "No services found");
       }
       const formatted_services_with_rates = services_with_rates.map((service) => {
          return {

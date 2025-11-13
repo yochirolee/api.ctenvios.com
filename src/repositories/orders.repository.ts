@@ -1,84 +1,8 @@
 import { Prisma } from "@prisma/client";
 import prisma from "../config/prisma_db";
+import { orderWithRelationsInclude } from "../types/order-with-relations";
 
-const orderPdfSelect = Prisma.validator<Prisma.OrderSelect>()({
-   id: true,
-   partner_order_id: true,
-   customer_id: true,
-   receiver_id: true,
-   service_id: true,
-   agency_id: true,
-   user_id: true,
-   total_in_cents: true,
-   paid_in_cents: true,
-   payment_status: true,
-   requires_home_delivery: true,
-   created_at: true,
-   updated_at: true,
-   stage: true,
-   
-   status: true,
-   customer: {
-      select: {
-         id: true,
-         first_name: true,
-         middle_name: true,
-         last_name: true,
-         second_last_name: true,
-         mobile: true,
-         address: true,
-      },
-   },
-   receiver: {
-      select: {
-         id: true,
-         first_name: true,
-         middle_name: true,
-         last_name: true,
-         second_last_name: true,
-         mobile: true,
-         phone: true,
-         address: true,
-         ci: true,
-         province: { select: { name: true } },
-         city: { select: { name: true } },
-      },
-   },
-   items: {
-      select: {
-         hbl: true,
-         description: true,
-         weight: true,
-         price_in_cents: true,
-         charge_fee_in_cents: true,
-         delivery_fee_in_cents: true,
-         insurance_fee_in_cents: true,
-         customs_fee_in_cents: true,
-         unit: true,
-      },
-   },
-   payments: {
-      select: {
-         id: true,
-         amount_in_cents: true,
-         charge_in_cents: true,
-         method: true,
-         date: true,
-      },
-   },
-   service: {
-      select: {
-         id: true,
-         name: true,
-         service_type: true,
-         provider: { select: { id: true, name: true } },
-      },
-   },
-   agency: { select: { id: true, name: true, address: true, phone: true, logo: true } },
-   user: { select: { id: true, name: true, email: true } },
-});
-
-export type OrderPdfDetails = Prisma.OrderGetPayload<{ select: typeof orderPdfSelect }>;
+export type OrderPdfDetails = Prisma.OrderGetPayload<{ include: typeof orderWithRelationsInclude }>;
 
 const orders = {
    getAll: async ({ page, limit }: { page: number; limit: number }) => {
@@ -90,12 +14,13 @@ const orders = {
       return { orders, total };
    },
    getById: async (id: number) => {
-      return await prisma.order.findUnique({ where: { id } });
+      return await prisma.order.findUnique({ where: { id }, include: { items: true } });
    },
-   getByIdWithDetails: async (id: number) => {
+   getByIdWithDetails: async (id: number): Promise<OrderPdfDetails | null> => {
+      console.log("getByIdWithDetails", id);
       return await prisma.order.findUnique({
          where: { id },
-         select: orderPdfSelect,
+         include: orderWithRelationsInclude,
       });
    },
    create: async (orderData: Prisma.OrderUncheckedCreateInput) => {

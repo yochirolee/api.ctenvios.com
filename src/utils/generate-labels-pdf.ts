@@ -1,53 +1,10 @@
 import PDFKit from "pdfkit";
-import { Order, Customer, Receiver, Agency, Service, Item, Provider, Forwarder, ServiceType } from "@prisma/client";
+import { Item, ServiceType } from "@prisma/client";
 import bwipjs from "bwip-js";
 import QRCode from "qrcode";
 import { formatName } from "./capitalize";
-import * as path from "path";
-
-interface OrderWithRelations extends Order {
-   customer: Customer;
-   receiver: Receiver & {
-      province: { id: number; name: string };
-      city: { id: number; name: string };
-   };
-   agency: Agency;
-   service: Service & {
-      provider: Provider;
-      forwarder: Forwarder;
-   };
-   items: Item[];
-}
-
-// Font paths
-const FONT_PATHS = {
-   REGULAR: path.join(process.cwd(), "assets", "fonts", "Inter-Regular.ttf"),
-   MEDIUM: path.join(process.cwd(), "assets", "fonts", "Inter-Medium.ttf"),
-   SEMIBOLD: path.join(process.cwd(), "assets", "fonts", "Inter-SemiBold.ttf"),
-   BOLD: path.join(process.cwd(), "assets", "fonts", "Inter-Bold.ttf"),
-} as const;
-
-// Font names (after registration)
-const FONTS = {
-   REGULAR: "Inter-Regular",
-   MEDIUM: "Inter-Medium",
-   SEMIBOLD: "Inter-SemiBold",
-   BOLD: "Inter-Bold",
-   NORMAL: "Inter-Regular", // Alias for compatibility
-} as const;
-
-// Register custom fonts with PDFKit
-function registerCustomFonts(doc: PDFKit.PDFDocument): void {
-   try {
-      doc.registerFont(FONTS.REGULAR, FONT_PATHS.REGULAR);
-      doc.registerFont(FONTS.MEDIUM, FONT_PATHS.MEDIUM);
-      doc.registerFont(FONTS.SEMIBOLD, FONT_PATHS.SEMIBOLD);
-      doc.registerFont(FONTS.BOLD, FONT_PATHS.BOLD);
-   } catch (error) {
-      console.warn("Failed to register custom fonts, falling back to Helvetica:", error);
-      // Fallback to default fonts if custom fonts fail to load
-   }
-}
+import { FONTS, registerPdfFonts } from "./pdf-fonts";
+import { OrderWithRelations } from "../types/order-with-relations";
 
 export const generateCTEnviosLabels = (order: OrderWithRelations): Promise<PDFKit.PDFDocument> => {
    // 4x6 inch labels (288x432 points at 72 DPI)
@@ -60,7 +17,7 @@ export const generateCTEnviosLabels = (order: OrderWithRelations): Promise<PDFKi
    });
 
    // Register custom fonts
-   registerCustomFonts(doc);
+   registerPdfFonts(doc);
 
    // Generate two labels per item (main label + province/city label)
    return new Promise(async (resolve, reject) => {
@@ -95,7 +52,7 @@ export const generateBulkCTEnviosLabels = (orders: OrderWithRelations[]): Promis
    });
 
    // Register custom fonts
-   registerCustomFonts(doc);
+   registerPdfFonts(doc);
 
    // Generate labels for all invoices using the existing internal functions
    return new Promise(async (resolve, reject) => {

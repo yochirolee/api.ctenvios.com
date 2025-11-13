@@ -17,6 +17,7 @@ import orders_routes from "./orders.routes";
 import products_routes from "./products.routes";
 import shippingRatesRoutes from "./shipping.rates.routes";
 import trackingRoutes from "./tracking.routes";
+import dispatchRoutes from "./dispatch.routes";
 
 const router = Router();
 
@@ -42,5 +43,6 @@ router.use("/partners", partners_routes);
 router.use("/orders", authMiddleware, orders_routes);
 router.use("/products", authMiddleware, products_routes);
 router.use("/shipping-rates", authMiddleware, shippingRatesRoutes);
+router.use("/dispatches", authMiddleware, dispatchRoutes);
 router.use("/tracking", trackingRoutes);
 export default router;
