@@ -1,4 +1,4 @@
-import { AgencyType, PrismaClient, Roles, CityType } from "@prisma/client";
+import { AgencyType, PrismaClient, Roles, CityType, ServiceType } from "@prisma/client";
 import { auth } from "../src/lib/auth";
 import { customsRates, provincesWithCities } from "./seed.data";
 
@@ -52,19 +52,19 @@ async function main(): Promise<void> {
 
    sectionStartTime = performance.now();
    // Create services
-   const maritimeService = await prisma.service.upsert({
+      const maritimeService = await prisma.service.upsert({
       where: { id: 1 },
       update: {},
       create: {
          name: "Maritimo",
-         service_type: "MARITIME",
+         service_type: ServiceType.MARITIME,
          description: "Envios Maritimos",
          forwarder: { connect: { id: forwarder.id } },
          provider: { connect: { id: provider.id } },
       },
-   });
+   }); 
 
-   console.log(`✅ Maritime service created: ${maritimeService.name}`);
+   // console.log(`✅ Maritime service created: ${maritimeService.name}`);
 
    // Create Agencia Habana (padre)
    const CTEnvios = await prisma.agency.upsert({
@@ -78,7 +78,6 @@ async function main(): Promise<void> {
          forwarder_id: forwarder.id,
          agency_type: AgencyType.FORWARDER,
          is_active: true,
-         services: { connect: { id: maritimeService.id } },
       },
 
       update: {},
@@ -312,7 +311,7 @@ async function main(): Promise<void> {
    console.log(`✅ Carrier created: ${carrier.name}`);
 
    // Update maritime service with carrier
-   await prisma.service.update({
+   /*  await prisma.service.update({
       where: { id: maritimeService.id },
       data: {
          carrier_id: carrier.id,
@@ -322,70 +321,7 @@ async function main(): Promise<void> {
    const carrierTime = ((performance.now() - sectionStartTime) / 1000).toFixed(2);
    console.log(`⏱️  Carrier setup completed in ${carrierTime}s`);
 
-   sectionStartTime = performance.now();
-   /*   // Create base delivery rates for carrier
-   console.log("📦 Creating delivery rates...");
-   const deliveryRates = [
-      {
-         name: "Delivery - Special Zone",
-         description: "Havana, Artemisa, Mayabeque",
-         forwarder_id: forwarder.id,
-         carrier_id: carrier.id,
-         city_type: CityType.SPECIAL,
-         cost_in_cents: 500, // $5 USD
-         rate_in_cents: 500, // $5 USD
-         is_base_rate: true,
-      },
-      {
-         name: "Delivery - Provincial Capital",
-         description: "Provincial capitals",
-         forwarder_id: forwarder.id,
-         carrier_id: carrier.id,
-         city_type: CityType.CAPITAL,
-         cost_in_cents: 1000, // $10 USD
-         rate_in_cents: 1000, // $10 USD
-         is_base_rate: true,
-      },
-      {
-         name: "Delivery - Other Cities",
-         description: "All other cities",
-         forwarder_id: forwarder.id,
-         carrier_id: carrier.id,
-         city_type: CityType.CITY,
-         cost_in_cents: 1500, // $15 USD
-         rate_in_cents: 1500, // $15 USD
-         is_base_rate: true,
-      },
-   ]; */
-
-   /*    for (const rate of deliveryRates) {
-      // Check if delivery rate exists
-      const existingRate = await prisma.deliveryRate.findFirst({
-         where: {
-            forwarder_id: rate.forwarder_id,
-            carrier_id: rate.carrier_id,
-            city_type: rate.city_type,
-            is_base_rate: true,
-            agency_id: null,
-         },
-      });
-
-      if (existingRate) {
-         await prisma.deliveryRate.update({
-            where: { id: existingRate.id },
-            data: {
-               cost_in_cents: rate.cost_in_cents,
-               rate_in_cents: rate.rate_in_cents,
-            },
-         });
-      } else {
-         await prisma.deliveryRate.create({
-            data: rate,
-         });
-      }
-   }
-   console.log(`✅ Delivery rates created: ${deliveryRates.length} total`);
- */
+   sectionStartTime = performance.now(); */
 
    const user = await prisma.user.findFirst({
       where: {

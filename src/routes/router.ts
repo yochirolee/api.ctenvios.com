@@ -22,11 +22,10 @@ import dispatchRoutes from "./dispatch.routes";
 const router = Router();
 
 router.get("/", (req: Request, res: Response) => {
-   res.send("Welcome to CTEnvios API V1");
+   res.status(200).json({ status: "ok", message: "Welcome to CTEnvios API V1", timestamp: new Date().toISOString() });
 });
-//private routes
 
-//public routes
+
 router.use("/providers", authMiddleware, providers_routes);
 router.use("/forwarders", authMiddleware, forwarders_routes);
 router.use("/agencies", authMiddleware, agencies_routes);

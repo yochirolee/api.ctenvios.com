@@ -1,0 +1,73 @@
+# Dependencies
+node_modules
+npm-debug.log
+yarn-error.log
+yarn.lock
+# Note: package-lock.json is needed for npm ci, so it's NOT ignored
+
+# Build outputs
+dist
+build
+*.tsbuildinfo
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage
+.nyc_output
+*.test.ts
+*.test.js
+*.spec.ts
+*.spec.js
+__tests__
+jest.config.js
+
+# Documentation
+*.md
+docs
+!README.md
+
+# CI/CD
+.github
+.gitlab-ci.yml
+.travis.yml
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Vercel
+vercel.json
+
+# Artillery configs (not needed in production)
+artillery-*.yml
+artillery-processor.js
+
+# Note: Seed scripts are included so they can be run in Docker containers
+# prisma/*.seed.ts and prisma/seed*.ts are NOT ignored
+
+# Other
+*.log
+.cache
+.temp
+

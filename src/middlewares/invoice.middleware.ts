@@ -1,26 +1,28 @@
 // prisma/middleware/invoiceHistory.ts
 // Usage: const extendedPrisma = prisma.$extends(createInvoiceHistoryExtension(userId, prisma));
+// Note: Despite the name, this tracks Order model updates (Invoice was renamed to Order)
 
-import {  PrismaClient } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
+import { OrderEventType } from "@prisma/client";
 
 export function createInvoiceHistoryExtension(userId: string, prisma: PrismaClient) {
    return {
       query: {
-         invoice: {
+         order: {
             async update({ args, query }: { args: any; query: any }) {
-               const invoiceId = args.where.id;
+               const orderId = args.where.id;
 
                // Obtener estado anterior
-               const previous = await prisma.invoice.findUnique({
-                  where: { id: invoiceId },
+               const previous = await prisma.order.findUnique({
+                  where: { id: orderId },
                   include: { items: true },
                });
 
                const result = await query(args); // Ejecuta la actualización
 
                // Obtener nuevo estado
-               const updated = await prisma.invoice.findUnique({
-                  where: { id: invoiceId },
+               const updated = await prisma.order.findUnique({
+                  where: { id: orderId },
                   include: { items: true },
                });
 
@@ -135,14 +137,14 @@ export function createInvoiceHistoryExtension(userId: string, prisma: PrismaClie
 
                // Only create history record if there are meaningful changes
                if (Object.keys(filteredChanges).length > 0) {
-                  await prisma.invoiceHistory.create({
+                  await prisma.orderHistory.create({
                      data: {
-                        invoice_id: invoiceId,
+                        order_id: orderId,
                         user_id: userId,
                         changed_fields: filteredChanges,
                         comment: "Modificación detectada por middleware",
                         status: updated.status,
-                        type: InvoiceEventType.PRIVATE,
+                        type: OrderEventType.PRIVATE_TRACKING,
                      },
                   });
                }
