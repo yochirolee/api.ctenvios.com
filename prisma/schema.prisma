@@ -243,8 +243,6 @@ model Product {
     id                 Int                @id @default(autoincrement())
     provider_id        Int
     provider           Agency             @relation(fields: [provider_id], references: [id])
-    service_id         Int
-    service            Service            @relation(fields: [service_id], references: [id])
     name               String
     description        String?
     type               ProductType        @default(SHIPPING)
@@ -257,8 +255,9 @@ model Product {
     updated_at         DateTime           @updatedAt
     pricing_agreements PricingAgreement[]
     shipping_rates     ShippingRate[]
+    services           Service[]
 
-    @@unique([provider_id, service_id, name])
+    @@unique([provider_id, name])
 }
 
 model PricingAgreement {
@@ -602,7 +601,7 @@ model Discount {
     user              User         @relation(fields: [user_id], references: [id], onDelete: Cascade)
     type              DiscountType
     description       String?
-    rate              Int?          @default(0)
+    rate              Int?         @default(0)
     discount_in_cents Int          @default(0)
     created_at        DateTime     @default(now())
 }
@@ -715,6 +714,7 @@ enum PaymentStatus {
     PENDING
     PAID
     PARTIALLY_PAID
+    FULL_DISCOUNT
     REFUNDED
     CANCELLED
 }

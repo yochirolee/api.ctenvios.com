@@ -34,6 +34,9 @@ export const pricingService = {
                },
             },
          },
+         orderBy: {
+            id: "desc",
+         },
       });
       if (rates.length === 0) {
          return [];
@@ -83,9 +86,7 @@ export const pricingService = {
          // 1. Validate product exists and is active
          const product = await tx.product.findUnique({
             where: { id: product_id },
-            include: { provider: true, service: true },
          });
-
          if (!product) {
             throw new AppError(HttpStatusCodes.NOT_FOUND, `Product with id ${product_id} not found`);
          }
@@ -138,7 +139,10 @@ export const pricingService = {
          });
 
          if (existingAgreement) {
-               throw new AppError(HttpStatusCodes.CONFLICT, `Pricing agreement already exists for seller ${seller_agency_id}, buyer ${buyer_agency_id}, and product ${product_id}`);
+            throw new AppError(
+               HttpStatusCodes.CONFLICT,
+               `Pricing agreement already exists for seller ${seller_agency_id}, buyer ${buyer_agency_id}, and product ${product_id}`
+            );
          }
 
          // 6. Create PricingAgreement

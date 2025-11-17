@@ -59,6 +59,7 @@ const customers = {
       });
       return customers;
    },
+
    getById: async (customerId: number): Promise<Customer | null> => {
       const customer = await prisma.customer.findUnique({
          where: {

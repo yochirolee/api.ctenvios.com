@@ -4,7 +4,7 @@ config:
       timeout: 45
    defaults:
       headers:
-         Authorization: "Bearer p5TAuBi2u8lH3JUV9a7E3kNCPuPvDDV4"
+         Authorization: "Bearer ebJ8DreKAqbZ3feQTLQ4DYFzm1AKzQNj"
    phases:
       # Gradual ramp-up to avoid immediate overload
       - duration: 30

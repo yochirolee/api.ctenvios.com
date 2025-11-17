@@ -267,14 +267,14 @@ export const ordersController = {
 
          if (isNaN(orderId)) {
             throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid order ID");
-            return;
+           
          }
 
          const order = await repository.orders.getByIdWithDetails(orderId);
 
          if (!order) {
             throw new AppError(HttpStatusCodes.NOT_FOUND, "Order not found");
-            return;
+           
          }
 
          res.status(200).json(order);
@@ -322,7 +322,7 @@ export const ordersController = {
       try {
          const user = req.user;
          if (!user) {
-               throw new AppError(HttpStatusCodes.UNAUTHORIZED, "Unauthorized");
+            throw new AppError(HttpStatusCodes.UNAUTHORIZED, "Unauthorized");
          }
          const { id } = req.params;
          const discountId = parseInt(id);

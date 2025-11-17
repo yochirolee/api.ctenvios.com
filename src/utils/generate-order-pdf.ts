@@ -560,6 +560,8 @@ function addModernTableHeaders(doc: PDFKit.PDFDocument, y: number, textStyle: Te
       { text: "Subtotal", x: 542, width: 50, align: "right" },
    ];
 
+   // Explicitly reset font to ensure consistent header styling across all pages
+   doc.font(FONTS.SEMIBOLD).fontSize(7).fillColor(COLORS.MUTED_FOREGROUND);
    textStyle.style(FONTS.SEMIBOLD, 7, COLORS.MUTED_FOREGROUND);
 
    headers.forEach((header) => {

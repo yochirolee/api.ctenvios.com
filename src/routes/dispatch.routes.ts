@@ -16,12 +16,12 @@ router.get("/:id", async (req: Request, res: Response) => {
    const dispatch = await repository.dispatch.getById(parseInt(req.params.id));
    res.status(200).json(dispatch);
 });
-router.post("/", async (req: Request, res: Response) => {
+router.post("/", async (req: any, res: Response) => {
+   const user = req.user;
    const dispatch = await repository.dispatch.create({
-      sender_agency_id: req.body.sender_agency_id,
+      sender_agency_id: user.agency_id,
       receiver_agency_id: req.body.receiver_agency_id,
-      created_by_id: req.body.created_by_id,
-      received_by_id: req.body.received_by_id,
+      created_by_id: user.id,
    });
    res.status(200).json(dispatch);
 });

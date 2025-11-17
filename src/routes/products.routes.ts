@@ -12,7 +12,6 @@ const products_routes = Router();
 const createProductSchema = z.object({
    id: z.number().optional(),
    provider_id: z.number(),
-   service_id: z.number(),
    name: z.string(),
    description: z.string(),
    unit: z.nativeEnum(Unit),
@@ -30,6 +29,7 @@ const updateProductSchema = z.object({
    width: z.number().optional(),
    height: z.number().optional(),
    is_active: z.boolean().optional(),
+   serviceIds: z.array(z.number().positive()).min(1).optional(),
 });
 
 products_routes.get("/", productController.getAll);
@@ -43,6 +43,9 @@ products_routes.get("/:id", productController.getById);
 products_routes.put("/:id", validate({ body: updateProductSchema }), productController.update);
 
 products_routes.delete("/:id", productController.delete);
+
+products_routes.post("/:id/connect-service", productController.connectServices);
+products_routes.delete("/:id/disconnect-service", productController.disconnectServices);
 
 // Create pricing agreement and shipping rate for a product
 //this has to be moved to shipping rates routes and controller

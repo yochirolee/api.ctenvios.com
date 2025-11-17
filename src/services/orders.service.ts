@@ -269,31 +269,60 @@ export const ordersService = {
       return result;
    },
    addDiscount: async (order_id: number, discountData: Prisma.DiscountCreateInput, user_id: string): Promise<any> => {
-      const order = await repository.orders.getById(order_id);
+      const order = await prisma.order.findUnique({
+         where: { id: order_id },
+         include: { items: true, discounts: true },
+      });
       if (!order) {
          throw new AppError(StatusCodes.NOT_FOUND, "Order not found");
       }
-      let total_discount_in_cents = 0;
-      if (discountData.type === DiscountType.RATE) {
-         total_discount_in_cents = order.items.reduce((acc, item) => {
-            if (item.unit === Unit.PER_LB) {
-               return (
-                  acc +
-                  Math.ceil(item.price_in_cents * item.weight - item.weight * (discountData?.discount_in_cents || 1))
-               );
-            }
-            return acc;
-         }, 0);
+      // Prevent adding discount to already paid orders
+      if (order.payment_status === PaymentStatus.PAID) {
+         throw new AppError(StatusCodes.BAD_REQUEST, "Cannot add discount to an already paid order");
       }
-      if (discountData.type === DiscountType.CASH) {
-         if ((discountData?.discount_in_cents ?? 0) > order.total_in_cents) {
-            throw new AppError(StatusCodes.BAD_REQUEST, "Discount amount cannot be greater than order total");
-         }
-         total_discount_in_cents = discountData.discount_in_cents ?? 0;
+      let total_discount_in_cents = 0;
+
+      switch (discountData.type) {
+         case DiscountType.RATE:
+            total_discount_in_cents = order.items.reduce((acc, item) => {
+               if (item.unit === Unit.PER_LB) {
+                  return (
+                     acc +
+                     Math.ceil(item.price_in_cents * item.weight - item.weight * (discountData?.discount_in_cents || 1))
+                  );
+               }
+               return acc;
+            }, 0);
+            break;
+         case DiscountType.CASH:
+            if ((discountData?.discount_in_cents ?? 0) > order.total_in_cents) {
+               throw new AppError(StatusCodes.BAD_REQUEST, "Discount amount cannot be greater than order total");
+            }
+            total_discount_in_cents = discountData.discount_in_cents ?? 0;
+            break;
+         default:
+            // If discount type is not handled, discount remains 0
+            break;
       }
 
+      // Calculate new total after discount
+      const newTotalInCents = order.total_in_cents - total_discount_in_cents;
+      // Check if order is fully paid after discount
+      const isFullyPaid = order.paid_in_cents >= newTotalInCents;
+
+      // Determine payment status
+      let newPaymentStatus: PaymentStatus | undefined;
+      if (total_discount_in_cents === order.total_in_cents) {
+         // Discount equals the full order total
+         newPaymentStatus = PaymentStatus.FULL_DISCOUNT;
+      } else if (total_discount_in_cents > 0 && !isFullyPaid) {
+         // Order has discount but is not fully paid
+         newPaymentStatus = PaymentStatus.PENDING;
+      }
+      // If discount doesn't equal total and order is fully paid, status remains unchanged
+
       const result = await prisma.$transaction(async (tx) => {
-         // Update order
+         // Create discount
          await tx.discount.create({
             data: {
                type: discountData.type,
@@ -304,11 +333,15 @@ export const ordersService = {
                user_id: user_id,
             },
          });
+         const updateData: Prisma.OrderUncheckedUpdateInput = {
+            total_in_cents: newTotalInCents,
+         };
+         if (newPaymentStatus) {
+            updateData.payment_status = newPaymentStatus;
+         }
          const updatedOrder = await tx.order.update({
             where: { id: order_id },
-            data: {
-               total_in_cents: order.total_in_cents - total_discount_in_cents,
-            },
+            data: updateData,
          });
          return updatedOrder;
       });
@@ -318,9 +351,25 @@ export const ordersService = {
    removeDiscount: async (discount_id: number): Promise<any> => {
       const discount_to_remove = await prisma.discount.findUnique({
          where: { id: discount_id },
+         include: {
+            order: true,
+         },
       });
       if (!discount_to_remove) {
          throw new AppError(StatusCodes.NOT_FOUND, "Discount not found");
+      }
+
+      const order = discount_to_remove.order;
+      const newTotalInCents = order.total_in_cents + discount_to_remove.discount_in_cents;
+
+      // Recalculate payment status based on paid amount vs new total
+      let newPaymentStatus: PaymentStatus;
+      if (order.paid_in_cents >= newTotalInCents) {
+         newPaymentStatus = PaymentStatus.PAID;
+      } else if (order.paid_in_cents > 0) {
+         newPaymentStatus = PaymentStatus.PARTIALLY_PAID;
+      } else {
+         newPaymentStatus = PaymentStatus.PENDING;
       }
 
       const result = await prisma.$transaction(async (tx) => {
@@ -330,9 +379,8 @@ export const ordersService = {
          const updatedOrder = await tx.order.update({
             where: { id: discount_to_remove.order_id },
             data: {
-               total_in_cents: {
-                  increment: discount_to_remove.discount_in_cents,
-               },
+               total_in_cents: newTotalInCents,
+               payment_status: newPaymentStatus,
             },
          });
          return updatedOrder;

@@ -127,7 +127,7 @@ function generateOrderData(context, events, done) {
 
 	// Calculate total from items
 	const total_in_cents = items.reduce((total, item) => {
-		return total + item.rate_in_cents + item.insurance_fee_in_cents + item.customs_fee_in_cents;
+		return total + item.price_in_cents + item.insurance_fee_in_cents + item.customs_fee_in_cents;
 	}, 0);
 
 	// Select agency and corresponding user
@@ -174,7 +174,7 @@ function generateComplexOrderData(context, events, done) {
 
 	// Calculate total from items
 	const total_in_cents = items.reduce((total, item) => {
-		return total + item.rate_in_cents + item.insurance_fee_in_cents + item.customs_fee_in_cents;
+		return total + item.price_in_cents + item.insurance_fee_in_cents + item.customs_fee_in_cents;
 	}, 0);
 
 	// Select agency and corresponding user

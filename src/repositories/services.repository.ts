@@ -55,6 +55,7 @@ const services = {
          include: {
             provider: true,
             forwarder: true,
+            products: true,
          },
          where: {
             is_active: true,
@@ -177,7 +178,6 @@ const services = {
             include: {
                provider: true,
                forwarder: true,
-               products: true,
             },
             orderBy: {
                name: "asc",

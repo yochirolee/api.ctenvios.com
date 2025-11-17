@@ -14,7 +14,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.partnerLogMiddleware = exports.partnerAuthMiddleware = void 0;
 const repositories_1 = __importDefault(require("../repositories"));
-const app_error_1 = __importDefault(require("../utils/app.error"));
+const app_errors_1 = require("../common/app-errors");
+const https_status_codes_1 = __importDefault(require("../common/https-status-codes"));
 /**
  * Middleware to authenticate partners using API Key
  * Validates API key from Authorization header (Bearer token)
@@ -25,26 +26,26 @@ const partnerAuthMiddleware = (req, res, next) => __awaiter(void 0, void 0, void
         // Extract API key from Authorization header
         const authHeader = req.headers.authorization;
         if (!authHeader) {
-            throw new app_error_1.default("API key is required. Please provide an API key in the Authorization header.", 401);
+            throw new app_errors_1.AppError(https_status_codes_1.default.UNAUTHORIZED, "API key is required. Please provide an API key in the Authorization header.");
         }
         // Support both "Bearer TOKEN" and direct token formats
         const apiKey = authHeader.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
         if (!apiKey || apiKey.trim() === "") {
-            throw new app_error_1.default("Invalid API key format", 401);
+            throw new app_errors_1.AppError(https_status_codes_1.default.UNAUTHORIZED, "Invalid API key format");
         }
         // Validate API key and get partner
         const partner = yield repositories_1.default.partners.getByApiKey(apiKey.trim());
         if (!partner) {
-            throw new app_error_1.default("Invalid API key or partner not found", 401);
+            throw new app_errors_1.AppError(https_status_codes_1.default.UNAUTHORIZED, "Invalid API key or partner not found");
         }
         if (!partner.is_active) {
-            throw new app_error_1.default("Partner account is inactive. Please contact support.", 403);
+            throw new app_errors_1.AppError(https_status_codes_1.default.FORBIDDEN, "Partner account is inactive. Please contact support.");
         }
         // Check rate limiting (requests per hour)
         if (partner.rate_limit && partner.rate_limit > 0) {
             const stats = yield repositories_1.default.partners.getStats(partner.id);
             if (stats.requests_last_hour >= partner.rate_limit) {
-                throw new app_error_1.default(`Rate limit exceeded. You are limited to ${partner.rate_limit} requests per hour.`, 429);
+                throw new app_errors_1.AppError(https_status_codes_1.default.TOO_MANY_REQUESTS, `Rate limit exceeded. You are limited to ${partner.rate_limit} requests per hour.`);
             }
         }
         // Attach partner to request object
@@ -53,8 +54,8 @@ const partnerAuthMiddleware = (req, res, next) => __awaiter(void 0, void 0, void
     }
     catch (error) {
         console.error("Partner authentication error:", error);
-        if (error instanceof app_error_1.default) {
-            res.status(error.statusCode).json({
+        if (error instanceof app_errors_1.AppError) {
+            res.status(error.status).json({
                 status: "error",
                 message: error.message,
             });

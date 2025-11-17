@@ -10,9 +10,9 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-here';
 
 // You can change these values based on your test user
 const payload = {
-  id: "R5KTYKBbQhiSSoA8iT7KD3BnGSwJ376Q", // Your user ID
+  id: "uQImPtS41N0AWPfLJKXUYALHHYas07w9", // Your user ID
   agency_id: 1,
-  role: "AGENCY_ADMIN"
+  role: "ROOT"
 };
 
 // Generate token that expires in 24 hours
