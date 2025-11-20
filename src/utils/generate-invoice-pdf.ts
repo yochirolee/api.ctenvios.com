@@ -4,7 +4,7 @@ import { promises as fs } from "fs";
 import * as path from "path";
 import { Order, Customer, Receiver, Agency, Service, Item, Unit } from "@prisma/client";
 import { formatName } from "./capitalize";
-import { calculate_row_subtotal, formatCents } from "./utils";
+import { calculate_row_subtotal, formatCents, toNumber } from "./utils";
 
 interface OrderWithRelations extends Order {
    customer: Customer;
@@ -23,22 +23,27 @@ interface OrderWithRelations extends Order {
 // Pre-calculate all financial totals //have to move this to the utils
 function calculateInvoiceTotals(order: OrderWithRelations) {
    const subtotal_in_cents = order.items.reduce(
-      (acc, item) =>
-         acc +
-         calculate_row_subtotal(
-            item.price_in_cents,
-            item.weight,
-            item.customs_fee_in_cents,
-            item.charge_fee_in_cents || 0,
-            item.insurance_fee_in_cents || 0,
+      (acc, item) => {
+         const weight = toNumber(item.weight); // weight is Decimal, needs conversion
+         return acc + calculate_row_subtotal(
+            item.price_in_cents, // Int - already a number
+            weight,
+            item.customs_fee_in_cents, // Int - already a number
+            item.charge_fee_in_cents || 0, // Int? - already a number
+            item.insurance_fee_in_cents || 0, // Int? - already a number
             item.unit as Unit
-         ),
+         );
+      },
       0
    );
-   const total_delivery_fee_in_cents = order.items.reduce((acc, item) => acc + (item.delivery_fee_in_cents || 0), 0);
+   const total_delivery_fee_in_cents = order.items.reduce((acc, item) => {
+      return acc + (item.delivery_fee_in_cents || 0); // Int? - already a number
+   }, 0);
 
    const subtotal = formatCents(subtotal_in_cents);
-   const totalWeight = order.items.reduce((acc, item) => acc + item.weight, 0);
+   const totalWeight = order.items.reduce((acc, item) => {
+      return acc + toNumber(item.weight); // weight is Decimal, needs conversion
+   }, 0);
    const chargeAmount = formatCents(order.charge_in_cents || 0);
    const deliveryFeeAmount = formatCents(total_delivery_fee_in_cents);
    const paidAmount = formatCents(order.paid_in_cents);
@@ -449,18 +454,21 @@ async function generateItemsTableOptimized(
    const textStyle = new TextStyler(doc);
 
    // Batch process items for better performance
-   const processedItems = invoice.items.map((item, index) => ({
-      ...item,
-      hbl: item.hbl || `CTE${String(invoice.id).padStart(6, "0")}${String(index + 1).padStart(6, "0")}`,
-      subtotal_in_cents: calculate_row_subtotal(
-         item.price_in_cents,
-         item.weight,
-         item.customs_fee_in_cents,
-         item.charge_fee_in_cents || 0,
-         item.insurance_fee_in_cents || 0,
-         item.unit as Unit
-      ),
-   }));
+   const processedItems = invoice.items.map((item, index) => {
+      const weight = toNumber(item.weight); // weight is Decimal, needs conversion
+      return {
+         ...item,
+         hbl: item.hbl || `CTE${String(invoice.id).padStart(6, "0")}${String(index + 1).padStart(6, "0")}`,
+         subtotal_in_cents: calculate_row_subtotal(
+            item.price_in_cents, // Int - already a number
+            weight,
+            item.customs_fee_in_cents, // Int - already a number
+            item.charge_fee_in_cents || 0, // Int? - already a number
+            item.insurance_fee_in_cents || 0, // Int? - already a number
+            item.unit as Unit
+         ),
+      };
+   });
 
    const addNewPageWithHeaderFooter = async () => {
       doc.addPage();

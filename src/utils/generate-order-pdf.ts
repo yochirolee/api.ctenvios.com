@@ -5,34 +5,47 @@ import * as path from "path";
 import { Unit } from "@prisma/client";
 import type { OrderPdfDetails } from "../repositories/orders.repository";
 import { formatName } from "./capitalize";
-import { calculate_row_subtotal, formatCents } from "./utils";
+import { calculate_row_subtotal, formatCents, toNumber } from "./utils";
 
 // Pre-calculate all financial totals
 function calculateOrderTotals(order: OrderPdfDetails) {
    const subtotal_in_cents = order.items.reduce(
-      (acc, item) =>
-         acc +
-         calculate_row_subtotal(
-            item.price_in_cents,
-            item.weight,
-            item.customs_fee_in_cents,
-            item.charge_fee_in_cents || 0,
-            item.insurance_fee_in_cents || 0,
+      (acc, item) => {
+         const weight = toNumber(item.weight); // weight is Decimal, needs conversion
+         return acc + calculate_row_subtotal(
+            item.price_in_cents, // Int - already a number
+            weight,
+            item.customs_fee_in_cents, // Int - already a number
+            item.charge_fee_in_cents || 0, // Int? - already a number
+            item.insurance_fee_in_cents || 0, // Int? - already a number
             item.unit as Unit
-         ),
+         );
+      },
       0
    );
-   const total_delivery_fee_in_cents = order.items.reduce((acc, item) => acc + (item.delivery_fee_in_cents || 0), 0);
-   const total_insurance_in_cents = order.items.reduce((acc, item) => acc + (item.insurance_fee_in_cents || 0), 0);
-   const items_charge_in_cents = order.items.reduce((acc, item) => acc + (item.charge_fee_in_cents || 0), 0);
+   const total_delivery_fee_in_cents = order.items.reduce((acc, item) => {
+      return acc + (item.delivery_fee_in_cents || 0); // Int? - already a number
+   }, 0);
+   const total_insurance_in_cents = order.items.reduce((acc, item) => {
+      return acc + (item.insurance_fee_in_cents || 0); // Int? - already a number
+   }, 0);
+   const items_charge_in_cents = order.items.reduce((acc, item) => {
+      return acc + (item.charge_fee_in_cents || 0); // Int? - already a number
+   }, 0);
 
-   const payments_charge_in_cents = order.payments.reduce((acc, payment) => acc + (payment.charge_in_cents || 0), 0);
-   const discount_in_cents = order.discounts.reduce((acc, discount) => acc + (discount.discount_in_cents || 0), 0);
+   const payments_charge_in_cents = order.payments.reduce((acc, payment) => {
+      return acc + (payment.charge_in_cents || 0); // Int? - already a number
+   }, 0);
+   const discount_in_cents = order.discounts.reduce((acc, discount) => {
+      return acc + (discount.discount_in_cents || 0); // Int? - already a number
+   }, 0);
    const discount_amount = formatCents(discount_in_cents);
    const items_fee_amount = formatCents(items_charge_in_cents);
    const payments_fee_amount = formatCents(payments_charge_in_cents);
    const subtotal = formatCents(subtotal_in_cents);
-   const totalWeight = order.items.reduce((acc, item) => acc + item.weight, 0);
+   const totalWeight = order.items.reduce((acc, item) => {
+      return acc + toNumber(item.weight); // weight is Decimal, needs conversion
+   }, 0);
    const insuranceAmount = formatCents(total_insurance_in_cents);
    const deliveryFeeAmount = formatCents(total_delivery_fee_in_cents);
    const paidAmount = formatCents(order.paid_in_cents);
@@ -462,18 +475,21 @@ async function generateModernTable(
    const textStyle = new TextStyler(doc);
 
    // Process items
-   const processedItems = order.items.map((item, index) => ({
-      ...item,
-      hbl: item.hbl || `CTE${String(order.id).padStart(6, "0")}${String(index + 1).padStart(6, "0")}`,
-      subtotal_in_cents: calculate_row_subtotal(
-         item.price_in_cents,
-         item.weight,
-         item.customs_fee_in_cents,
-         item.charge_fee_in_cents || 0,
-         item.insurance_fee_in_cents || 0,
-         item.unit as Unit
-      ),
-   }));
+   const processedItems = order.items.map((item, index) => {
+      const weight = toNumber(item.weight); // weight is Decimal, needs conversion
+      return {
+         ...item,
+         hbl: item.hbl || `CTE${String(order.id).padStart(6, "0")}${String(index + 1).padStart(6, "0")}`,
+         subtotal_in_cents: calculate_row_subtotal(
+            item.price_in_cents, // Int - already a number
+            weight,
+            item.customs_fee_in_cents, // Int - already a number
+            item.charge_fee_in_cents || 0, // Int? - already a number
+            item.insurance_fee_in_cents || 0, // Int? - already a number
+            item.unit as Unit
+         ),
+      };
+   });
 
    const addNewPageWithHeader = async (includeTableHeaders: boolean = true): Promise<number> => {
       doc.addPage({ margin: 0 });

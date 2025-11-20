@@ -5,6 +5,7 @@ import * as path from "path";
 import { formatName } from "./capitalize";
 import { FONTS, registerPdfFonts } from "./pdf-fonts";
 import { OrderWithRelations } from "../types/order-with-relations";
+import { toNumber } from "./utils";
 
 const LOGO_PATH = path.join(process.cwd(), "assets", "ctelogo.png");
 
@@ -134,8 +135,9 @@ const drawHblSection = (
    const forwardingAgent = uppercase(order.service.forwarder.name);
    const notifyParty = uppercase(order.service.provider.name);
 
-   const weightKg = poundsToKilograms(item.weight);
-   const volume = item.volume ?? 0;
+   const weight = toNumber(item.weight); // weight is Decimal, needs conversion
+   const weightKg = poundsToKilograms(weight);
+   const volume = item.volume ?? 0; // volume is Float?, already a number
    const packageCount = item.quantity ?? 1;
    const movementType = uppercase(order.service.service_type);
 

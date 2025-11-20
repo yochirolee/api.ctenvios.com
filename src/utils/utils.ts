@@ -68,6 +68,16 @@ export function formatCents(cents: number, locale: string = "en-US", currency: s
    return getFormatter(locale, currency).format(cents / 100);
 }
 
+// Helper function to safely convert Prisma Decimal to number
+export function toNumber(value: number | { toNumber?: () => number } | null | undefined): number {
+   if (value === null || value === undefined) return 0;
+   if (typeof value === "number") return value;
+   if (typeof value === "object" && typeof value.toNumber === "function") {
+      return value.toNumber();
+   }
+   return Number(value) || 0;
+}
+
 export const calculate_row_subtotal = (
    price_in_cents: number,
    weight: number,

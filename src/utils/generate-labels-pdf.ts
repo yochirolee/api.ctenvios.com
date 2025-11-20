@@ -5,6 +5,7 @@ import QRCode from "qrcode";
 import { formatName } from "./capitalize";
 import { FONTS, registerPdfFonts } from "./pdf-fonts";
 import { OrderWithRelations } from "../types/order-with-relations";
+import { toNumber } from "./utils";
 
 export const generateCTEnviosLabels = (order: OrderWithRelations): Promise<PDFKit.PDFDocument> => {
    // 4x6 inch labels (288x432 points at 72 DPI)
@@ -135,8 +136,9 @@ async function generateCleanCTEnviosLabel(
    // Weight area without border
 
    // Weight text - lbs above, kg below
-   const weightLbs = `${item.weight.toFixed(2)} lbs`;
-   const weightKg = `${(item.weight / 2.20462).toFixed(2)} kg`;
+   const weight = toNumber(item.weight);
+   const weightLbs = `${weight.toFixed(2)} lbs`;
+   const weightKg = `${(weight / 2.20462).toFixed(2)} kg`;
 
    // Pounds on top - left aligned, larger font size
    doc.fontSize(12)

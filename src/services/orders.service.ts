@@ -1,7 +1,7 @@
 import { Customer, Prisma, PaymentMethod, PaymentStatus, Status, Unit, DiscountType } from "@prisma/client";
 import { services } from ".";
 import repository from "../repositories";
-import { calculateOrderTotal, formatCents } from "../utils/utils";
+import { calculateOrderTotal, formatCents, toNumber } from "../utils/utils";
 import { PAYMENT_CONFIG } from "../config/payment.config";
 import prisma from "../lib/prisma.client";
 import StatusCodes from "../common/https-status-codes";
@@ -286,9 +286,9 @@ export const ordersService = {
          case DiscountType.RATE:
             total_discount_in_cents = order.items.reduce((acc, item) => {
                if (item.unit === Unit.PER_LB) {
+                  const weight = toNumber(item.weight); // weight is Decimal, needs conversion
                   return (
-                     acc +
-                     Math.ceil(item.price_in_cents * item.weight - item.weight * (discountData?.discount_in_cents || 1))
+                     acc + Math.ceil(item.price_in_cents * weight - weight * (discountData?.discount_in_cents || 1))
                   );
                }
                return acc;
