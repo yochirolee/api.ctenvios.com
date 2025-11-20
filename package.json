@@ -27,7 +27,8 @@
 		"seed-receipts": "tsx prisma/recepit-seed.ts",
 		"seed-customers": "tsx prisma/customers-seed.ts",
 		"seed-customs-rates": "tsx prisma/customsRates.seed.ts",
-		"generate": "npx prisma migrate reset --preview-feature && npx prisma migrate deploy"
+		"generate": "npx prisma migrate reset --preview-feature && npx prisma migrate deploy",
+		"generate-client": "npx prisma generate"
 	},
 	"keywords": [],
 	"author": "Yochiro Lee Cruz",
