@@ -9,27 +9,27 @@ import { calculate_row_subtotal, formatCents, toNumber } from "./utils";
 
 // Pre-calculate all financial totals
 function calculateOrderTotals(order: OrderPdfDetails) {
-   const subtotal_in_cents = order.items.reduce(
-      (acc, item) => {
-         const weight = toNumber(item.weight); // weight is Decimal, needs conversion
-         return acc + calculate_row_subtotal(
+   const subtotal_in_cents = order.order_items.reduce((acc, item) => {
+      const weight = toNumber(item.weight); // weight is Decimal, needs conversion
+      return (
+         acc +
+         calculate_row_subtotal(
             item.price_in_cents, // Int - already a number
             weight,
             item.customs_fee_in_cents, // Int - already a number
             item.charge_fee_in_cents || 0, // Int? - already a number
             item.insurance_fee_in_cents || 0, // Int? - already a number
             item.unit as Unit
-         );
-      },
-      0
-   );
-   const total_delivery_fee_in_cents = order.items.reduce((acc, item) => {
+         )
+      );
+   }, 0);
+   const total_delivery_fee_in_cents = order.order_items.reduce((acc, item) => {
       return acc + (item.delivery_fee_in_cents || 0); // Int? - already a number
    }, 0);
-   const total_insurance_in_cents = order.items.reduce((acc, item) => {
+   const total_insurance_in_cents = order.order_items.reduce((acc, item) => {
       return acc + (item.insurance_fee_in_cents || 0); // Int? - already a number
    }, 0);
-   const items_charge_in_cents = order.items.reduce((acc, item) => {
+   const items_charge_in_cents = order.order_items.reduce((acc, item) => {
       return acc + (item.charge_fee_in_cents || 0); // Int? - already a number
    }, 0);
 
@@ -43,7 +43,7 @@ function calculateOrderTotals(order: OrderPdfDetails) {
    const items_fee_amount = formatCents(items_charge_in_cents);
    const payments_fee_amount = formatCents(payments_charge_in_cents);
    const subtotal = formatCents(subtotal_in_cents);
-   const totalWeight = order.items.reduce((acc, item) => {
+   const totalWeight = order.order_items.reduce((acc, item) => {
       return acc + toNumber(item.weight); // weight is Decimal, needs conversion
    }, 0);
    const insuranceAmount = formatCents(total_insurance_in_cents);
@@ -255,9 +255,9 @@ function formatOrderData(order: OrderPdfDetails) {
    const location = `${order.receiver.city?.name || ""} ${order.receiver.province?.name || ""}`.trim();
    const fullAddress = location ? `${order.receiver.address}, ${location}` : order.receiver.address;
 
-   const totalWeightValue = order.items.reduce((acc, item) => acc + Number(item.weight), 0);
+   const totalWeightValue = order.order_items.reduce((acc, item) => acc + Number(item.weight), 0);
    const totalWeightLabel = `${totalWeightValue} lbs`;
-   const itemsCount = `${order.items.length}`;
+   const itemsCount = `${order.order_items.length}`;
 
    return {
       senderName,
@@ -475,7 +475,7 @@ async function generateModernTable(
    const textStyle = new TextStyler(doc);
 
    // Process items
-   const processedItems = order.items.map((item, index) => {
+   const processedItems = order.order_items.map((item, index) => {
       const weight = toNumber(item.weight); // weight is Decimal, needs conversion
       return {
          ...item,

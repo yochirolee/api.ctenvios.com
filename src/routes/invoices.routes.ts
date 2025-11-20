@@ -33,7 +33,7 @@ router.get("/:id/order-pdf", async (req, res) => {
             },
             agency: true,
             service: true,
-            items: true,
+            order_items: true,
          },
       });
 
@@ -129,9 +129,9 @@ router.get("/:id/labels", async (req, res) => {
       if (!invoice) {
          throw new AppError(HttpStatusCodes.NOT_FOUND, "Invoice not found");
       }
-
-      if (!invoice.items || invoice.items.length === 0) {
-         throw new AppError(HttpStatusCodes.BAD_REQUEST, "No items found for this invoice");
+console.log(invoice);
+      if (!invoice.order_items || invoice.order_items.length === 0) {
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "No order items found for this invoice");
       }
 
       // Generate CTEnvios labels

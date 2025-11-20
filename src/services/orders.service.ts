@@ -65,7 +65,7 @@ export const ordersService = {
             agency_id,
             status: Status.CREATED,
             requires_home_delivery,
-            items: {
+            order_items: {
                create: items_hbl,
             },
             total_in_cents: finalTotal + (total_delivery_fee_in_cents || 0),
@@ -271,7 +271,7 @@ export const ordersService = {
    addDiscount: async (order_id: number, discountData: Prisma.DiscountCreateInput, user_id: string): Promise<any> => {
       const order = await prisma.order.findUnique({
          where: { id: order_id },
-         include: { items: true, discounts: true },
+         include: { order_items: true, discounts: true },
       });
       if (!order) {
          throw new AppError(StatusCodes.NOT_FOUND, "Order not found");
@@ -284,7 +284,7 @@ export const ordersService = {
 
       switch (discountData.type) {
          case DiscountType.RATE:
-            total_discount_in_cents = order.items.reduce((acc, item) => {
+            total_discount_in_cents = order.order_items.reduce((acc, item) => {
                if (item.unit === Unit.PER_LB) {
                   const weight = toNumber(item.weight); // weight is Decimal, needs conversion
                   return (

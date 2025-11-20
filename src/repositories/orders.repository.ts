@@ -14,7 +14,7 @@ const orders = {
       return { orders, total };
    },
    getById: async (id: number) => {
-      return await prisma.order.findUnique({ where: { id }, include: { items: true } });
+      return await prisma.order.findUnique({ where: { id }, include: { order_items: true } });
    },
    getByIdWithDetails: async (id: number): Promise<OrderPdfDetails | null> => {
       console.log("getByIdWithDetails", id);
@@ -34,7 +34,7 @@ const orders = {
                   city: true,
                },
             },
-            items: {
+            order_items: {
                select: {
                   hbl: true,
                   description: true,

@@ -15,7 +15,7 @@ export function createInvoiceHistoryExtension(userId: string, prisma: PrismaClie
                // Obtener estado anterior
                const previous = await prisma.order.findUnique({
                   where: { id: orderId },
-                  include: { items: true },
+                  include: { order_items: true },
                });
 
                const result = await query(args); // Ejecuta la actualización
@@ -23,7 +23,7 @@ export function createInvoiceHistoryExtension(userId: string, prisma: PrismaClie
                // Obtener nuevo estado
                const updated = await prisma.order.findUnique({
                   where: { id: orderId },
-                  include: { items: true },
+                  include: { order_items: true },
                });
 
                if (!previous || !updated) {
@@ -67,8 +67,8 @@ export function createInvoiceHistoryExtension(userId: string, prisma: PrismaClie
                }
 
                // Procesar cambios en Items
-               const prevItems = Object.fromEntries(previous.items.map((i: any) => [i.hbl, i]));
-               const newItems = Object.fromEntries(updated.items.map((i: any) => [i.hbl, i]));
+               const prevItems = Object.fromEntries(previous.order_items.map((i: any) => [i.hbl, i]));
+               const newItems = Object.fromEntries(updated.order_items.map((i: any) => [i.hbl, i]));
 
                const allHbls = new Set([...Object.keys(prevItems), ...Object.keys(newItems)]);
 

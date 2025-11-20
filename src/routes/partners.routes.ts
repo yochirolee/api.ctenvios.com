@@ -247,7 +247,7 @@ router.get("/orders/:id", partnerAuthMiddleware, partnerLogMiddleware, async (re
                   service_type: true,
                },
             },
-            items: {
+            order_items: {
                select: {
                   hbl: true,
                   description: true,
@@ -309,7 +309,7 @@ router.get("/tracking/:hbl", partnerAuthMiddleware, partnerLogMiddleware, async 
       }
 
       // Get item with invoice info
-      const item = await prisma.item.findFirst({
+      const item = await prisma.orderItem.findFirst({
          where: {
             hbl: hbl,
             agency_id: partner.agency_id,

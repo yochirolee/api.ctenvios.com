@@ -1,9 +1,9 @@
 import prisma from "../lib/prisma.client";
-import { Item, Prisma } from "@prisma/client";
+import { OrderItem, Prisma } from "@prisma/client";
 
 const items = {
    get: async (page: number, limit: number) => {
-      return await prisma.item.findMany({
+      return await prisma.orderItem.findMany({
          take: limit,
          skip: (page - 1) * limit,
          orderBy: {
@@ -12,7 +12,7 @@ const items = {
       });
    },
    findForDispatch: async (hbl: string) => {
-      return await prisma.item.findUnique({
+      return await prisma.orderItem.findUnique({
          where: { hbl },
          select: {
             hbl: true,

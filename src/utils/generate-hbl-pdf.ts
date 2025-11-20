@@ -1,5 +1,5 @@
 import PDFKit from "pdfkit";
-import { Item } from "@prisma/client";
+import { OrderItem } from "@prisma/client";
 import * as fs from "fs";
 import * as path from "path";
 import { formatName } from "./capitalize";
@@ -71,7 +71,7 @@ export const generateHblPdf = (order: OrderWithRelations): Promise<PDFKit.PDFDoc
 
    return new Promise<PDFKit.PDFDocument>((resolve, reject) => {
       try {
-         order.items.forEach((item, index) => {
+         order.order_items.forEach((item, index) => {
             if (index > 0) {
                doc.addPage();
             }

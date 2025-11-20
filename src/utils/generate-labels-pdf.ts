@@ -1,5 +1,5 @@
 import PDFKit from "pdfkit";
-import { Item, ServiceType } from "@prisma/client";
+import { OrderItem, ServiceType } from "@prisma/client";
 import bwipjs from "bwip-js";
 import QRCode from "qrcode";
 import { formatName } from "./capitalize";
@@ -23,16 +23,16 @@ export const generateCTEnviosLabels = (order: OrderWithRelations): Promise<PDFKi
    // Generate two labels per item (main label + province/city label)
    return new Promise(async (resolve, reject) => {
       try {
-         for (let i = 0; i < order.items.length; i++) {
+         for (let i = 0; i < order.order_items.length; i++) {
             if (i > 0) {
                doc.addPage(); // New page for each main label
             }
             // Generate main label
-            await generateCleanCTEnviosLabel(doc, order, order.items[i], i, labelWidth, labelHeight);
+            await generateCleanCTEnviosLabel(doc, order, order.order_items[i], i, labelWidth, labelHeight);
 
             // Generate province/city label
             doc.addPage();
-            await generateProvinceLabel(doc, order, order.items[i], i, labelWidth, labelHeight);
+            await generateProvinceLabel(doc, order, order.order_items[i], i, labelWidth, labelHeight);
          }
          resolve(doc);
       } catch (error) {
@@ -61,18 +61,18 @@ export const generateBulkCTEnviosLabels = (orders: OrderWithRelations[]): Promis
          let isFirstLabel = true;
 
          for (const order of orders) {
-            for (let i = 0; i < order.items.length; i++) {
+            for (let i = 0; i < order.order_items.length; i++) {
                if (!isFirstLabel) {
                   doc.addPage(); // New page for each main label
                }
                isFirstLabel = false;
 
                // Generate main label using existing function
-               await generateCleanCTEnviosLabel(doc, order, order.items[i], i, labelWidth, labelHeight);
+               await generateCleanCTEnviosLabel(doc, order, order.order_items[i], i, labelWidth, labelHeight);
 
                // Generate province/city label
                doc.addPage();
-               await generateProvinceLabel(doc, order, order.items[i], i, labelWidth, labelHeight);
+               await generateProvinceLabel(doc, order, order.order_items[i], i, labelWidth, labelHeight);
             }
          }
          resolve(doc);
@@ -452,7 +452,7 @@ async function generateCleanCTEnviosLabel(
       .text("Paquete", labelWidth - 85, labelHeight - 50, { width: 60, align: "center" });
    doc.fontSize(20)
       .font(FONTS.BOLD)
-      .text(`${itemIndex + 1}-${order.items.length}`, labelWidth - 85, labelHeight - 40, {
+      .text(`${itemIndex + 1}-${order.order_items.length}`, labelWidth - 85, labelHeight - 40, {
          width: 80,
          align: "center",
       });

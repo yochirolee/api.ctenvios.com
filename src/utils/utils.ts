@@ -87,7 +87,7 @@ export const calculate_row_subtotal = (
    unit: string
 ): number => {
    const safePriceInCents = price_in_cents || 0;
-   const safeWeight = weight || 0;
+   const safeWeight =toNumber(weight) || 0;
    const safeCustomsFeeInCents = customs_fee_in_cents || 0;
    const safeChargeFeeInCents = charge_fee_in_cents || 0;
    const safeInsuranceFeeInCents = insurance_fee_in_cents || 0;

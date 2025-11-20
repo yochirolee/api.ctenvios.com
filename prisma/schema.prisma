@@ -67,7 +67,7 @@ model Agency {
     surcharges          Surcharge[]
     customers           Customer[]
     receivers           Receiver[]
-    items               Item[]
+    order_items         OrderItem[]
     counters            Counter[]
     partners            Partner[]
     agency_type         AgencyType     @default(AGENCY)
@@ -145,7 +145,7 @@ model Order {
     receiver               Receiver       @relation(fields: [receiver_id], references: [id])
     service_id             Int
     service                Service        @relation(fields: [service_id], references: [id])
-    items                  Item[]
+    order_items                  OrderItem[]
     total_in_cents         Int            @default(0)
     paid_in_cents          Int            @default(0)
     requires_home_delivery Boolean        @default(true)
@@ -170,7 +170,7 @@ model Order {
     @@index([receiver_id]) // Para JOINs
 }
 
-model Item {
+model OrderItem {
     hbl                    String        @id
     description            String
     created_at             DateTime      @default(now())
@@ -216,7 +216,7 @@ model Dispatch {
     receiver_agency_id Int
     receiver_agency    Agency         @relation("received_dispatches", fields: [receiver_agency_id], references: [id])
     status             DispatchStatus @default(CREATED)
-    items              Item[]
+    order_items              OrderItem[]
     weight             Float          @default(0)
     total_in_cents     Int            @default(0)
     created_at         DateTime       @default(now())
@@ -294,7 +294,7 @@ model ShippingRate {
     is_active            Boolean          @default(true)
     created_at           DateTime         @default(now())
     updated_at           DateTime         @updatedAt
-    items                Item[]
+    order_items          OrderItem[]
     product_id           Int
     product              Product          @relation(fields: [product_id], references: [id])
 
@@ -322,7 +322,7 @@ model ShippingRate {
  * is_active          Boolean            @default(true)
  * created_at         DateTime           @default(now())
  * updated_at         DateTime           @updatedAt
- * items              Item[]
+ * order_items        OrderItem[]
  * pricing_agreements PricingAgreement[]
  * @@index([agency_id, carrier_id, city_type, scope, is_active])
  * @@index([carrier_id, city_id, scope, is_active])
@@ -345,7 +345,7 @@ model CustomsRates {
     max_quantity Int? // RESTAURADO
     created_at   DateTime @default(now())
     updated_at   DateTime @updatedAt
-    items        Item[]
+    order_items        OrderItem[]
     agency       Agency?  @relation(fields: [agencyId], references: [id])
     agencyId     Int?
 
@@ -418,7 +418,7 @@ model Service {
     carrier            Carrier?           @relation(fields: [carrier_id], references: [id])
     agencies           Agency[]
     is_active          Boolean            @default(true)
-    items              Item[]
+    order_items        OrderItem[]
     surcharges         Surcharge[]
     volumetric_divisor Int?
     orders             Order[]

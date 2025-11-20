@@ -1,5 +1,5 @@
 import prisma from "../lib/prisma.client";
-import { Dispatch, Item, Prisma } from "@prisma/client";
+import { Dispatch, OrderItem, Prisma } from "@prisma/client";
 
 const dispatch = {
    get: async (page: number, limit: number) => {
@@ -39,7 +39,7 @@ const dispatch = {
             },
             _count: {
                select: {
-                  items: true,
+                  order_items: true,
                },
             },
          },
@@ -66,8 +66,8 @@ const dispatch = {
       });
       return newDispatch;
    },
-   getItemByHbl: async (hbl: string, dispatchId: number): Promise<Item | null> => {
-      const item = await prisma.item.findFirst({
+   getItemByHbl: async (hbl: string, dispatchId: number): Promise<OrderItem | null> => {
+      const item = await prisma.orderItem.findFirst({
          where: { hbl: hbl, dispatch_id: dispatchId },
       });
       return item;
@@ -92,7 +92,7 @@ const dispatch = {
       const updatedDispatch = await prisma.dispatch.update({
          where: { id: dispatchId },
          data: {
-            items: {
+            order_items: {
                connect: {
                   hbl: item.hbl,
                },

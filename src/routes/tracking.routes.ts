@@ -4,7 +4,7 @@ import prisma from "../lib/prisma.client";
 const router = Router();
 
 router.get("/", async (req: Request, res: Response) => {
-   const rows = await prisma.item.findMany({
+   const rows = await prisma.orderItem.findMany({
       select: {
          hbl: true,
          description: true,
@@ -22,7 +22,7 @@ router.get("/", async (req: Request, res: Response) => {
       skip: 0,
       orderBy: { created_at: "desc" },
    });
-   const total = await prisma.item.count();
+   const total = await prisma.orderItem.count();
    res.status(200).json({ rows, total });
 });
 

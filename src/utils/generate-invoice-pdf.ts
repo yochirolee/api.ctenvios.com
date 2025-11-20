@@ -2,7 +2,7 @@ import PDFKit from "pdfkit";
 import * as bwipjs from "bwip-js";
 import { promises as fs } from "fs";
 import * as path from "path";
-import { Order, Customer, Receiver, Agency, Service, Item, Unit } from "@prisma/client";
+import { Order, Customer, Receiver, Agency, Service, OrderItem, Unit } from "@prisma/client";
 import { formatName } from "./capitalize";
 import { calculate_row_subtotal, formatCents, toNumber } from "./utils";
 
@@ -17,31 +17,31 @@ interface OrderWithRelations extends Order {
    charge_in_cents: number;
    agency: Agency;
    service: Service;
-   items: Item[];
+   order_items: OrderItem[];
 }
 
 // Pre-calculate all financial totals //have to move this to the utils
 function calculateInvoiceTotals(order: OrderWithRelations) {
-   const subtotal_in_cents = order.items.reduce(
-      (acc, item) => {
-         const weight = toNumber(item.weight); // weight is Decimal, needs conversion
-         return acc + calculate_row_subtotal(
+   const subtotal_in_cents = order.order_items.reduce((acc, item) => {
+      const weight = toNumber(item.weight); // weight is Decimal, needs conversion
+      return (
+         acc +
+         calculate_row_subtotal(
             item.price_in_cents, // Int - already a number
             weight,
             item.customs_fee_in_cents, // Int - already a number
             item.charge_fee_in_cents || 0, // Int? - already a number
             item.insurance_fee_in_cents || 0, // Int? - already a number
             item.unit as Unit
-         );
-      },
-      0
-   );
-   const total_delivery_fee_in_cents = order.items.reduce((acc, item) => {
+         )
+      );
+   }, 0);
+   const total_delivery_fee_in_cents = order.order_items.reduce((acc, item) => {
       return acc + (item.delivery_fee_in_cents || 0); // Int? - already a number
    }, 0);
 
    const subtotal = formatCents(subtotal_in_cents);
-   const totalWeight = order.items.reduce((acc, item) => {
+   const totalWeight = order.order_items.reduce((acc, item) => {
       return acc + toNumber(item.weight); // weight is Decimal, needs conversion
    }, 0);
    const chargeAmount = formatCents(order.charge_in_cents || 0);
@@ -313,7 +313,7 @@ async function generatePageHeader(
 
    textStyle
       .style(FONTS.NORMAL, 12, COLORS.BLACK)
-      .text(`Items: ${invoice.items.length}`, 450, 37, { align: "right", width: 122 });
+      .text(`Items: ${invoice.order_items.length}`, 450, 37, { align: "right", width: 122 });
 
    // Total weight
    textStyle
@@ -454,7 +454,7 @@ async function generateItemsTableOptimized(
    const textStyle = new TextStyler(doc);
 
    // Batch process items for better performance
-   const processedItems = invoice.items.map((item, index) => {
+   const processedItems = invoice.order_items.map((item, index) => {
       const weight = toNumber(item.weight); // weight is Decimal, needs conversion
       return {
          ...item,
