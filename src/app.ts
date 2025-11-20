@@ -48,8 +48,8 @@ app.use(compression());
 app.use(express.urlencoded({ extended: true }));
 
 // Health check endpoint
-app.get("/", (req, res) => {
-   res.json({ status: "ok", message: "API is running" });
+app.get("/health", (req, res) => {
+   res.json({ status: "ok", message: "API is running", timestamp: new Date().toISOString() });
 });
 
 app.use("/api/v1/", router);
