@@ -84,7 +84,7 @@ export const generateHblPdf = (order: OrderWithRelations): Promise<PDFKit.PDFDoc
    });
 };
 
-const drawHblPage = (doc: PDFKit.PDFDocument, order: OrderWithRelations, item: Item): void => {
+const drawHblPage = (doc: PDFKit.PDFDocument, order: OrderWithRelations, item: OrderItem): void => {
    const pageWidth = doc.page.width;
    const pageHeight = doc.page.height;
    const columnWidth = (pageWidth - PAGE_MARGIN * 2 - COLUMN_GAP) / 2;
@@ -100,7 +100,7 @@ const drawHblPage = (doc: PDFKit.PDFDocument, order: OrderWithRelations, item: I
 const drawHblSection = (
    doc: PDFKit.PDFDocument,
    order: OrderWithRelations,
-   item: Item,
+   item: OrderItem,
    x: number,
    y: number,
    width: number,

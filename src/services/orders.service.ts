@@ -14,7 +14,7 @@ interface OrderCreateInput {
    receiver_id?: number;
    customer?: Partial<Customer>;
    receiver?: any; // ReceiverWithLocationNames from receivers.service
-   items: any[]; // Using any[] to support rate_type and other extended fields
+   order_items: any[]; // Using any[] to support rate_type and other extended fields
    service_id: number;
    user_id: string;
    agency_id: number;
@@ -34,7 +34,7 @@ export const ordersService = {
       receiver_id,
       customer,
       receiver,
-      items,
+      order_items,
       service_id,
       user_id,
       agency_id,
@@ -42,7 +42,7 @@ export const ordersService = {
       requires_home_delivery = true,
    }: OrderCreateInput): Promise<any> => {
       const items_hbl = await services.resolvers.resolveItemsWithHbl({
-         items,
+         order_items,
          service_id,
          agency_id,
       });
@@ -102,7 +102,7 @@ export const ordersService = {
          agency_id,
          status: Status.CREATED,
          requires_home_delivery,
-         items: {
+         order_items: {
             create: items_hbl,
          },
          total_in_cents: finalTotal + (total_delivery_fee_in_cents || 0),

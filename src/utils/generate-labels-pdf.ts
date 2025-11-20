@@ -85,7 +85,7 @@ export const generateBulkCTEnviosLabels = (orders: OrderWithRelations[]): Promis
 async function generateCleanCTEnviosLabel(
    doc: PDFKit.PDFDocument,
    order: OrderWithRelations,
-   item: Item,
+   item: OrderItem,
    itemIndex: number,
    labelWidth: number,
    labelHeight: number
