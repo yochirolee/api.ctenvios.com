@@ -21,7 +21,7 @@ export const ordersController = {
             customer,
             receiver,
             service_id,
-            items,
+            order_items,
             total_delivery_fee_in_cents,
             requires_home_delivery,
          } = req.body;
@@ -33,7 +33,7 @@ export const ordersController = {
             customer,
             receiver,
             service_id,
-            items,
+            order_items,
             user_id: user.id,
             agency_id: user.agency_id,
             total_delivery_fee_in_cents,

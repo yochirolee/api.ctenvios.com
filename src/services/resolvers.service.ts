@@ -82,8 +82,6 @@ export const resolvers = {
          if (existingReceiver) return existingReceiver;
       }
 
-      console.log("receiver", receiver);
-
       if (!receiver) {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "Receiver data is required");
       }
@@ -176,25 +174,25 @@ export const resolvers = {
       throw new AppError(HttpStatusCodes.BAD_REQUEST, "Customer mobile, first_name, and last_name are required");
    },
    resolveItemsWithHbl: async ({
-      items,
+      order_items,
       service_id,
       agency_id,
    }: {
-      items: any[];
+      order_items: any[];
       service_id: number;
       agency_id: number;
    }): Promise<any[]> => {
       // 🚀 OPTIMIZATION: Extract unique rate IDs efficiently (single pass, no intermediate arrays)
 
       // 🚀 OPTIMIZATION: Parallelize HBL generation and rate fetching
-      const allHblCodes = await generateHBLFast(agency_id, service_id, items.length);
+      const allHblCodes = await generateHBLFast(agency_id, service_id, order_items.length);
 
       const rates = await pricingService.getRatesByServiceIdAndAgencyId(service_id, agency_id);
 
       // Pre-allocate and populate items array
-      const items_hbl: any[] = new Array(items.length);
-      for (let i = 0; i < items.length; i++) {
-         const item = items[i];
+      const items_hbl: any[] = new Array(order_items.length);
+      for (let i = 0; i < order_items.length; i++) {
+         const item = order_items[i];
          const rate = rates.find((rate) => rate.id === item.rate_id);
          items_hbl[i] = {
             hbl: allHblCodes[i],

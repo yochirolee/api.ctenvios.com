@@ -461,7 +461,7 @@ async function generateCleanCTEnviosLabel(
 async function generateProvinceLabel(
    doc: PDFKit.PDFDocument,
    order: OrderWithRelations,
-   item: Item,
+   item: OrderItem,
    itemIndex: number,
    labelWidth: number,
    labelHeight: number
