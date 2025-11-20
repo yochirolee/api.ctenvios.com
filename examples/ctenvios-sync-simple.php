@@ -8,7 +8,7 @@
 // Each agency (partner) has its own API key
 $AGENCY_CONFIG = [
     2 => [
-        'api_key' => 'ct_test_XLMfw9ZoI2xVE1x7kMVtvymPSE4pC0zrGf1QmiN0S3M',
+        'api_key' => 'ct_production_w8-empEG8rSsyVAC0jga5kYnN5FifRkzc1RE2rtjhN4',
         'ctenvios_agency_id' => 2,  // Agency ID in CTEnvios system
         'rate_per_lb' => 199,        // Default rate if not in database
         'name' => 'CTEnvios'
@@ -59,7 +59,6 @@ function syncOrderToCTEnvios($conn, $cod_envio, $agency_id = null) {
     $api_key = $config['api_key'];
     $rate_per_lb = $config['rate_per_lb'];
     
-    // Helper: Convert to Title Case (LEIDIANA → Leidiana)
     $toTitleCase = function($text) {
         if (empty($text)) return '';
         // Convert to lowercase first, then capitalize first letter of each word
@@ -250,7 +249,7 @@ function syncOrderToCTEnvios($conn, $cod_envio, $agency_id = null) {
             $charge_cents = (int) round(($precio + $empaquetado) * 100);
         }
         
-        $items[] = [
+        $order_items[] = [
             'description' => $row['descripcion'],
             'weight' => $weight,
             'rate_id' => 1,
@@ -324,7 +323,7 @@ function syncOrderToCTEnvios($conn, $cod_envio, $agency_id = null) {
             return in_array($k, $required) || ($v !== '' && $v !== null);
         }, ARRAY_FILTER_USE_BOTH),
         'service_id' => 1,
-        'items' => $items,
+        'order_items' => $order_items,
         'total_delivery_fee_in_cents' => $delivery_fee_cents,
         'requires_home_delivery' => $delivery_fee > 0 ? true : false
     ];
@@ -357,7 +356,7 @@ function syncOrderToCTEnvios($conn, $cod_envio, $agency_id = null) {
         return [
             'success' => true,
             'order_id' => $response_data['data']['order']['id'] ?? null,
-            'hbls' => array_column($response_data['data']['items'] ?? [], 'hbl'),
+            'hbls' => array_column($response_data['data']['order_items'] ?? [], 'hbl'),
             'total_in_cents' => $response_data['data']['order']['total_in_cents'] ?? 0
         ];
     }

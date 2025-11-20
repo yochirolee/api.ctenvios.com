@@ -161,17 +161,19 @@ const partnerOrderItemSchema = z.object({
    unit: z.nativeEnum(Unit).optional().default(Unit.PER_LB),
 });
 
-const partnerOrderSchema = z.object({
-   partner_order_id: z.string().optional(),
-   customer_id: z.number().optional(),
-   customer: createCustomerSchema.optional(),
-   receiver_id: z.number().optional(),
-   receiver: createReceiverSchema.optional(),
-   service_id: z.number().positive(),
-   items: z.array(partnerOrderItemSchema).min(1),
-   total_delivery_fee_in_cents: z.number().int().min(0).optional().default(0),
-   requires_home_delivery: z.boolean().optional().default(true),
-});
+const partnerOrderSchema = z
+   .object({
+      partner_order_id: z.string().optional(),
+      customer_id: z.number().optional(),
+      customer: createCustomerSchema.optional(),
+      receiver_id: z.number().optional(),
+      receiver: createReceiverSchema.optional(),
+      service_id: z.number().positive(),
+      order_items: z.array(partnerOrderItemSchema).min(1).optional(),
+      total_delivery_fee_in_cents: z.number().int().min(0).optional().default(0),
+      requires_home_delivery: z.boolean().optional().default(true),
+   })
+   
 
 /**
  * POST /partners/api/orders
