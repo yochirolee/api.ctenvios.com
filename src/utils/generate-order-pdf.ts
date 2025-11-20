@@ -242,8 +242,8 @@ function formatOrderData(order: OrderPdfDetails) {
    const location = `${order.receiver.city?.name || ""} ${order.receiver.province?.name || ""}`.trim();
    const fullAddress = location ? `${order.receiver.address}, ${location}` : order.receiver.address;
 
-   const totalWeightValue = order.items.reduce((acc, item) => acc + item.weight, 0);
-   const totalWeightLabel = `${totalWeightValue.toFixed(2)} lbs`;
+   const totalWeightValue = order.items.reduce((acc, item) => acc + Number(item.weight), 0);
+   const totalWeightLabel = `${totalWeightValue} lbs`;
    const itemsCount = `${order.items.length}`;
 
    return {

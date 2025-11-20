@@ -1,4 +1,4 @@
-import prisma from "../config/prisma_db";
+import prisma from "../lib/prisma.client";
 import { Prisma } from "@prisma/client";
 import { generateApiKey, hashApiKey } from "../utils/apiKeyUtils";
 

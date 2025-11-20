@@ -1,5 +1,5 @@
 import { Router, Response } from "express";
-import prisma from "../config/prisma_db";
+import prisma from "../lib/prisma.client";
 import { services } from "../services";
 import StatusCodes from "../common/https-status-codes";
 import z from "zod";

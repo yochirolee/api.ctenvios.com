@@ -1,5 +1,5 @@
 import { City, Prisma, Province, Receiver } from "@prisma/client";
-import prisma from "../config/prisma_db";
+import prisma from "../lib/prisma.client";
 
 const receivers = {
    get: async (
@@ -67,7 +67,7 @@ const receivers = {
       }));
    },
 
-   create: async (receiver: Prisma.ReceiverUncheckedCreateInput ): Promise<Receiver> => {
+   create: async (receiver: Prisma.ReceiverUncheckedCreateInput): Promise<Receiver> => {
       const newReceiver = await prisma.receiver.create({
          data: receiver,
          include: {

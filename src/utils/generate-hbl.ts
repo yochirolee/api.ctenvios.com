@@ -1,4 +1,4 @@
-import prisma from "../config/prisma_db";
+import prisma from "../lib/prisma.client";
 
 export async function generateHBLFast(agencyId: number, serviceId: number, cantidad: number): Promise<string[]> {
    const today = new Date();

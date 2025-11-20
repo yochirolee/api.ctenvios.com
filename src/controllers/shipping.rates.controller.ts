@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { pricingService } from "../services/pricing.service";
 import { AppError } from "../common/app-errors";
 import HttpStatusCodes from "../common/https-status-codes";
-import prisma from "../config/prisma_db";
+import prisma from "../lib/prisma.client";
 
 const shippingRates = {
    create: async (req: Request, res: Response) => {

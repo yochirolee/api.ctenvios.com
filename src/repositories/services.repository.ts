@@ -1,5 +1,5 @@
 import { Service, Prisma } from "@prisma/client";
-import prisma from "../config/prisma_db";
+import prisma from "../lib/prisma.client";
 
 // Type for the complex getByAgencyId return structure
 type ServiceWithRatesForAgency = Prisma.ServiceGetPayload<{

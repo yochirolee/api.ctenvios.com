@@ -1,4 +1,4 @@
-import prisma from "../config/prisma_db";
+import prisma from "../lib/prisma.client";
 import { format } from "date-fns";
 
 interface ReportData {

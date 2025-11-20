@@ -1,5 +1,5 @@
 import { Product, Prisma } from "@prisma/client";
-import prisma from "../config/prisma_db";
+import prisma from "../lib/prisma.client";
 
 export const products = {
    getAll: async () => {

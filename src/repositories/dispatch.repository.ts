@@ -1,4 +1,4 @@
-import prisma from "../config/prisma_db";
+import prisma from "../lib/prisma.client";
 import { Dispatch, Item, Prisma } from "@prisma/client";
 
 const dispatch = {
@@ -103,7 +103,6 @@ const dispatch = {
             total_in_cents: {
                increment: item.rate.pricing_agreement.price_in_cents * item.weight,
             },
-            
          },
       });
       return updatedDispatch;

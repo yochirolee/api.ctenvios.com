@@ -1,4 +1,4 @@
-import prisma from "../config/prisma_db";
+import prisma from "../lib/prisma.client";
 import { Prisma } from "@prisma/client";
 
 export const customsRates = {
@@ -28,7 +28,7 @@ export const customsRates = {
          orderBy: { id: "asc" },
       });
       const total = await prisma.customsRates.count({ where: { name: { contains: query, mode: "insensitive" } } });
-	  console.log(rows);
+      console.log(rows);
       return { rows, total };
    },
 

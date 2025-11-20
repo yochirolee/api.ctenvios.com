@@ -1,8 +1,19 @@
-import { AgencyType, PrismaClient, Roles, CityType, ServiceType } from "@prisma/client";
+import { AgencyType, PrismaClient, Roles, CityType, ServiceType, ProductType, Unit } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { Pool } from "pg";
 import { auth } from "../src/lib/auth";
 import { customsRates, provincesWithCities } from "./seed.data";
 
-const prisma = new PrismaClient();
+// Prisma 7 requires adapter for PrismaClient
+const pool = new Pool({
+   connectionString: process.env.DATABASE_URL,
+});
+
+const adapter = new PrismaPg(pool);
+
+const prisma = new PrismaClient({
+   adapter,
+});
 
 async function main(): Promise<void> {
    const startTime = performance.now();
@@ -47,12 +58,9 @@ async function main(): Promise<void> {
    });
 
    console.log(`✅ Provider created: ${provider.name}`);
-   const basicEntitiesTime = ((performance.now() - sectionStartTime) / 1000).toFixed(2);
-   console.log(`⏱️  Basic entities (forwarder, country, provider) completed in ${basicEntitiesTime}s`);
 
-   sectionStartTime = performance.now();
    // Create services
-      const maritimeService = await prisma.service.upsert({
+   const maritimeService = await prisma.service.upsert({
       where: { id: 1 },
       update: {},
       create: {
@@ -62,9 +70,9 @@ async function main(): Promise<void> {
          forwarder: { connect: { id: forwarder.id } },
          provider: { connect: { id: provider.id } },
       },
-   }); 
+   });
 
-   // console.log(`✅ Maritime service created: ${maritimeService.name}`);
+   console.log(`✅ Maritime service created: ${maritimeService.name}`);
 
    // Create Agencia Habana (padre)
    const CTEnvios = await prisma.agency.upsert({
@@ -78,132 +86,75 @@ async function main(): Promise<void> {
          forwarder_id: forwarder.id,
          agency_type: AgencyType.FORWARDER,
          is_active: true,
+         services: {
+            connect: {
+               id: maritimeService.id,
+            },
+         },
       },
 
-      update: {},
+      update: {
+         name: "CTEnvios",
+         address: "10230 NW 80th Ave, Miami, FL 33016",
+         contact: "F Infanzon",
+         phone: "3058513004",
+         email: "gerente@ctenvios.com",
+         forwarder_id: forwarder.id,
+         agency_type: AgencyType.FORWARDER,
+         is_active: true,
+         services: {
+            connect: {
+               id: maritimeService.id,
+            },
+         },
+      },
    });
    console.log(`✅ Agency created: ${CTEnvios.name}`);
 
-   console.log(`✅ Services connected to CTEnvios`);
-   const servicesTime = ((performance.now() - sectionStartTime) / 1000).toFixed(2);
-   console.log(`⏱️  Services and agency completed in ${servicesTime}s`);
+   const product = await prisma.product.upsert({
+      where: { id: 1 },
+      update: {},
+      create: {
+         name: "Regular",
+         description: "ByWeight",
+         provider_id: provider.id,
+         type: ProductType.SHIPPING,
+         unit: Unit.PER_LB,
+         length: 10,
+         width: 10,
+         height: 10,
+         is_active: true,
+         services: {
+            connect: {
+               id: maritimeService.id,
+            },
+         },
+      },
+   });
+   console.log(`✅ Product created: ${product.name}`);
 
-   sectionStartTime = performance.now();
-   console.log("🏝️ Creating provinces and cities...");
+   //create or update provinces and cities
 
-   // Step 1: Upsert all provinces first
-   const provincePromises = provincesWithCities.map((provincia) =>
-      prisma.province.upsert({
-         where: { id: provincia.id },
+   console.log("🏝️ Creating or updating provinces and cities...");
+
+   for (const province of provincesWithCities) {
+      await prisma.province.upsert({
+         where: { id: province.id },
          update: {
-            name: provincia.name,
+            name: province.name,
+            cities: {
+               createMany: { data: province.cities.map((city) => ({ name: city.name, city_type: city.city_type })) },
+            },
          },
          create: {
-            name: provincia.name,
+            name: province.name,
+            cities: {
+               createMany: { data: province.cities.map((city) => ({ name: city.name, city_type: city.city_type })) },
+            },
          },
-      })
-   );
-   const createdProvinces = await Promise.all(provincePromises);
-   const provinceMap = new Map(createdProvinces.map((p) => [p.id, p]));
-
-   // Step 2: Fetch all existing cities in bulk to check what exists
-   const allProvinceIds = createdProvinces.map((p) => p.id);
-   const allExistingCities = await prisma.city.findMany({
-      where: {
-         province_id: { in: allProvinceIds },
-      },
-      select: {
-         id: true,
-         name: true,
-         province_id: true,
-         city_type: true,
-      },
-   });
-
-   // Create a map for fast lookup: key = "province_id:city_name"
-   const existingCityMap = new Map<string, (typeof allExistingCities)[0]>();
-   for (const city of allExistingCities) {
-      const key = `${city.province_id}:${city.name}`;
-      existingCityMap.set(key, city);
+      });
    }
-
-   // Step 3: Prepare cities for bulk operations
-   const citiesToCreate: Array<{ name: string; province_id: number; city_type: CityType }> = [];
-   const citiesToUpdate: Array<{ id: number; city_type: CityType }> = [];
-
-   for (const provincia of provincesWithCities) {
-      const province = provinceMap.get(provincia.id);
-      if (!province) continue;
-
-      for (const city of provincia.cities) {
-         const key = `${province.id}:${city.name}`;
-         const existingCity = existingCityMap.get(key);
-
-         if (existingCity) {
-            // Only update if city_type has changed
-            if (existingCity.city_type !== city.city_type) {
-               citiesToUpdate.push({
-                  id: existingCity.id,
-                  city_type: city.city_type,
-               });
-            }
-         } else {
-            // City doesn't exist, add to create batch
-            citiesToCreate.push({
-               name: city.name,
-               province_id: province.id,
-               city_type: city.city_type,
-            });
-         }
-      }
-   }
-
-   // Step 4: Execute bulk operations
-   // Use transaction for better performance and consistency
-   await prisma.$transaction(async (tx) => {
-      // Batch create new cities (Prisma createMany has limits, so batch in chunks of 1000)
-      if (citiesToCreate.length > 0) {
-         const batchSize = 1000;
-         for (let i = 0; i < citiesToCreate.length; i += batchSize) {
-            const batch = citiesToCreate.slice(i, i + batchSize);
-            await tx.city.createMany({
-               data: batch,
-               skipDuplicates: true,
-            });
-         }
-      }
-
-      // Batch update existing cities
-      if (citiesToUpdate.length > 0) {
-         // Prisma doesn't support bulk update with different values per row
-         // So we group by city_type and use updateMany where possible
-         const updatesByType = new Map<CityType, number[]>();
-         for (const city of citiesToUpdate) {
-            const ids = updatesByType.get(city.city_type) || [];
-            ids.push(city.id);
-            updatesByType.set(city.city_type, ids);
-         }
-
-         // Execute grouped updates
-         const updatePromises = Array.from(updatesByType.entries()).map(([cityType, ids]) =>
-            tx.city.updateMany({
-               where: { id: { in: ids } },
-               data: { city_type: cityType },
-            })
-         );
-         await Promise.all(updatePromises);
-      }
-   });
-
-   // Log summary
-   for (const provincia of provincesWithCities) {
-      console.log(`✅ Province created: ${provincia.name} (${provincia.cities.length} cities)`);
-   }
-   const provincesTime = ((performance.now() - sectionStartTime) / 1000).toFixed(2);
-   console.log(`⏱️  Provinces and cities completed in ${provincesTime}s`);
-
-   sectionStartTime = performance.now();
-   console.log("🏳️ Creating customs rates...");
+   console.log(`✅ Provinces and cities created`);
 
    // Step 1: Fetch all existing customs rates by name in bulk
    const rateNames = customsRates.map((rate) => rate.name);
@@ -304,24 +255,20 @@ async function main(): Promise<void> {
       where: { id: 1 },
       update: {},
       create: {
-         name: "Transcargo Carrier",
+         name: "HM Paquetes",
          forwarder_id: forwarder.id,
       },
    });
    console.log(`✅ Carrier created: ${carrier.name}`);
 
    // Update maritime service with carrier
-   /*  await prisma.service.update({
+   await prisma.service.update({
       where: { id: maritimeService.id },
       data: {
          carrier_id: carrier.id,
       },
    });
    console.log(`✅ Maritime service updated with carrier`);
-   const carrierTime = ((performance.now() - sectionStartTime) / 1000).toFixed(2);
-   console.log(`⏱️  Carrier setup completed in ${carrierTime}s`);
-
-   sectionStartTime = performance.now(); */
 
    const user = await prisma.user.findFirst({
       where: {
@@ -337,7 +284,21 @@ async function main(): Promise<void> {
             name: "Yochiro Lee Cruz",
          },
       });
-      console.log(response);
+      const loggedInUser = await auth.api.signInEmail({
+         body: {
+            email: "yleecruz@gmail.com",
+            password: "Audioslave*84",
+         },
+      });
+      const user = await prisma.user.update({
+         where: { id: loggedInUser.user.id },
+         data: {
+            role: Roles.ROOT,
+            agency_id: CTEnvios.id,
+            forwarder_id: forwarder.id,
+         },
+      });
+      console.log(user);
    } else {
       const updatedUser = await prisma.user.update({
          where: { id: user.id },

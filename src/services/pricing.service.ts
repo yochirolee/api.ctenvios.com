@@ -1,5 +1,5 @@
 import { PricingAgreement, ShippingRate, RateScope } from "@prisma/client";
-import prisma from "../config/prisma_db";
+import prisma from "../lib/prisma.client";
 import { AppError } from "../common/app-errors";
 import { CreatePricingInput } from "../types/types";
 import HttpStatusCodes from "../common/https-status-codes";

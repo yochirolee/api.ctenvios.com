@@ -2,7 +2,7 @@ import { Router } from "express";
 import { authMiddleware } from "../middlewares/auth.middleware";
 import { partnerAuthMiddleware, partnerLogMiddleware } from "../middlewares/partner.auth.middleware";
 import controllers from "../controllers";
-import prisma from "../config/prisma_db";
+import prisma from "../lib/prisma.client";
 import { z } from "zod";
 import { AppError } from "../common/app-errors";
 import { Unit } from "@prisma/client";
@@ -352,7 +352,7 @@ router.get("/tracking/:hbl", partnerAuthMiddleware, partnerLogMiddleware, async 
       console.error("Partner API tracking error:", error);
 
       if (error instanceof AppError) {
-            return res.status(error.status).json({
+         return res.status(error.status).json({
             status: "error",
             message: error.message,
          });

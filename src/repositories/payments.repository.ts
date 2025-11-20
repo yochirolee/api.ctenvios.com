@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import prisma from "../config/prisma_db";
+import prisma from "../lib/prisma.client";
 
 const payments = {
    create: async (paymentData: Prisma.PaymentCreateInput) => {

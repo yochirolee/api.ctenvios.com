@@ -7,9 +7,7 @@ generator client {
 }
 
 datasource db {
-    provider  = "postgresql"
-    url       = env("DATABASE_URL")
-    directUrl = env("DIRECT_URL")
+    provider = "postgresql"
 }
 
 // --- MODELOS PRINCIPALES (CORE) ---
@@ -177,7 +175,7 @@ model Item {
     description            String
     created_at             DateTime      @default(now())
     updated_at             DateTime      @updatedAt
-    weight                 Float         @default(0)
+    weight                 Decimal       @default("0.00")
     volume                 Float?        @default(0)
     length                 Float?
     width                  Float?

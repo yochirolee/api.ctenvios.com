@@ -1,7 +1,7 @@
 import { Router, Response } from "express";
 import { auth } from "../lib/auth";
 import { fromNodeHeaders } from "better-auth/node";
-import prisma from "../config/prisma_db";
+import prisma from "../lib/prisma.client";
 import { authMiddleware } from "../middlewares/auth.middleware";
 import { Roles } from "@prisma/client";
 

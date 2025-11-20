@@ -4,7 +4,7 @@ import { AgencyType, Prisma, Roles } from "@prisma/client";
 import { AppError } from "../common/app-errors";
 import { agencySchema } from "../types/types";
 import repository from "../repositories";
-import prisma from "../config/prisma_db";
+import prisma from "../lib/prisma.client";
 import { auth } from "../lib/auth";
 import { pricingService } from "../services/pricing.service";
 import HttpStatusCodes from "../common/https-status-codes";
@@ -123,7 +123,10 @@ const agencies = {
          parent_agency.agency_type === AgencyType.FORWARDER || parent_agency.agency_type === AgencyType.RESELLER;
 
       if (!canCreateChild) {
-         throw new AppError(HttpStatusCodes.FORBIDDEN, "Only FORWARDER and RESELLER agencies can create child agencies");
+         throw new AppError(
+            HttpStatusCodes.FORBIDDEN,
+            "Only FORWARDER and RESELLER agencies can create child agencies"
+         );
       }
       // Validate request body
       const result = create_agency_schema.safeParse(req.body);
@@ -229,7 +232,7 @@ const agencies = {
       const agencyId = Number(id);
 
       if (isNaN(agencyId) || agencyId <= 0) {
-            throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid agency ID");
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid agency ID");
       }
 
       const agency = await repository.agencies.delete(agencyId);
@@ -295,7 +298,7 @@ const agencies = {
       const agencyId = Number(id);
 
       if (isNaN(agencyId) || agencyId <= 0) {
-               throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid agency ID");
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid agency ID");
       }
       const services_with_rates = await repository.services.getActiveServicesWithRates(agencyId);
       if (!services_with_rates) {

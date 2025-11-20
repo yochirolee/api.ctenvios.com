@@ -5,8 +5,19 @@
 
 const { faker } = require("@faker-js/faker");
 const { PrismaClient } = require("@prisma/client");
+const { PrismaPg } = require("@prisma/adapter-pg");
+const { Pool } = require("pg");
 
-const prisma = new PrismaClient();
+// Prisma 7 requires adapter for PrismaClient
+const pool = new Pool({
+   connectionString: process.env.DATABASE_URL,
+});
+
+const adapter = new PrismaPg(pool);
+
+const prisma = new PrismaClient({
+   adapter,
+});
 
 // Real production data pools - populated by initializeData()
 const sampleAgencies = [1, 2]; // Both agencies for testing

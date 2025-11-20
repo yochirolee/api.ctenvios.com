@@ -3,7 +3,7 @@ import { z } from "zod";
 import { Roles } from "@prisma/client";
 import { AppError } from "../common/app-errors";
 import repository from "../repositories";
-import prisma from "../config/prisma_db";
+import prisma from "../lib/prisma.client";
 import { services } from "../services";
 import { pricingService } from "../services/pricing.service";
 import HttpStatusCodes from "../common/https-status-codes";
@@ -128,7 +128,7 @@ const partners = {
       const user = req.user;
 
       if (!id || isNaN(parseInt(id))) {
-            throw new AppError(HttpStatusCodes.BAD_REQUEST, "Valid partner ID is required");
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Valid partner ID is required");
       }
 
       // Validate request body
@@ -252,7 +252,7 @@ const partners = {
       // Check authorization
       const permittedRoles = [Roles.ROOT, Roles.ADMINISTRATOR, Roles.FORWARDER_ADMIN];
       if (!permittedRoles.includes(user.role) && user.agency_id !== existingPartner.agency_id) {
-            throw new AppError(HttpStatusCodes.FORBIDDEN, "You are not authorized to view API keys for this partner");
+         throw new AppError(HttpStatusCodes.FORBIDDEN, "You are not authorized to view API keys for this partner");
       }
 
       const apiKeys = await repository.partners.getApiKeys(parseInt(id));
@@ -314,7 +314,10 @@ const partners = {
 
       // Check authorization - Only ROOT can permanently delete
       if (user.role !== Roles.ROOT) {
-         throw new AppError(HttpStatusCodes.FORBIDDEN, "Only ROOT users can permanently delete API keys. Use revoke instead.");
+         throw new AppError(
+            HttpStatusCodes.FORBIDDEN,
+            "Only ROOT users can permanently delete API keys. Use revoke instead."
+         );
       }
 
       await repository.partners.deleteApiKey(keyId);
@@ -359,7 +362,7 @@ const partners = {
       const user = req.user;
 
       if (!id || isNaN(parseInt(id))) {
-            throw new AppError(HttpStatusCodes.BAD_REQUEST, "Valid partner ID is required");
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Valid partner ID is required");
       }
 
       // Check if partner exists
@@ -432,7 +435,7 @@ const partners = {
 
       // Validate service_id if provided
       if (service_id !== undefined && (isNaN(service_id) || service_id <= 0)) {
-            throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid service_id parameter");
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid service_id parameter");
       }
 
       // Get rates with optional service filter

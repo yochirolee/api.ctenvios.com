@@ -1,5 +1,5 @@
 import { Customer, Receiver, Province, City, Prisma, Unit } from "@prisma/client";
-import prisma from "../config/prisma_db";
+import prisma from "../lib/prisma.client";
 import { AppError } from "../common/app-errors";
 import repository from "../repositories";
 import { generateHBLFast } from "../utils/generate-hbl";
@@ -173,7 +173,7 @@ export const resolvers = {
          return newCustomer as Customer;
       }
 
-         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Customer mobile, first_name, and last_name are required");
+      throw new AppError(HttpStatusCodes.BAD_REQUEST, "Customer mobile, first_name, and last_name are required");
    },
    resolveItemsWithHbl: async ({
       items,

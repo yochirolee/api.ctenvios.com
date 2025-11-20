@@ -3,7 +3,7 @@ import { services } from ".";
 import repository from "../repositories";
 import { calculateOrderTotal, formatCents } from "../utils/utils";
 import { PAYMENT_CONFIG } from "../config/payment.config";
-import prisma from "../config/prisma_db";
+import prisma from "../lib/prisma.client";
 import StatusCodes from "../common/https-status-codes";
 
 import { AppError } from "../common/app-errors";

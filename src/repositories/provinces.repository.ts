@@ -1,5 +1,5 @@
 import { Province, City, Prisma } from "@prisma/client";
-import prisma from "../config/prisma_db";
+import prisma from "../lib/prisma.client";
 
 type CityWithProvince = Prisma.CityGetPayload<{
    include: { province: true };

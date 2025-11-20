@@ -3,7 +3,7 @@ import { services } from "../services";
 import { parseDateFlexible } from "../types/types";
 import { buildNameSearchFilter } from "../types/types";
 import { Roles } from "@prisma/client";
-import prisma from "../config/prisma_db";
+import prisma from "../lib/prisma.client";
 import repository from "../repositories";
 import { AppError } from "../common/app-errors";
 import HttpStatusCodes from "../common/https-status-codes";
@@ -267,14 +267,12 @@ export const ordersController = {
 
          if (isNaN(orderId)) {
             throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid order ID");
-           
          }
 
          const order = await repository.orders.getByIdWithDetails(orderId);
 
          if (!order) {
             throw new AppError(HttpStatusCodes.NOT_FOUND, "Order not found");
-           
          }
 
          res.status(200).json(order);

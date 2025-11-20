@@ -1,5 +1,5 @@
 import { Router } from "express";
-import prisma from "../config/prisma_db";
+import prisma from "../lib/prisma.client";
 import { generateInvoicePDF } from "../utils/generate-invoice-pdf";
 import { generateOrderPDF } from "../utils/generate-order-pdf";
 import { generateCTEnviosLabels } from "../utils/generate-labels-pdf";
@@ -98,7 +98,7 @@ router.get("/:id/pdf", async (req, res) => {
       console.error("Modern order PDF generation error:", error);
 
       if (error instanceof AppError) {
-            res.status(error.status).json({
+         res.status(error.status).json({
             status: "error",
             message: error.message,
          });

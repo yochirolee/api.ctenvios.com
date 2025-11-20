@@ -1,5 +1,5 @@
 import { City, Customer, Prisma, Province, Receiver } from "@prisma/client";
-import prisma from "../config/prisma_db";
+import prisma from "../lib/prisma.client";
 
 const customers = {
    get: async (page: number = 1, limit: number = 10): Promise<{ rows: Customer[]; total: number }> => {
