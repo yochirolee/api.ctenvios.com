@@ -390,7 +390,7 @@ const partners = {
          customer,
          receiver,
          service_id,
-         items,
+         order_items,
          total_delivery_fee_in_cents,
          requires_home_delivery,
       } = req.body;
@@ -411,7 +411,7 @@ const partners = {
          customer,
          receiver,
          service_id,
-         items,
+         order_items,
          user_id: agencyUser.id,
          agency_id: req.partner.agency_id,
          total_delivery_fee_in_cents,

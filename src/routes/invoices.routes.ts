@@ -129,7 +129,6 @@ router.get("/:id/labels", async (req, res) => {
       if (!invoice) {
          throw new AppError(HttpStatusCodes.NOT_FOUND, "Invoice not found");
       }
-console.log(invoice);
       if (!invoice.order_items || invoice.order_items.length === 0) {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "No order items found for this invoice");
       }
