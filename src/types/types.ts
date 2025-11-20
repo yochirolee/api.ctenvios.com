@@ -129,7 +129,7 @@ export const createOrderSchema = z
       receiver_id: z.number().int().positive().optional(),
       receiver: createReceiverSchema.optional(),
       service_id: z.number().int().positive(),
-      items: z.array(ItemSchema).min(1, "At least one item is required in the invoice."),
+      order_items: z.array(ItemSchema).min(1, "At least one item is required in the invoice."),
       total_delivery_fee_in_cents: z.number().int().min(0).optional().default(0),
       requires_home_delivery: z.boolean().optional().default(true),
       partner_order_id: z.string().optional(),
