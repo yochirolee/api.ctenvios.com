@@ -7,6 +7,9 @@ import { createOrderSchema, paymentSchema, searchSchema, discountSchema } from "
 
 const router = Router();
 
+// GET /orders/:id/pdf - Get order PDF
+router.get("/:id/pdf", controllers.orders.generateOrderPdf);
+
 // GET /orders - List and search orders (RESTful pattern)
 router.get("/", authMiddleware, validate({ query: searchSchema }), controllers.orders.search);
 
@@ -43,6 +46,7 @@ router.delete(
 router.post(
    "/:id/payments",
    authMiddleware,
+
    validate({
       body: paymentSchema,
       params: z.object({ id: z.string().transform(Number).pipe(z.number().positive()) }),

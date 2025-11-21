@@ -145,7 +145,7 @@ model Order {
     receiver               Receiver       @relation(fields: [receiver_id], references: [id])
     service_id             Int
     service                Service        @relation(fields: [service_id], references: [id])
-    order_items                  OrderItem[]
+    order_items            OrderItem[]
     total_in_cents         Int            @default(0)
     paid_in_cents          Int            @default(0)
     requires_home_delivery Boolean        @default(true)
@@ -216,7 +216,7 @@ model Dispatch {
     receiver_agency_id Int
     receiver_agency    Agency         @relation("received_dispatches", fields: [receiver_agency_id], references: [id])
     status             DispatchStatus @default(CREATED)
-    order_items              OrderItem[]
+    order_items        OrderItem[]
     weight             Float          @default(0)
     total_in_cents     Int            @default(0)
     created_at         DateTime       @default(now())
@@ -229,7 +229,7 @@ model Dispatch {
 
 enum DispatchStatus {
     CREATED
-    DISPATCHED
+    RECEIVED
     PENDING_PAYMENT
     PAID
     CANCELLED
@@ -330,23 +330,23 @@ model ShippingRate {
  */
 
 model CustomsRates {
-    id           Int      @id @default(autoincrement())
+    id           Int         @id @default(autoincrement())
     name         String
     description  String?
-    country_id   Int      @default(1)
-    country      Country  @relation(fields: [country_id], references: [id])
+    country_id   Int         @default(1)
+    country      Country     @relation(fields: [country_id], references: [id])
     chapter      String? // RESTAURADO
     custom_value Float? // RESTAURADO
     price_in_cup Float? // RESTAURADO
-    fee_type     FeeType  @default(UNIT)
-    fee_in_cents Int      @default(0)
+    fee_type     FeeType     @default(UNIT)
+    fee_in_cents Int         @default(0)
     min_weight   Float? // RESTAURADO
     max_weight   Float? // RESTAURADO
     max_quantity Int? // RESTAURADO
-    created_at   DateTime @default(now())
-    updated_at   DateTime @updatedAt
-    order_items        OrderItem[]
-    agency       Agency?  @relation(fields: [agencyId], references: [id])
+    created_at   DateTime    @default(now())
+    updated_at   DateTime    @updatedAt
+    order_items  OrderItem[]
+    agency       Agency?     @relation(fields: [agencyId], references: [id])
     agencyId     Int?
 
     @@index([country_id, fee_type]) // For filtering by country and fee type

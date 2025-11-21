@@ -7,6 +7,7 @@ import prisma from "../lib/prisma.client";
 import repository from "../repositories";
 import { AppError } from "../common/app-errors";
 import HttpStatusCodes from "../common/https-status-codes";
+import { generateOrderPDF } from "../utils/generate-order-pdf";
 export const ordersController = {
    /**
     * Creates an order from frontend or partner API
@@ -339,6 +340,19 @@ export const ordersController = {
       } catch (error) {
          next(error);
       }
+   },
+   generateOrderPdf: async (req: any, res: Response, next: NextFunction): Promise<void> => {
+      const { id } = req.params;
+      const orderId = parseInt(id);
+      const order = await repository.orders.getByIdWithDetails(orderId);
+      if (!order) {
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Order not found");
+      }
+      const result = await generateOrderPDF(order);
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `inline; filename="order-${order.id}.pdf"`);
+      result.pipe(res);
+      result.end();
    },
 };
 

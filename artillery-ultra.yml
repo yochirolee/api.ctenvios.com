@@ -55,7 +55,7 @@ scenarios:
                 customer_id: "{{ customer_id }}"
                 receiver_id: "{{ receiver_id }}"
                 service_id: "{{ service_id }}"
-                items: "{{ items }}"
+                order_items: "{{ order_items }}"
                 paid_in_cents: "{{ paid_in_cents }}"
                 total_in_cents: "{{ total_in_cents }}"
              expect:
@@ -79,7 +79,7 @@ scenarios:
                 customer_id: "{{ customer_id }}"
                 receiver_id: "{{ receiver_id }}"
                 service_id: "{{ service_id }}"
-                items: "{{ complex_items }}"
+                order_items: "{{ order_items }}"
              expect:
                 - statusCode: [200, 201]
              capture:

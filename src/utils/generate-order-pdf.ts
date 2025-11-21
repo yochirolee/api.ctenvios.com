@@ -510,6 +510,23 @@ async function generateModernTable(
    // Add table headers
    currentY = addModernTableHeaders(doc, currentY, textStyle);
 
+   // Calculate column positions (same as in renderModernTableRow)
+   const rightMargin = LAYOUT.PAGE_WIDTH - 20;
+   const columnGap = 5;
+   const subtotalWidth = 55;
+   const pesoWidth = 40;
+   const precioWidth = 35;
+   const arancelWidth = 35;
+   const cargoWidth = 35;
+   const seguroWidth = 35;
+   const subtotalX = rightMargin - subtotalWidth;
+   const pesoX = subtotalX - columnGap - pesoWidth;
+   const precioX = pesoX - columnGap - precioWidth;
+   const arancelX = precioX - columnGap - arancelWidth;
+   const cargoX = arancelX - columnGap - cargoWidth;
+   const seguroX = cargoX - columnGap - seguroWidth;
+   const descriptionWidth = seguroX - 125 - columnGap;
+
    // Render items
    for (const item of processedItems) {
       // Set font style for accurate height measurement
@@ -519,7 +536,7 @@ async function generateModernTable(
       const maxHeight = 33; // Based on font size 9pt, ~11pt per line = 33pt for 3 lines
 
       let description = item.description;
-      let descriptionHeight = doc.heightOfString(description, { width: 145 });
+      let descriptionHeight = doc.heightOfString(description, { width: descriptionWidth });
 
       // If description exceeds 3 lines, trim it
       if (descriptionHeight > maxHeight) {
@@ -528,7 +545,7 @@ async function generateModernTable(
 
          for (let i = 0; i < words.length; i++) {
             const testDesc = trimmedDesc + (trimmedDesc ? " " : "") + words[i];
-            const testHeight = doc.heightOfString(testDesc + "...", { width: 145 });
+            const testHeight = doc.heightOfString(testDesc + "...", { width: descriptionWidth });
 
             if (testHeight > maxHeight) {
                break;
@@ -537,10 +554,10 @@ async function generateModernTable(
          }
 
          description = trimmedDesc + "...";
-         descriptionHeight = doc.heightOfString(description, { width: 145 });
+         descriptionHeight = doc.heightOfString(description, { width: descriptionWidth });
       }
 
-      const rowHeight = Math.max(30, descriptionHeight + 20);
+      const rowHeight = Math.max(20, descriptionHeight + 12);
 
       // Check page break
       if (currentY + rowHeight > LAYOUT.PAGE_HEIGHT - LAYOUT.BOTTOM_MARGIN) {
@@ -565,23 +582,41 @@ async function generateModernTable(
 function addModernTableHeaders(doc: PDFKit.PDFDocument, y: number, textStyle: TextStyler): number {
    const headerY = y + 10;
 
+   // Calculate positions from right edge (PAGE_WIDTH - 20 = right margin)
+   const rightMargin = LAYOUT.PAGE_WIDTH - 20;
+   const columnGap = 5;
+   const subtotalWidth = 55;
+   const pesoWidth = 40;
+   const precioWidth = 35;
+   const arancelWidth = 35;
+   const cargoWidth = 35;
+   const seguroWidth = 35;
+
+   // Position from right to left
+   const subtotalX = rightMargin - subtotalWidth;
+   const pesoX = subtotalX - columnGap - pesoWidth;
+   const precioX = pesoX - columnGap - precioWidth;
+   const arancelX = precioX - columnGap - arancelWidth;
+   const cargoX = arancelX - columnGap - cargoWidth;
+   const seguroX = cargoX - columnGap - seguroWidth;
+
    const headers = [
-      { text: "HBL", x: 25, width: 100, align: "left" },
-      { text: "Descripción", x: 110, width: 145, align: "left" },
-      { text: "Seguro", x: 290, width: 48, align: "right" },
-      { text: "Cargo", x: 348, width: 48, align: "right" },
-      { text: "Arancel", x: 406, width: 48, align: "right" },
-      { text: "Precio", x: 464, width: 42, align: "right" },
-      { text: "Peso", x: 508, width: 33, align: "right" },
-      { text: "Subtotal", x: 542, width: 50, align: "right" },
+      { text: "HBL", x: 20, width: 100, align: "left" },
+      { text: "Descripción", x: 125, width: seguroX - 125 - columnGap, align: "left" },
+      { text: "Seguro", x: seguroX, width: seguroWidth, align: "right" },
+      { text: "Cargo", x: cargoX, width: cargoWidth, align: "right" },
+      { text: "Arancel", x: arancelX, width: arancelWidth, align: "right" },
+      { text: "Precio", x: precioX, width: precioWidth, align: "right" },
+      { text: "Peso", x: pesoX, width: pesoWidth, align: "right" },
+      { text: "Subtotal", x: subtotalX, width: subtotalWidth, align: "right" },
    ];
 
    // Explicitly reset font to ensure consistent header styling across all pages
-   doc.font(FONTS.SEMIBOLD).fontSize(7).fillColor(COLORS.MUTED_FOREGROUND);
+   doc.font(FONTS.SEMIBOLD).fontSize(8).fillColor(COLORS.MUTED_FOREGROUND);
    textStyle.style(FONTS.SEMIBOLD, 7, COLORS.MUTED_FOREGROUND);
 
    headers.forEach((header) => {
-      textStyle.text(header.text.toUpperCase(), header.x, headerY, {
+      textStyle.text(header.text.charAt(0).toUpperCase() + header.text.slice(1).toLowerCase(), header.x, headerY, {
          width: header.width,
          align: header.align as any,
          characterSpacing: 0.3,
@@ -605,20 +640,41 @@ function renderModernTableRow(
    rowHeight: number,
    textStyle: TextStyler
 ) {
-   const verticalCenter = currentY + rowHeight / 2 - 5;
+   const verticalCenter = currentY + rowHeight / 2.5 - 3;
+
+   // Calculate positions from right edge (same as headers)
+   const rightMargin = LAYOUT.PAGE_WIDTH - 20;
+   const columnGap = 5;
+   const subtotalWidth = 55;
+   const pesoWidth = 40;
+   const precioWidth = 35;
+   const arancelWidth = 35;
+   const cargoWidth = 35;
+   const seguroWidth = 35;
+
+   // Position from right to left
+   const subtotalX = rightMargin - subtotalWidth;
+   const pesoX = subtotalX - columnGap - pesoWidth;
+   const precioX = pesoX - columnGap - precioWidth;
+   const arancelX = precioX - columnGap - arancelWidth;
+   const cargoX = arancelX - columnGap - cargoWidth;
+   const seguroX = cargoX - columnGap - seguroWidth;
+   const descriptionWidth = seguroX - 125 - columnGap;
 
    // HBL (monospace style)
-   textStyle.style(FONTS.REGULAR, 8, COLORS.FOREGROUND).text(item.hbl, 20, verticalCenter, { width: 100 });
+   textStyle.style(FONTS.REGULAR, 7, COLORS.FOREGROUND).text(item.hbl, 20, verticalCenter, { width: 100 });
 
    // Description
-   textStyle.style(FONTS.REGULAR, 7, COLORS.FOREGROUND).text(item.description, 110, verticalCenter, { width: 165 });
+   textStyle
+      .style(FONTS.REGULAR, 7, COLORS.FOREGROUND)
+      .text(item.description, 125, verticalCenter, { width: descriptionWidth });
 
    // Seguro
    const insuranceColor = (item.insurance_fee_in_cents || 0) === 0 ? COLORS.MUTED_FOREGROUND : COLORS.FOREGROUND;
    textStyle
       .style(FONTS.REGULAR, 7, insuranceColor)
-      .text(`${formatCents(item.insurance_fee_in_cents || 0)}`, 290, verticalCenter, {
-         width: 48,
+      .text(`${formatCents(item.insurance_fee_in_cents || 0)}`, seguroX, verticalCenter, {
+         width: seguroWidth,
          align: "right",
       });
 
@@ -626,8 +682,8 @@ function renderModernTableRow(
    const chargeColor = (item.charge_fee_in_cents || 0) === 0 ? COLORS.MUTED_FOREGROUND : COLORS.FOREGROUND;
    textStyle
       .style(FONTS.REGULAR, 7, chargeColor)
-      .text(`${formatCents(item.charge_fee_in_cents || 0)}`, 348, verticalCenter, {
-         width: 48,
+      .text(`${formatCents(item.charge_fee_in_cents || 0)}`, cargoX, verticalCenter, {
+         width: cargoWidth,
          align: "right",
       });
 
@@ -635,30 +691,30 @@ function renderModernTableRow(
    const customsColor = (item.customs_fee_in_cents || 0) === 0 ? COLORS.MUTED_FOREGROUND : COLORS.FOREGROUND;
    textStyle
       .style(FONTS.REGULAR, 7, customsColor)
-      .text(`${formatCents(item.customs_fee_in_cents || 0)}`, 406, verticalCenter, {
-         width: 48,
+      .text(`${formatCents(item.customs_fee_in_cents || 0)}`, arancelX, verticalCenter, {
+         width: arancelWidth,
          align: "right",
       });
 
    // Precio
    textStyle
       .style(FONTS.REGULAR, 7, COLORS.FOREGROUND)
-      .text(`${formatCents(item.price_in_cents || 0)}`, 464, verticalCenter, {
-         width: 42,
+      .text(`${formatCents(item.price_in_cents || 0)}`, precioX, verticalCenter, {
+         width: precioWidth,
          align: "right",
       });
 
    // Peso
-   textStyle.style(FONTS.REGULAR, 7, COLORS.MUTED_FOREGROUND).text(`${item.weight.toFixed(2)}`, 508, verticalCenter, {
-      width: 33,
+   textStyle.style(FONTS.REGULAR, 7, COLORS.FOREGROUND).text(`${item.weight.toFixed(2)}`, pesoX, verticalCenter, {
+      width: pesoWidth,
       align: "right",
    });
 
    // Subtotal
    textStyle
       .style(FONTS.REGULAR, 7, COLORS.FOREGROUND)
-      .text(`${formatCents(item.subtotal_in_cents)}`, 542, verticalCenter, {
-         width: 50,
+      .text(`${formatCents(item.subtotal_in_cents)}`, subtotalX, verticalCenter, {
+         width: subtotalWidth,
          align: "right",
       });
 

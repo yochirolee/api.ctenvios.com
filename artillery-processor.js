@@ -3,20 +3,48 @@
  * Fetches real data from database to avoid foreign key errors
  */
 
-const { faker } = require("@faker-js/faker");
+require("dotenv/config");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
 const { Pool } = require("pg");
+const { faker } = require("@faker-js/faker");
 
-// Prisma 7 requires adapter for PrismaClient
-const pool = new Pool({
-   connectionString: process.env.DATABASE_URL,
-});
+// Create Prisma client directly (since we can't import TypeScript files)
+// Match production setup for consistency
+let pool;
+try {
+   const url = new URL(process.env.DATABASE_URL);
+   if (!url.protocol.startsWith("postgres")) {
+      throw new Error(`Invalid DATABASE_URL protocol: ${url.protocol}. Expected postgresql:// or postgres://`);
+   }
+
+   // Parse connection string and use explicit parameters for better reliability
+   pool = new Pool({
+      host: url.hostname,
+      port: parseInt(url.port || "5432", 10),
+      database: url.pathname.slice(1), // Remove leading slash
+      user: url.username || undefined,
+      password: url.password || undefined,
+      // Additional pool configuration for better connection handling
+      max: 20, // Maximum number of clients in the pool
+      idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
+      connectionTimeoutMillis: 5000, // Return an error after 5 seconds if connection could not be established
+   });
+} catch (error) {
+   // Fallback to connectionString if URL parsing fails
+   pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      max: 20,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 5000,
+   });
+}
 
 const adapter = new PrismaPg(pool);
 
 const prisma = new PrismaClient({
    adapter,
+   errorFormat: "pretty",
 });
 
 // Real production data pools - populated by initializeData()
@@ -42,10 +70,10 @@ let testStartTime = Date.now();
  * Initialize data from database
  * This function fetches real customers, receivers, and users to avoid foreign key errors
  */
-async function initializeData(context, events, done) {
+async function initializeData(context, events) {
 	// Only initialize once
 	if (dataInitialized) {
-		return done();
+		return;
 	}
 
 	try {
@@ -105,7 +133,6 @@ async function initializeData(context, events, done) {
 
 		dataInitialized = true;
 		await prisma.$disconnect();
-		return done();
 	} catch (error) {
 		console.error("❌ Failed to initialize Artillery data:", error);
 		await prisma.$disconnect();
@@ -119,7 +146,7 @@ async function initializeData(context, events, done) {
 function generateItem() {
 	return {
 		description: faker.commerce.productName(),
-		price_in_cents: faker.number.int({ min: 100, max: 5000 }), // $1 - $50
+		price_in_cents: 199, // Fixed price for testing
 		rate_id: 1, // Use rate_id = 1 which we know exists
 		charge_fee_in_cents: 0,
 		insurance_fee_in_cents: faker.number.int({ min: 0, max: 500 }), // $0 - $5
@@ -169,7 +196,7 @@ function generateOrderData(context, events, done) {
 	context.vars.customer_id = faker.helpers.arrayElement(sampleCustomers);
 	context.vars.receiver_id = faker.helpers.arrayElement(sampleReceivers);
 	context.vars.service_id = 1; // Use service ID 1 which we know exists
-	context.vars.items = items;
+	context.vars.order_items = items;
 	context.vars.paid_in_cents = 0;
 	context.vars.total_in_cents = total_in_cents;
 
@@ -216,13 +243,14 @@ function generateComplexOrderData(context, events, done) {
 	context.vars.customer_id = faker.helpers.arrayElement(sampleCustomers);
 	context.vars.receiver_id = faker.helpers.arrayElement(sampleReceivers);
 	context.vars.service_id = 1; // Use service ID 1 which we know exists
-	context.vars.complex_items = items;
+	context.vars.order_items = items;
 	context.vars.paid_in_cents = 0;
 	context.vars.total_in_cents = total_in_cents;
 
 	return done();
 }
 
+// Export functions for Artillery (CommonJS)
 module.exports = {
 	initializeData,
 	generateOrderData,

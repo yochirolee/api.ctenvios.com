@@ -39,7 +39,7 @@ router.use("/invoices", invoices_routes);
 router.use("/roles", authMiddleware, roles_routes);
 router.use("/analytics", authMiddleware, analytics_routes);
 router.use("/partners", partners_routes);
-router.use("/orders", authMiddleware, orders_routes);
+router.use("/orders", orders_routes);
 router.use("/products", authMiddleware, products_routes);
 router.use("/shipping-rates", authMiddleware, shippingRatesRoutes);
 router.use("/dispatches", authMiddleware, dispatchRoutes);

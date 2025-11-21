@@ -4,7 +4,7 @@ config:
       timeout: 30
    defaults:
       headers:
-         Authorization: "Bearer p5TAuBi2u8lH3JUV9a7E3kNCPuPvDDV4"
+         Authorization: "Bearer tgvDo8J4r6EA7oc2S3kWWaJVtPRdMqux"
    phases:
       - duration: 10
         arrivalRate: 2 # 2 users per second - light load
@@ -40,7 +40,7 @@ scenarios:
                 customer_id: "{{ customer_id }}"
                 receiver_id: "{{ receiver_id }}"
                 service_id: "{{ service_id }}"
-                items: "{{ items }}"
+                order_items: "{{ order_items }}"
                 paid_in_cents: "{{ paid_in_cents }}"
                 total_in_cents: "{{ total_in_cents }}"
              expect:
