@@ -1,4 +1,3 @@
-# ========= STAGE 1: BUILDER =========
 FROM node:22-alpine AS builder
 
 # Para Prisma (openssl)
@@ -17,7 +16,7 @@ RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 COPY . .
 
 # 4) Generar Prisma Client (usa el schema que ya está en /app/prisma)
-RUN npx prisma generate
+#RUN npx prisma generate
 
 # 5) Build de TypeScript (asumo que genera dist/server.js)
 RUN npm run build
@@ -45,8 +44,8 @@ COPY --from=builder /app/dist ./dist
 # 5) Copiar assets si los usas en runtime
 COPY --from=builder /app/assets ./assets
 
- #(Opcional) Si necesitas seeds en TS, podrías copiar src y tsconfig:
- COPY --from=builder /app/src ./src
+#(Opcional) Si necesitas seeds en TS, podrías copiar src y tsconfig:
+COPY --from=builder /app/src ./src
 COPY --from=builder /app/tsconfig.json ./tsconfig.json
 
 # Usuario no root
