@@ -15,7 +15,6 @@ const router = Router();
 router.get("/:id/order-pdf", async (req, res) => {
    try {
       const { id } = req.params;
-
       if (!id || isNaN(parseInt(id))) {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid invoice ID");
       }
