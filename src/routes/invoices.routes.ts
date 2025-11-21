@@ -18,7 +18,6 @@ router.get("/:id/order-pdf", async (req, res) => {
       if (!id || isNaN(parseInt(id))) {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid invoice ID");
       }
-
       // Fetch invoice with all required relations
       const invoice = await prisma.order.findUnique({
          where: { id: parseInt(id) },
