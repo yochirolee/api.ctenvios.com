@@ -525,7 +525,8 @@ async function generateModernTable(
    const arancelX = precioX - columnGap - arancelWidth;
    const cargoX = arancelX - columnGap - cargoWidth;
    const seguroX = cargoX - columnGap - seguroWidth;
-   const descriptionWidth = seguroX - 125 - columnGap;
+   const descriptionX = 105;
+   const descriptionWidth = seguroX - descriptionX - columnGap;
 
    // Render items
    for (const item of processedItems) {
@@ -601,8 +602,8 @@ function addModernTableHeaders(doc: PDFKit.PDFDocument, y: number, textStyle: Te
    const seguroX = cargoX - columnGap - seguroWidth;
 
    const headers = [
-      { text: "HBL", x: 20, width: 100, align: "left" },
-      { text: "Descripción", x: 125, width: seguroX - 125 - columnGap, align: "left" },
+      { text: "HBL", x: 20, width: 90, align: "left" },
+      { text: "Descripción", x: 105, width: seguroX - 105 - columnGap, align: "left" },
       { text: "Seguro", x: seguroX, width: seguroWidth, align: "right" },
       { text: "Cargo", x: cargoX, width: cargoWidth, align: "right" },
       { text: "Arancel", x: arancelX, width: arancelWidth, align: "right" },
@@ -659,15 +660,16 @@ function renderModernTableRow(
    const arancelX = precioX - columnGap - arancelWidth;
    const cargoX = arancelX - columnGap - cargoWidth;
    const seguroX = cargoX - columnGap - seguroWidth;
-   const descriptionWidth = seguroX - 125 - columnGap;
+   const descriptionX = 105;
+   const descriptionWidth = seguroX - descriptionX - columnGap;
 
    // HBL (monospace style)
-   textStyle.style(FONTS.REGULAR, 7, COLORS.FOREGROUND).text(item.hbl, 20, verticalCenter, { width: 100 });
+   textStyle.style(FONTS.REGULAR, 8, COLORS.FOREGROUND).text(item.hbl, 20, verticalCenter, { width: 100 });
 
    // Description
    textStyle
-      .style(FONTS.REGULAR, 7, COLORS.FOREGROUND)
-      .text(item.description, 125, verticalCenter, { width: descriptionWidth });
+      .style(FONTS.REGULAR, 8, COLORS.FOREGROUND)
+      .text(item.description, descriptionX, verticalCenter, { width: descriptionWidth });
 
    // Seguro
    const insuranceColor = (item.insurance_fee_in_cents || 0) === 0 ? COLORS.MUTED_FOREGROUND : COLORS.FOREGROUND;
