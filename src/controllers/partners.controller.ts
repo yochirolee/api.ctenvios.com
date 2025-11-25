@@ -394,7 +394,6 @@ const partners = {
          total_delivery_fee_in_cents,
          requires_home_delivery,
       } = req.body;
-      const user = req.user;
       // Get agency user (needed for order creation)
       const agencyUser = await prisma.user.findFirst({
          where: { agency_id: req.partner.agency_id },
@@ -423,33 +422,34 @@ const partners = {
          data: orderResult,
       });
    },
-   getRates: async (req: any, res: Response): Promise<void> => {
-      if (!req.partner) {
-         throw new AppError(HttpStatusCodes.UNAUTHORIZED, "Partner authentication required");
-      }
-
+   getServices: async (req: any, res: Response): Promise<void> => {
       const agency_id = req.partner.agency_id;
-
-      // Parse service_id from query params (optional filter)
-      const service_id = req.query.service_id ? parseInt(req.query.service_id as string) : undefined;
-
-      // Validate service_id if provided
-      if (service_id !== undefined && (isNaN(service_id) || service_id <= 0)) {
-         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid service_id parameter");
+      console.log(agency_id, "agency_id in partner middleware");
+      if (!agency_id || isNaN(parseInt(agency_id))) {
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Valid agency ID is required");
       }
-
-      // Get rates with optional service filter
-      const rates = await pricingService.getRatesByServiceIdAndAgencyId(service_id ?? 0, agency_id ?? 0);
-
-      res.status(200).json({
-         status: "success",
-         count: rates.length,
-         filters: {
-            agency_id,
-            service_id: service_id || "all",
-         },
-         data: rates,
+      const services_with_rates = await repository.services.getActiveServicesWithRates(agency_id);
+      if (!services_with_rates) {
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "No services found");
+      }
+      const formatted_services_with_rates = services_with_rates.map((service) => {
+         return {
+            ...service,
+            shipping_rates:
+               service.shipping_rates.map((rate) => {
+                  return {
+                     id: rate.id,
+                     name: rate.product.name,
+                     description: rate.product.description,
+                     unit: rate.product.unit,
+                     price_in_cents: rate.price_in_cents,
+                     cost_in_cents: rate.pricing_agreement.price_in_cents,
+                     is_active: rate.is_active,
+                  };
+               }) || [],
+         };
       });
+      res.status(200).json(formatted_services_with_rates);
    },
 };
 

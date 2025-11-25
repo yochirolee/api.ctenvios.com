@@ -73,6 +73,8 @@ export const partnerAuthMiddleware = async (req: PartnerRequest, res: Response, 
       // Attach partner to request object
       req.partner = partner;
 
+      console.log(req.partner, "req.partner");
+
       next();
    } catch (error) {
       console.error("Partner authentication error:", error);

@@ -1,7 +1,7 @@
 import { AgencyType, PrismaClient, Roles, CityType, ServiceType, ProductType, Unit } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
-import { auth } from "../src/lib/auth";
+import { auth } from "../../src/lib/auth";
 import { customsRates, provincesWithCities } from "./seed.data";
 
 // Prisma 7 requires adapter for PrismaClient

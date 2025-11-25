@@ -46,6 +46,8 @@ export const ordersService = {
          service_id,
          agency_id,
       });
+
+      console.log(items_hbl, "items_hbl");
       //calculate delivery fee for each item temporarily
       const finalTotal = calculateOrderTotal(items_hbl);
 

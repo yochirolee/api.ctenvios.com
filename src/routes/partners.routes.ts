@@ -198,7 +198,7 @@ router.post(
  * Get rates via Partner API
  * Requires API key authentication
  */
-router.get("/rates", partnerAuthMiddleware, partnerLogMiddleware, controllers.partners.getRates);
+router.get("/services", partnerAuthMiddleware, partnerLogMiddleware, controllers.partners.getServices);
 
 /**
  * GET /partners/api/orders/:id

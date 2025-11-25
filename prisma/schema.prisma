@@ -163,6 +163,7 @@ model Order {
     status                 Status         @default(CREATED)
     partner                Partner?       @relation(fields: [partner_id], references: [id])
     partner_id             Int?
+    parcels                Parcel[]
 
     @@index([agency_id, created_at(sort: Desc)]) // 🔥 MÁS IMPORTANTE
     @@index([created_at(sort: Desc)]) // Para admins
@@ -202,6 +203,8 @@ model OrderItem {
     order_id               Int
     dispatch_id            Int?
     dispatch               Dispatch?     @relation(fields: [dispatch_id], references: [id])
+    parcel_id              Int?
+    parcel                 Parcel?       @relation("ParcelOrderItems", fields: [parcel_id], references: [id])
 
     @@index([order_id])
     @@index([hbl])
@@ -766,7 +769,6 @@ enum OrderStage {
 enum Status {
     DRAFT
     CREATED
-    PARTIALLY_PAID
     PAID
     PROCESSING
     READY_FOR_PICKUP

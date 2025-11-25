@@ -194,6 +194,12 @@ export const resolvers = {
       for (let i = 0; i < order_items.length; i++) {
          const item = order_items[i];
          const rate = rates.find((rate) => rate.id === item.rate_id);
+         if (!rate) {
+            throw new AppError(
+               HttpStatusCodes.NOT_FOUND,
+               `Rate with ID ${item.rate_id} not found or not exists for your agency ${agency_id}`
+            );
+         }
          items_hbl[i] = {
             hbl: allHblCodes[i],
             description: item.description,
@@ -207,7 +213,7 @@ export const resolvers = {
             weight: item.weight,
             service_id,
             agency_id,
-            unit: item.unit || rate?.unit || Unit.PER_LB,
+            unit: rate?.unit || item.unit || Unit.PER_LB,
          };
       }
       return items_hbl;
