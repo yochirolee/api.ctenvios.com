@@ -5,7 +5,6 @@ import { calculateOrderTotal, formatCents, toNumber } from "../utils/utils";
 import { PAYMENT_CONFIG } from "../config/payment.config";
 import prisma from "../lib/prisma.client";
 import StatusCodes from "../common/https-status-codes";
-
 import { AppError } from "../common/app-errors";
 
 interface OrderCreateInput {
@@ -167,7 +166,7 @@ export const ordersService = {
          order_to_pay.status = Status.PAID;
       } else if (totalPaidAfterPayment > 0) {
          newPaymentStatus = PaymentStatus.PARTIALLY_PAID;
-         order_to_pay.status = Status.PARTIALLY_PAID;
+         order_to_pay.status = Status.PROCESSING;
       } else {
          newPaymentStatus = PaymentStatus.PENDING;
          order_to_pay.status = Status.CREATED;
