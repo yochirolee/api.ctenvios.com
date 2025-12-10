@@ -46,7 +46,22 @@ export const ordersService = {
          agency_id,
       });
 
-      console.log(items_hbl, "items_hbl");
+      const parcels = items_hbl.map((item) => ({
+         tracking_number: item.hbl,
+         description: item.description,
+         weight: item.weight,
+         status: Status.IN_AGENCY,
+         user_id: user_id,
+         agency_id: agency_id,
+         service_id: service_id,
+         // Create initial event when parcel is created
+         events: {
+            create: {
+               user_id: user_id,
+            },
+         },
+      }));
+
       //calculate delivery fee for each item temporarily
       const finalTotal = calculateOrderTotal(items_hbl);
 
@@ -57,6 +72,28 @@ export const ordersService = {
       }
       // 🚀 OPTIMIZATION: Fast path for frontend (IDs provided, no lookups needed)
       if (customer_id && receiver_id) {
+         // Transform items_hbl to use relation syntax for nested creates
+         const orderItemsWithRelations = items_hbl.map((item) => ({
+            hbl: item.hbl,
+            description: item.description,
+            price_in_cents: item.price_in_cents,
+            charge_fee_in_cents: item.charge_fee_in_cents,
+            delivery_fee_in_cents: item.delivery_fee_in_cents,
+            rate: { connect: { id: item.rate_id } },
+            insurance_fee_in_cents: item.insurance_fee_in_cents,
+            customs_fee_in_cents: item.customs_fee_in_cents,
+            quantity: item.quantity,
+            weight: item.weight,
+            agency: { connect: { id: item.agency_id } },
+            service: { connect: { id: service_id } },
+            unit: item.unit,
+            status: Status.IN_AGENCY,
+            // Connect to parcel created at Order level (matching by tracking_number)
+            parcel: {
+               connect: { tracking_number: item.hbl },
+            },
+         }));
+
          const orderData: Prisma.OrderUncheckedCreateInput = {
             partner_order_id,
             customer_id,
@@ -64,10 +101,15 @@ export const ordersService = {
             service_id,
             user_id,
             agency_id,
-            status: Status.CREATED,
+            status: Status.IN_AGENCY,
             requires_home_delivery,
+            // Create parcels at Order level so they get order_id automatically
+            // Events are created nested within each parcel
+            parcels: {
+               create: parcels,
+            },
             order_items: {
-               create: items_hbl,
+               create: orderItemsWithRelations,
             },
             total_in_cents: finalTotal + (total_delivery_fee_in_cents || 0),
          };
@@ -94,6 +136,28 @@ export const ordersService = {
          }),
       ]);
 
+      // Transform items_hbl to use relation syntax for nested creates
+      const orderItemsWithRelations = items_hbl.map((item) => ({
+         hbl: item.hbl,
+         description: item.description,
+         price_in_cents: item.price_in_cents,
+         charge_fee_in_cents: item.charge_fee_in_cents,
+         delivery_fee_in_cents: item.delivery_fee_in_cents,
+         rate: { connect: { id: item.rate_id } },
+         insurance_fee_in_cents: item.insurance_fee_in_cents,
+         customs_fee_in_cents: item.customs_fee_in_cents,
+         quantity: item.quantity,
+         weight: item.weight,
+         agency: { connect: { id: item.agency_id } },
+         service: { connect: { id: service_id } },
+         unit: item.unit,
+         status: Status.IN_AGENCY,
+         // Connect to parcel created at Order level (matching by tracking_number)
+         parcel: {
+            connect: { tracking_number: item.hbl },
+         },
+      }));
+
       const orderData: Prisma.OrderUncheckedCreateInput = {
          partner_order_id,
          customer_id: resolvedCustomer.id,
@@ -101,10 +165,15 @@ export const ordersService = {
          service_id,
          user_id,
          agency_id,
-         status: Status.CREATED,
+         status: Status.IN_AGENCY,
          requires_home_delivery,
+         // Create parcels at Order level so they get order_id automatically
+         // Events are created nested within each parcel
+         parcels: {
+            create: parcels,
+         },
          order_items: {
-            create: items_hbl,
+            create: orderItemsWithRelations,
          },
          total_in_cents: finalTotal + (total_delivery_fee_in_cents || 0),
       };
@@ -163,13 +232,10 @@ export const ordersService = {
       let newPaymentStatus: PaymentStatus;
       if (totalPaidAfterPayment >= newTotalWithCharge) {
          newPaymentStatus = PaymentStatus.PAID;
-         order_to_pay.status = Status.PAID;
       } else if (totalPaidAfterPayment > 0) {
          newPaymentStatus = PaymentStatus.PARTIALLY_PAID;
-         order_to_pay.status = Status.PROCESSING;
       } else {
          newPaymentStatus = PaymentStatus.PENDING;
-         order_to_pay.status = Status.CREATED;
       }
 
       // Execute payment transaction
@@ -181,7 +247,6 @@ export const ordersService = {
                paid_in_cents: totalPaidAfterPayment,
                total_in_cents: newTotalWithCharge,
                payment_status: newPaymentStatus,
-               status: order_to_pay.status,
             },
             include: {
                customer: true,

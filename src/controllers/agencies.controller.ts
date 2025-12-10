@@ -323,6 +323,18 @@ const agencies = {
       });
       res.status(200).json(formatted_services_with_rates);
    },
+   getParcelsInAgency: async (req: Request, res: Response): Promise<void> => {
+      const { id } = req.params;
+      const { page, limit } = req.query;
+      const agencyId = Number(id);
+      const pageNumber = Number(page) || 1;
+      const limitNumber = Number(limit) || 10;
+      if (isNaN(agencyId) || agencyId <= 0) {
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid agency ID");
+      }
+      const { parcels: parcels_data, total } = await repository.parcels.getInAgency(agencyId, pageNumber, limitNumber);
+      res.status(200).json({ rows: parcels_data, total: total });
+   },
 };
 
 export default agencies;

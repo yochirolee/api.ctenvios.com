@@ -7,6 +7,7 @@ services:
          POSTGRES_USER: ${POSTGRES_USER:-ctenvios}
          POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
          POSTGRES_DB: ${POSTGRES_DB:-ctenvios}
+      command: postgres -c wal_level=logical -c max_replication_slots=10 -c max_wal_senders=10
       volumes:
          - postgres_data:/var/lib/postgresql/data
       healthcheck:
@@ -16,10 +17,9 @@ services:
          retries: 5
          start_period: 10s
       ports:
-         - "5432:5432"
+         - "5434:5432"
       networks:
          - ctenvios-network
-      # Port not exposed externally for security (only accessible from API container)
 
    api:
       build:
@@ -29,7 +29,7 @@ services:
       restart: unless-stopped
       ports:
          - "${PORT:-3000}:3000"
-         - "5555:5555"  # Prisma Studio
+         - "5556:5556"  # Prisma Studio
       environment:
          - NODE_ENV=${NODE_ENV:-production}
          - PORT=${PORT:-3000}
@@ -49,6 +49,23 @@ services:
       volumes:
          # Optional: mount assets if you need to update them without rebuilding
          - ./assets:/app/assets:ro
+
+   electric-sql-api:
+      image: docker.io/electricsql/electric:latest
+      container_name: ctenvios-electric
+      restart: unless-stopped
+      env_file:
+         - .env
+      environment:
+         DATABASE_URL: postgresql://${POSTGRES_USER:-ctenvios}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ctenvios}
+         ELECTRIC_INSECURE: ${ELECTRIC_INSECURE:-true}
+      ports:
+         - "3006:3001"
+      depends_on:
+         postgres:
+            condition: service_healthy
+      networks:
+         - ctenvios-network
 
 volumes:
    postgres_data:

@@ -1,5 +1,5 @@
 import prisma from "../lib/prisma.client";
-import { Prisma, ShippingRate } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 export const agencies = {
    getAll: async () => {

@@ -6,6 +6,7 @@ export const services = {
    orders,
    resolvers,
    pricing,
+   
 };
 
 export default services;

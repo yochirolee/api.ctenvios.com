@@ -17,6 +17,7 @@ const corsOptions = {
          "https://api-ctenvios-com.vercel.app",
          "https://dev.ctenvios.com",
          "https://systemcaribetravel.com/",
+         "http://192.168.1.157",
       ];
 
       // Allow requests with no origin (like mobile apps, Postman, etc.)

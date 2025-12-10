@@ -223,4 +223,33 @@ export const pricingService = {
 
       return agreements;
    },
+
+   getPriceAgreementsBetweenAgencies: async (
+      seller_agency_id: number,
+      buyer_agency_id: number
+   ): Promise<
+      { id: number; seller_agency_id: number; buyer_agency_id: number; service_id: number; price_in_cents: number }[]
+   > => {
+      const agreements = await prisma.pricingAgreement.findMany({
+         where: {
+            seller_agency_id: seller_agency_id,
+            buyer_agency_id: buyer_agency_id,
+            is_active: true,
+         },
+         select: {
+            id: true,
+            price_in_cents: true,
+            service_id: true,
+         },
+      });
+      return agreements.map((agreement) => {
+         return {
+            id: agreement.id,
+            seller_agency_id: seller_agency_id,
+            buyer_agency_id: buyer_agency_id,
+            service_id: agreement.service_id,
+            price_in_cents: agreement.price_in_cents,
+         };
+      });
+   },
 };

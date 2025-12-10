@@ -38,6 +38,9 @@ model User {
     order_history       OrderHistory[]
     created_dispatches  Dispatch[]     @relation("created_by")
     received_dispatches Dispatch[]     @relation("received_by")
+    paid_dispatches     Dispatch[]     @relation("paid_by")
+    parcels             Parcel[]
+    parcels_events      ParcelEvent[]
 
     @@index([agency_id, role])
     @@map("user")
@@ -76,6 +79,7 @@ model Agency {
     orders              Order[]
     created_dispatches  Dispatch[]     @relation("created_dispatches")
     received_dispatches Dispatch[]     @relation("received_dispatches")
+    parcels             Parcel[]
 
     @@index([forwarder_id, is_active])
     @@index([parent_agency_id])
@@ -146,6 +150,7 @@ model Order {
     service_id             Int
     service                Service        @relation(fields: [service_id], references: [id])
     order_items            OrderItem[]
+    parcels                Parcel[]
     total_in_cents         Int            @default(0)
     paid_in_cents          Int            @default(0)
     requires_home_delivery Boolean        @default(true)
@@ -160,10 +165,10 @@ model Order {
     payment_status         PaymentStatus  @default(PENDING)
     discounts              Discount[]
     stage                  OrderStage     @default(BILLING)
-    status                 Status         @default(CREATED)
+    status                 Status         @default(IN_AGENCY)
     partner                Partner?       @relation(fields: [partner_id], references: [id])
     partner_id             Int?
-   
+
     @@index([agency_id, created_at(sort: Desc)]) // 🔥 MÁS IMPORTANTE
     @@index([created_at(sort: Desc)]) // Para admins
     @@index([customer_id]) // Para JOINs
@@ -197,41 +202,111 @@ model OrderItem {
     customs_rates          CustomsRates? @relation(fields: [customs_rates_id], references: [id])
     agency_id              Int
     agency                 Agency        @relation(fields: [agency_id], references: [id], onDelete: Cascade)
-    status                 Status        @default(CREATED)
+    status                 Status        @default(IN_AGENCY)
     order                  Order         @relation(fields: [order_id], references: [id], onDelete: Cascade)
     order_id               Int
-    dispatch_id            Int?
-    dispatch               Dispatch?     @relation(fields: [dispatch_id], references: [id])
-  
+    parcel_id              Int
+    parcel                 Parcel        @relation(fields: [parcel_id], references: [id])
+
     @@index([order_id])
     @@index([hbl])
     @@index([agency_id, created_at])
 }
 
+model Parcel {
+    id                  Int           @id @default(autoincrement())
+    tracking_number     String        @unique
+    agency_id           Int?
+    agency              Agency?       @relation(fields: [agency_id], references: [id], onDelete: SetNull)
+    current_agency_id   Int?
+    order_id            Int?
+    order               Order?        @relation(fields: [order_id], references: [id], onDelete: SetNull)
+    service_id          Int?
+    service             Service?      @relation(fields: [service_id], references: [id], onDelete: SetNull)
+    description         String
+    weight              Decimal       @default("0.00")
+    status              Status        @default(IN_AGENCY)
+    current_location_id Int?
+    current_location    Location?     @relation(fields: [current_location_id], references: [id])
+    created_at          DateTime      @default(now())
+    updated_at          DateTime      @updatedAt
+    order_items         OrderItem[]
+    events              ParcelEvent[]
+    dispatch_id         Int?
+    dispatch            Dispatch?     @relation(fields: [dispatch_id], references: [id])
+    user_id             String
+    user                User          @relation(fields: [user_id], references: [id])
+
+    @@index([tracking_number])
+}
+
+model ParcelEvent {
+    id          Int       @id @default(autoincrement())
+    parcel_id   Int
+    parcel      Parcel    @relation(fields: [parcel_id], references: [id], onDelete: Cascade)
+    created_at  DateTime  @default(now())
+    updated_at  DateTime  @updatedAt
+    status      Status    @default(IN_AGENCY)
+    user_id     String
+    user        User      @relation(fields: [user_id], references: [id])
+    location_id Int?
+    location    Location? @relation(fields: [location_id], references: [id])
+}
+
+model Location {
+    id             Int           @id @default(autoincrement())
+    name           String
+    created_at     DateTime      @default(now())
+    updated_at     DateTime      @updatedAt
+    parcels        Parcel[]
+    parcels_events ParcelEvent[]
+}
+
 // --- MODELOS DE DESPACHO ---
 model Dispatch {
-    id                 Int            @id @default(autoincrement())
-    sender_agency_id   Int
-    sender_agency      Agency         @relation("created_dispatches", fields: [sender_agency_id], references: [id])
-    receiver_agency_id Int
-    receiver_agency    Agency         @relation("received_dispatches", fields: [receiver_agency_id], references: [id])
-    status             DispatchStatus @default(CREATED)
-    order_items        OrderItem[]
-    weight             Float          @default(0)
-    total_in_cents     Int            @default(0)
-    created_at         DateTime       @default(now())
-    updated_at         DateTime       @updatedAt
-    created_by_id      String
-    created_by         User           @relation("created_by", fields: [created_by_id], references: [id])
-    received_by_id     String?
-    received_by        User?          @relation("received_by", fields: [received_by_id], references: [id])
+    id               Int    @id @default(autoincrement())
+    //DEUDOR/ACREEDOR
+    sender_agency_id Int
+    sender_agency    Agency @relation("created_dispatches", fields: [sender_agency_id], references: [id])
+
+    receiver_agency_id Int?
+    receiver_agency    Agency? @relation("received_dispatches", fields: [receiver_agency_id], references: [id], onDelete: SetNull)
+
+    status DispatchStatus @default(DRAFT)
+
+    declared_parcels_count Int @default(0) //Declarador por el sender_agency
+    received_parcels_count Int @default(0) //Recibido por el receiver_agency
+
+    parcels Parcel[]
+
+    declared_weight Decimal @default("0.00")
+    weight          Decimal @default("0.00")
+
+    declared_cost_in_cents Int           @default(0)
+    cost_in_cents          Int           @default(0)
+    //PAYMENTS INFORMATION
+    payment_status         PaymentStatus @default(PENDING)
+    payment_date           DateTime?
+    payment_method         PaymentMethod @default(CASH)
+    payment_reference      String?
+    payment_notes          String?
+    paid_by_id             String?
+    paid_by                User?         @relation("paid_by", fields: [paid_by_id], references: [id])
+
+    created_at DateTime @default(now())
+    updated_at DateTime @updatedAt
+
+    created_by_id  String
+    created_by     User    @relation("created_by", fields: [created_by_id], references: [id])
+    received_by_id String?
+    received_by    User?   @relation("received_by", fields: [received_by_id], references: [id])
 }
 
 enum DispatchStatus {
-    CREATED
+    DRAFT
+    DISPATCHED
     RECEIVED
-    PENDING_PAYMENT
-    PAID
+    DISCREPANCY
     CANCELLED
 }
 
@@ -425,6 +500,7 @@ model Service {
     products           Product[]
     pricing_agreements PricingAgreement[]
     shipping_rates     ShippingRate[]
+    parcels            Parcel[]
 }
 
 model Carrier {
@@ -764,35 +840,21 @@ enum OrderStage {
 }
 
 enum Status {
-    DRAFT
-    CREATED
-    PAID
-    PROCESSING
-    READY_FOR_PICKUP
-    PACKED
-    AWAITING_SHIPMENT
-    PARTIALLY_ON_PALLET
-    ON_PALLET
-    PARTIALLY_IN_CONTAINER
+    IN_AGENCY
+    IN_PALLET
+    IN_DISPATCH
+    RECEIVED_IN_DISPATCH
+    IN_WAREHOUSE
     IN_CONTAINER
-    PARTIALLY_DISPATCHED
-    DISPATCHED
     IN_TRANSIT
-    AT_WAREHOUSE
-    CUSTOMS_CLEARANCE
-    HELD_BY_CUSTOMS
+    AT_PORT_OF_ENTRY
+    CUSTOMS_INSPECTION
     RELEASED_FROM_CUSTOMS
     OUT_FOR_DELIVERY
-    // ¡NUEVO! Para el escenario de "3 de 4 entregados"
+    FAILED_DELIVERY
     PARTIALLY_DELIVERED
     DELIVERED
-    FAILED_DELIVERY
-    CANCELLED
-    RETURNED
-    REFUNDED
-    ON_HOLD
-    ISSUE_REPORTED
-    // (Opcional) PARTIALLY_CANCELLED, si necesitas ese nivel de granularidad
+    RETURNED_TO_SENDER
 }
 
 enum CityType {

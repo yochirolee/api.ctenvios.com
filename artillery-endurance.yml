@@ -4,7 +4,7 @@ config:
       timeout: 30
    defaults:
       headers:
-         Authorization: "Bearer p5TAuBi2u8lH3JUV9a7E3kNCPuPvDDV4"
+         Authorization: "Bearer fMYP13nZtvWzbMwaL1Whnrd2GwXVzEMh"
    phases:
       # Sustained high load over a long period
       - duration: 60

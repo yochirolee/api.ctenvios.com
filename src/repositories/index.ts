@@ -13,7 +13,7 @@ import payments from "./payments.repository";
 import products from "./products.repository";
 import shippingRates from "./shipping.rates.repository";
 import dispatch from "./dispatch.repository";
-import items from "./items.repository";
+import parcels from "./parcels.repository";
 export const repository = {
    agencies,
    providers,
@@ -30,7 +30,7 @@ export const repository = {
    products,
    shippingRates,
    dispatch,
-   items,
+   parcels,
 };
 
 export default repository;

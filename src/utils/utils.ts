@@ -1,4 +1,3 @@
-import { Unit } from "@prisma/client";
 
 export function formatPhoneNumber(phoneNumber: string): string {
    return phoneNumber.replace(/^(\+535|535)?/, "");

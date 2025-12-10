@@ -159,6 +159,8 @@ const partnerOrderItemSchema = z.object({
    weight: z.number().positive(),
    price_in_cents: z.number().optional(),
    unit: z.nativeEnum(Unit).optional().default(Unit.PER_LB),
+   insurance_fee_in_cents: z.number().optional(),
+   charge_fee_in_cents: z.number().optional(),
 });
 
 const partnerOrderSchema = z.object({

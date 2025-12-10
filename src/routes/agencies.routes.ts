@@ -12,4 +12,5 @@ agencies_routes.get("/:id/childrens", controllers.agencies.getChildren);
 agencies_routes.get("/:id/parent", controllers.agencies.getParent);
 agencies_routes.get("/:id/services-with-rates", controllers.agencies.getServicesWithRates);
 agencies_routes.get("/:id/active-services-with-rates", controllers.agencies.getActiveServicesWithRates);
+agencies_routes.get("/:id/parcels", controllers.agencies.getParcelsInAgency);
 export default agencies_routes;

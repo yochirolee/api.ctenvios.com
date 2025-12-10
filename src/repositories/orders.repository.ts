@@ -45,6 +45,22 @@ const orders = {
                   delivery_fee_in_cents: true,
                },
             },
+            parcels: {
+               select: {
+                  id: true,
+                  tracking_number: true,
+                  weight: true,
+                  service_id: true,
+                  user_id: true,
+                  agency_id: true,
+                  status: true,
+                  current_location_id: true,
+                  current_location: true,
+                  dispatch_id: true,
+                  dispatch: true,
+                  events: true,
+               },
+            },
          },
       });
    },

@@ -40,7 +40,10 @@ export const partnerAuthMiddleware = async (req: PartnerRequest, res: Response, 
       const authHeader = req.headers.authorization;
 
       if (!authHeader) {
-         throw new AppError(HttpStatusCodes.UNAUTHORIZED, "API key is required. Please provide an API key in the Authorization header.");
+         throw new AppError(
+            HttpStatusCodes.UNAUTHORIZED,
+            "API key is required. Please provide an API key in the Authorization header."
+         );
       }
 
       // Support both "Bearer TOKEN" and direct token formats
@@ -66,7 +69,10 @@ export const partnerAuthMiddleware = async (req: PartnerRequest, res: Response, 
          const stats = await repository.partners.getStats(partner.id);
 
          if (stats.requests_last_hour >= partner.rate_limit) {
-            throw new AppError(HttpStatusCodes.TOO_MANY_REQUESTS, `Rate limit exceeded. You are limited to ${partner.rate_limit} requests per hour.`);
+            throw new AppError(
+               HttpStatusCodes.TOO_MANY_REQUESTS,
+               `Rate limit exceeded. You are limited to ${partner.rate_limit} requests per hour.`
+            );
          }
       }
 
@@ -98,6 +104,7 @@ export const partnerAuthMiddleware = async (req: PartnerRequest, res: Response, 
  * Should be used after partnerAuthMiddleware
  */
 export const partnerLogMiddleware = (req: PartnerRequest, res: Response, next: NextFunction): void => {
+ 
    if (!req.partner) {
       return next();
    }
@@ -127,7 +134,7 @@ export const partnerLogMiddleware = (req: PartnerRequest, res: Response, next: N
                .logRequest({
                   partner_id: partner.id,
                   api_key_id: partner.api_key_id,
-                  endpoint: req.path,
+                  endpoint: req.originalUrl,
                   method: req.method,
                   status_code: res.statusCode,
                   request_body: req.body && Object.keys(req.body).length > 0 ? req.body : undefined,
