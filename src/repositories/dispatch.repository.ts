@@ -335,7 +335,6 @@ const dispatch = {
             } cannot be added to dispatch. Allowed statuses: ${ALLOWED_DISPATCH_STATUSES.join(", ")}`
          );
       }
-
       // Check if parcel is already in a dispatch
       if (parcel.dispatch_id) {
          throw new AppError(
