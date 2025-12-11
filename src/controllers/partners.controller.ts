@@ -9,9 +9,10 @@ import prisma from "../lib/prisma.client";
 import { services } from "../services";
 import HttpStatusCodes from "../common/https-status-codes";
 
-const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
-const host = process.env.NODE_ENV === "development" ? "localhost:3000/api/v1" : "api.ctenvios.com:3000/api/v1";
-const apiUrl = `${protocol}://${host}`;
+// Use API_URL from environment if available, otherwise construct it
+const apiUrl =
+   process.env.API_URL ||
+   (process.env.NODE_ENV === "development" ? "http://localhost:3000/api/v1" : "https://api.ctenvios.com/api/v1");
 
 const partnerCreateSchema = z.object({
    name: z.string().min(1, "Name is required"),
