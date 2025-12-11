@@ -5,7 +5,6 @@ import { AppError } from "../common/app-errors";
 import repository from "../repositories";
 import prisma from "../lib/prisma.client";
 import { services } from "../services";
-import { pricingService } from "../services/pricing.service";
 import HttpStatusCodes from "../common/https-status-codes";
 
 const partnerCreateSchema = z.object({
@@ -403,6 +402,8 @@ const partners = {
       if (!agencyUser) {
          throw new AppError(HttpStatusCodes.INTERNAL_SERVER_ERROR, "No user found for partner's agency");
       }
+
+      const partner = req.partner || null;
       const orderResult = await services.orders.create({
          partner_order_id,
          customer_id,
@@ -415,6 +416,7 @@ const partners = {
          agency_id: req.partner.agency_id,
          total_delivery_fee_in_cents,
          requires_home_delivery,
+         partner_id: partner?.id || null,
       });
 
       res.status(200).json({

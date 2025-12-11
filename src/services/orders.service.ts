@@ -8,6 +8,7 @@ import StatusCodes from "../common/https-status-codes";
 import { AppError } from "../common/app-errors";
 
 interface OrderCreateInput {
+   partner_id?: number;
    partner_order_id?: string;
    customer_id?: number;
    receiver_id?: number;
@@ -28,6 +29,7 @@ export const ordersService = {
     * Partners: provides customer and receiver data (with location names)
     */
    create: async ({
+      partner_id,
       partner_order_id,
       customer_id,
       receiver_id,
@@ -103,6 +105,7 @@ export const ordersService = {
             agency_id,
             status: Status.IN_AGENCY,
             requires_home_delivery,
+            partner_id,
             // Create parcels at Order level so they get order_id automatically
             // Events are created nested within each parcel
             parcels: {
@@ -167,6 +170,7 @@ export const ordersService = {
          agency_id,
          status: Status.IN_AGENCY,
          requires_home_delivery,
+         partner_id,
          // Create parcels at Order level so they get order_id automatically
          // Events are created nested within each parcel
          parcels: {

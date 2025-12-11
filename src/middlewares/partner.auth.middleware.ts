@@ -79,8 +79,6 @@ export const partnerAuthMiddleware = async (req: PartnerRequest, res: Response, 
       // Attach partner to request object
       req.partner = partner;
 
-      console.log(req.partner, "req.partner");
-
       next();
    } catch (error) {
       console.error("Partner authentication error:", error);
@@ -104,7 +102,6 @@ export const partnerAuthMiddleware = async (req: PartnerRequest, res: Response, 
  * Should be used after partnerAuthMiddleware
  */
 export const partnerLogMiddleware = (req: PartnerRequest, res: Response, next: NextFunction): void => {
- 
    if (!req.partner) {
       return next();
    }
