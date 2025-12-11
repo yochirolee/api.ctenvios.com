@@ -62,10 +62,11 @@ router.post("/", async (req: any, res: Response) => {
 router.post("/:id/add-parcel", async (req: any, res: Response) => {
    try {
       const dispatchId = parseInt(req.params.id);
-      const dispatch = await repository.dispatch.getById(dispatchId);
-      if (!dispatch) {
-         return res.status(HttpStatusCodes.NOT_FOUND).json({ message: "Dispatch not found" });
-      }
+      // Remove this redundant query - addParcelToDispatch will validate dispatch exists
+      // const dispatch = await repository.dispatch.getById(dispatchId);
+      // if (!dispatch) {
+      //    return res.status(HttpStatusCodes.NOT_FOUND).json({ message: "Dispatch not found" });
+      // }
 
       const existingParcel = await repository.parcels.findParcelByHbl(req.body.hbl);
       if (!existingParcel) {

@@ -343,24 +343,6 @@ const dispatch = {
          );
       }
 
-      // Get dispatch to count current parcels and get status
-      const dispatch = await prisma.dispatch.findUnique({
-         where: { id: dispatchId },
-         select: {
-            id: true,
-            status: true,
-            _count: {
-               select: {
-                  parcels: true,
-               },
-            },
-         },
-      });
-
-      if (!dispatch) {
-         throw new AppError(HttpStatusCodes.NOT_FOUND, `Dispatch with id ${dispatchId} not found`);
-      }
-
       // Use transaction to ensure parcel update, dispatch update, and event creation all succeed
       const updatedDispatch = await prisma.$transaction(async (tx) => {
          // Update the parcel status and connect it to dispatch
@@ -382,20 +364,26 @@ const dispatch = {
             },
          });
 
-         // Connect parcel to dispatch (so it's included in weight recalculation)
+         // Update dispatch - REMOVE redundant connect since dispatch_id is already set
          const updatedDispatch = await tx.dispatch.update({
             where: { id: dispatchId },
             data: {
-               parcels: {
-                  connect: {
-                     id: parcel.id,
-                  },
-               },
+               // Remove this redundant connect - parcel already has dispatch_id set
+               // parcels: {
+               //    connect: {
+               //       id: parcel.id,
+               //    },
+               // },
                declared_weight: {
                   increment: parcel.weight,
                },
                declared_parcels_count: {
                   increment: 1,
+               },
+            },
+            include: {
+               parcels: {
+                  take: 0, // Don't load parcels, just return dispatch
                },
             },
          });

@@ -238,6 +238,7 @@ model Parcel {
     user                User          @relation(fields: [user_id], references: [id])
 
     @@index([tracking_number])
+    @@index([dispatch_id]) // Add this for faster dispatch queries
 }
 
 model ParcelEvent {
