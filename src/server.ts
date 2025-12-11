@@ -2,6 +2,7 @@ import app from "./app";
 
 const PORT = process.env.PORT || 3000;
 
+
 // Start server unless running on Vercel (which handles serverless)
 // Docker deployments need the server to listen
 const isVercel = process.env.VERCEL === "1";

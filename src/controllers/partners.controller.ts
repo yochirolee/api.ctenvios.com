@@ -10,9 +10,10 @@ import { services } from "../services";
 import HttpStatusCodes from "../common/https-status-codes";
 
 // Use API_URL from environment if available, otherwise construct it
-const apiUrl =
-   process.env.API_URL ||
-   (process.env.NODE_ENV === "development" ? "http://localhost:3000/api/v1" : "https://api.ctenvios.com/api/v1");
+const host = process.env.HOST || "localhost";
+const port = process.env.PORT || 3000;
+const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
+const apiUrl = `${protocol}://${host}:${port}/api/v1`;
 
 const partnerCreateSchema = z.object({
    name: z.string().min(1, "Name is required"),
