@@ -8,6 +8,9 @@ import repository from "../repositories";
 import { AppError } from "../common/app-errors";
 import HttpStatusCodes from "../common/https-status-codes";
 import { generateOrderPDF } from "../utils/generate-order-pdf";
+import { generateCTEnviosLabels } from "../utils/generate-labels-pdf";
+import { orderWithRelationsInclude } from "../types/order-with-relations";
+import { generateHblPdf } from "../utils/generate-hbl-pdf";
 export const ordersController = {
    /**
     * Creates an order from frontend or partner API
@@ -337,18 +340,123 @@ export const ordersController = {
          next(error);
       }
    },
+
+   ///PDFS
    generateOrderPdf: async (req: any, res: Response, next: NextFunction): Promise<void> => {
-      const { id } = req.params;
-      const orderId = parseInt(id);
-      const order = await repository.orders.getByIdWithDetails(orderId);
-      if (!order) {
-         throw new AppError(HttpStatusCodes.NOT_FOUND, "Order not found");
+      try {
+         const { id } = req.params;
+         const orderId = parseInt(id);
+         const order = await repository.orders.getByIdWithDetails(orderId);
+         if (!order) {
+            throw new AppError(HttpStatusCodes.NOT_FOUND, "Order not found");
+         }
+         const result = await generateOrderPDF(order);
+         res.setHeader("Content-Type", "application/pdf");
+         res.setHeader("Content-Disposition", `inline; filename="order-${order.id}.pdf"`);
+         result.pipe(res);
+         result.end();
+      } catch (error) {
+         console.error("Order PDF generation error:", error);
+         if (error instanceof AppError) {
+            res.status(error.status).json({
+               status: "error",
+               message: error.message,
+            });
+         } else {
+            res.status(500).json({
+               status: "error",
+               message: "Error generating order PDF",
+               error: process.env.NODE_ENV === "development" ? error : undefined,
+            });
+         }
+         next(error);
       }
-      const result = await generateOrderPDF(order);
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `inline; filename="order-${order.id}.pdf"`);
-      result.pipe(res);
-      result.end();
+   },
+   generateOrderLabelsPdf: async (req: any, res: Response, next: NextFunction): Promise<void> => {
+      try {
+         const { id } = req.params;
+
+         if (!id || isNaN(parseInt(id))) {
+            throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid invoice ID");
+         }
+
+         // Fetch invoice with all required relations
+         const invoice = await prisma.order.findUnique({
+            where: { id: parseInt(id) },
+            include: orderWithRelationsInclude,
+         });
+
+         if (!invoice) {
+            throw new AppError(HttpStatusCodes.NOT_FOUND, "Invoice not found");
+         }
+         if (!invoice.order_items || invoice.order_items.length === 0) {
+            throw new AppError(HttpStatusCodes.BAD_REQUEST, "No order items found for this invoice");
+         }
+
+         // Generate CTEnvios labels
+         const doc = await generateCTEnviosLabels(invoice);
+
+         // Set response headers for PDF to open in browser (inline)
+         res.setHeader("Content-Type", "application/pdf");
+         res.setHeader("Content-Disposition", `inline; filename="ctenvios-labels-${invoice.id}.pdf"`);
+
+         // Pipe the PDF to response
+         doc.pipe(res);
+         doc.end();
+      } catch (error) {
+         console.error("label generation error:", error);
+
+         if (error instanceof AppError) {
+            res.status(error.status).json({
+               status: "error",
+               message: error.message,
+            });
+         } else {
+            res.status(500).json({
+               status: "error",
+               message: "Error generating labels",
+               error: process.env.NODE_ENV === "development" ? error : undefined,
+            });
+         }
+         next(error);
+      }
+   },
+   generateOrderHblPdf: async (req: any, res: Response, next: NextFunction): Promise<void> => {
+      try {
+         const { id } = req.params;
+         if (!id || isNaN(parseInt(id))) {
+            throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid invoice ID");
+         }
+
+         // Fetch invoice with all required relations
+         const order = await repository.orders.getByIdWithDetails(parseInt(id));
+
+         if (!order) {
+            throw new AppError(HttpStatusCodes.NOT_FOUND, "Order not found");
+         }
+
+         // Generate HBL PDF
+         const doc = await generateHblPdf(order);
+         res.setHeader("Content-Type", "application/pdf");
+         res.setHeader("Content-Disposition", `inline; filename="hbl-${order.id}.pdf"`);
+         doc.pipe(res);
+         doc.end();
+      } catch (error) {
+         console.error("HBL PDF generation error:", error);
+         if (error instanceof AppError) {
+            res.status(error.status).json({
+               status: "error",
+               message: error.message,
+            });
+         } else {
+            res.status(500).json({
+               status: "error",
+               message: "Error generating HBL PDF",
+               error: process.env.NODE_ENV === "development" ? error : undefined,
+            });
+         }
+         next(error);
+      }
    },
 };
 

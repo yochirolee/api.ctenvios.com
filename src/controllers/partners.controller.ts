@@ -6,6 +6,9 @@ import repository from "../repositories";
 import prisma from "../lib/prisma.client";
 import { services } from "../services";
 import HttpStatusCodes from "../common/https-status-codes";
+import { generateOrderPDF } from "../utils/generate-order-pdf";
+import { generateCTEnviosLabels } from "../utils/generate-labels-pdf";
+import { generateHblPdf } from "../utils/generate-hbl-pdf";
 
 const partnerCreateSchema = z.object({
    name: z.string().min(1, "Name is required"),
@@ -418,6 +421,14 @@ const partners = {
          requires_home_delivery,
          partner_id: partner?.id || null,
       });
+      //create pdf urls for the order
+      const orderPdfUrl = await generateOrderPDF(orderResult.order);
+      const orderLabelsPdfUrl = await generateCTEnviosLabels(orderResult.order);
+      const orderHblPdfUrl = await generateHblPdf(orderResult.order);
+
+      orderResult.order.pdf_url = orderPdfUrl;
+      orderResult.order.labels_pdf_url = orderLabelsPdfUrl;
+      orderResult.order.hbl_pdf_url = orderHblPdfUrl;
 
       res.status(200).json({
          message: "Order created successfully",

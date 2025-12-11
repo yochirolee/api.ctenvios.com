@@ -10,6 +10,10 @@ const router = Router();
 // GET /orders/:id/pdf - Get order PDF
 router.get("/:id/pdf", controllers.orders.generateOrderPdf);
 
+router.get("/:id/labels", controllers.orders.generateOrderLabelsPdf);
+
+      router.get("/:id/hbl-pdf", controllers.orders.generateOrderHblPdf);
+
 // GET /orders - List and search orders (RESTful pattern)
 router.get("/", authMiddleware, validate({ query: searchSchema }), controllers.orders.search);
 
