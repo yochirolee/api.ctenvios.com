@@ -188,7 +188,7 @@ export const ordersService = {
       repository.receivers
          .connect(resolvedReceiver.id, resolvedCustomer.id)
          .catch((err) => console.error("Receiver connection failed (non-critical):", err));
-
+      console.log("order", order);
       return order;
    },
    payOrder: async (order_id: number, paymentData: Prisma.PaymentCreateInput, user_id: string): Promise<any> => {

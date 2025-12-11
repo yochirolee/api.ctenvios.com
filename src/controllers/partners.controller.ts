@@ -1,3 +1,5 @@
+import dotenv from "dotenv";
+dotenv.config();
 import { Response } from "express";
 import { z } from "zod";
 import { Roles } from "@prisma/client";
@@ -6,9 +8,10 @@ import repository from "../repositories";
 import prisma from "../lib/prisma.client";
 import { services } from "../services";
 import HttpStatusCodes from "../common/https-status-codes";
-import { generateOrderPDF } from "../utils/generate-order-pdf";
-import { generateCTEnviosLabels } from "../utils/generate-labels-pdf";
-import { generateHblPdf } from "../utils/generate-hbl-pdf";
+
+const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
+const host = process.env.NODE_ENV === "development" ? "localhost:3000/api/v1" : "api.ctenvios.com:3000/api/v1";
+const apiUrl = `${protocol}://${host}`;
 
 const partnerCreateSchema = z.object({
    name: z.string().min(1, "Name is required"),
@@ -422,13 +425,15 @@ const partners = {
          partner_id: partner?.id || null,
       });
       //create pdf urls for the order
-      const orderPdfUrl = await generateOrderPDF(orderResult.order);
-      const orderLabelsPdfUrl = await generateCTEnviosLabels(orderResult.order);
-      const orderHblPdfUrl = await generateHblPdf(orderResult.order);
+      const orderPdfUrl = `${apiUrl}/orders/${orderResult.id}/pdf`;
+      const orderLabelsPdfUrl = `${apiUrl}/orders/${orderResult.id}/labels-pdf`;
+      const orderHblPdfUrl = `${apiUrl}/orders/${orderResult.id}/hbl-pdf`;
 
-      orderResult.order.pdf_url = orderPdfUrl;
-      orderResult.order.labels_pdf_url = orderLabelsPdfUrl;
-      orderResult.order.hbl_pdf_url = orderHblPdfUrl;
+      orderResult.pdf_urls = {
+         order: orderPdfUrl,
+         labels: orderLabelsPdfUrl,
+         hbls: orderHblPdfUrl,
+      };
 
       res.status(200).json({
          message: "Order created successfully",
