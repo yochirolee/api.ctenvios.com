@@ -364,26 +364,15 @@ const dispatch = {
             },
          });
 
-         // Update dispatch - REMOVE redundant connect since dispatch_id is already set
+         // Update dispatch - removed unnecessary include to avoid extra query
          const updatedDispatch = await tx.dispatch.update({
             where: { id: dispatchId },
             data: {
-               // Remove this redundant connect - parcel already has dispatch_id set
-               // parcels: {
-               //    connect: {
-               //       id: parcel.id,
-               //    },
-               // },
                declared_weight: {
                   increment: parcel.weight,
                },
                declared_parcels_count: {
                   increment: 1,
-               },
-            },
-            include: {
-               parcels: {
-                  take: 0, // Don't load parcels, just return dispatch
                },
             },
          });
