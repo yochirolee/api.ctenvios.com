@@ -1,0 +1,20 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const controllers_1 = __importDefault(require("../controllers"));
+const agencies_routes = (0, express_1.Router)();
+agencies_routes.get("/", controllers_1.default.agencies.getAll);
+agencies_routes.get("/:id", controllers_1.default.agencies.getById);
+agencies_routes.get("/:id/users", controllers_1.default.agencies.getUsers);
+agencies_routes.post("/", controllers_1.default.agencies.create);
+agencies_routes.put("/:id", controllers_1.default.agencies.update);
+agencies_routes.delete("/:id", controllers_1.default.agencies.remove);
+agencies_routes.get("/:id/childrens", controllers_1.default.agencies.getChildren);
+agencies_routes.get("/:id/parent", controllers_1.default.agencies.getParent);
+agencies_routes.get("/:id/services-with-rates", controllers_1.default.agencies.getServicesWithRates);
+agencies_routes.get("/:id/active-services-with-rates", controllers_1.default.agencies.getActiveServicesWithRates);
+agencies_routes.get("/:id/parcels", controllers_1.default.agencies.getParcelsInAgency);
+exports.default = agencies_routes;

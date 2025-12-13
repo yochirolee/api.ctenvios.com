@@ -2,7 +2,7 @@ import { NextFunction, Request, Response } from "express";
 import { Prisma } from "@prisma/client";
 import { AppError } from "../common/app-errors";
 import HttpStatusCodes from "../common/https-status-codes";
-
+import { createRequestLogger } from "../utils/logger";
 interface ErrorResponse {
    message: string;
    source?: "prisma" | "zod" | "application" | "system";
@@ -212,9 +212,10 @@ const handlePrismaError = (
 /**
  * Global error handling middleware
  * Handles AppError, Prisma errors, and generic errors
+ * Uses Winston logger for all error logging (writes to AppLog table)
  */
-export const errorMiddleware = (err: Error, _req: Request, res: Response, _next: NextFunction): void => {
-   console.error("Error:", err);
+export const errorMiddleware = (err: Error, req: Request, res: Response, _next: NextFunction): void => {
+   const requestLogger = createRequestLogger(req);
 
    // Handle custom AppError
    if (err instanceof AppError) {
@@ -223,6 +224,13 @@ export const errorMiddleware = (err: Error, _req: Request, res: Response, _next:
          source: "application",
          code: err.status.toString(),
       };
+      requestLogger.error(`Application error: ${err.message}`, {
+         source: "application",
+         code: err.status.toString(),
+         statusCode: err.status,
+         stack: err.stack,
+         errorName: err.name,
+      });
       res.status(err.status).json(response);
       return;
    }
@@ -235,6 +243,14 @@ export const errorMiddleware = (err: Error, _req: Request, res: Response, _next:
          source: "prisma",
          code,
       };
+      requestLogger.error(`Prisma error: ${message}`, {
+         source: "prisma",
+         code,
+         statusCode: status,
+         stack: err.stack,
+         errorName: err.name,
+         details: { meta: err.meta },
+      });
       res.status(status).json(response);
       return;
    }
@@ -281,6 +297,14 @@ export const errorMiddleware = (err: Error, _req: Request, res: Response, _next:
             code: "VALIDATION_ERROR",
             errors,
          };
+         requestLogger.error(`Prisma validation error: ${errorMessage}`, {
+            source: "prisma",
+            code: "VALIDATION_ERROR",
+            statusCode: HttpStatusCodes.BAD_REQUEST,
+            stack: err.stack,
+            errorName: err.name,
+            details: { errors },
+         });
          res.status(HttpStatusCodes.BAD_REQUEST).json(response);
          return;
       }
@@ -292,6 +316,14 @@ export const errorMiddleware = (err: Error, _req: Request, res: Response, _next:
          code: "VALIDATION_ERROR",
          details: process.env.NODE_ENV === "development" ? errorMessage : undefined,
       };
+      requestLogger.error(`Prisma validation error: ${errorMessage}`, {
+         source: "prisma",
+         code: "VALIDATION_ERROR",
+         statusCode: HttpStatusCodes.BAD_REQUEST,
+         stack: err.stack,
+         errorName: err.name,
+         details: { errorMessage },
+      });
       res.status(HttpStatusCodes.BAD_REQUEST).json(response);
       return;
    }
@@ -303,6 +335,14 @@ export const errorMiddleware = (err: Error, _req: Request, res: Response, _next:
          source: "prisma",
          code: "DB_CONNECTION_ERROR",
       };
+      requestLogger.error(`Database connection error: ${err.message}`, {
+         source: "prisma",
+         code: "DB_CONNECTION_ERROR",
+         statusCode: HttpStatusCodes.SERVICE_UNAVAILABLE,
+         stack: err.stack,
+         errorName: err.name,
+         details: { errorCode: err.errorCode },
+      });
       res.status(HttpStatusCodes.SERVICE_UNAVAILABLE).json(response);
       return;
    }
@@ -314,6 +354,13 @@ export const errorMiddleware = (err: Error, _req: Request, res: Response, _next:
          source: "prisma",
          code: "DB_PANIC_ERROR",
       };
+      requestLogger.error(`Critical database error: ${err.message}`, {
+         source: "prisma",
+         code: "DB_PANIC_ERROR",
+         statusCode: HttpStatusCodes.INTERNAL_SERVER_ERROR,
+         stack: err.stack,
+         errorName: err.name,
+      });
       res.status(HttpStatusCodes.INTERNAL_SERVER_ERROR).json(response);
       return;
    }
@@ -323,5 +370,11 @@ export const errorMiddleware = (err: Error, _req: Request, res: Response, _next:
       message: err.message || "Internal server error",
       source: "system",
    };
+   requestLogger.error(`System error: ${err.message || "Unknown error"}`, {
+      source: "system",
+      statusCode: HttpStatusCodes.INTERNAL_SERVER_ERROR,
+      stack: err.stack,
+      errorName: err.name,
+   });
    res.status(HttpStatusCodes.INTERNAL_SERVER_ERROR).json(response);
 };

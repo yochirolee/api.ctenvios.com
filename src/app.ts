@@ -3,8 +3,10 @@ import helmet from "helmet";
 import cors from "cors";
 import router from "./routes/router";
 import { errorMiddleware } from "./middlewares/error.middleware";
+import { httpLoggerMiddleware } from "./middlewares/http-logger.middleware";
 import morgan from "morgan";
 import compression from "compression";
+import { logger } from "./utils/logger";
 
 const app: Application = express();
 
@@ -30,8 +32,17 @@ const corsOptions = {
       }
    },
    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-   allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"],
-   exposedHeaders: ["Content-Length", "X-Request-Id"],
+   allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "Accept",
+      "Origin",
+      "electric-offset",
+      "electric-handle",
+      "electric-schema",
+   ],
+   exposedHeaders: ["Content-Length", "X-Request-Id", "electric-offset", "electric-handle", "electric-schema"],
    credentials: true,
    preflightContinue: false,
    optionsSuccessStatus: 204, // Some legacy browsers choke on 204
@@ -47,6 +58,9 @@ app.use(
 app.use(morgan("dev"));
 app.use(compression());
 app.use(express.urlencoded({ extended: true }));
+
+// HTTP Logger - logs all requests to database
+app.use(httpLoggerMiddleware);
 
 // Health check endpoint
 app.get("/health", (req, res) => {

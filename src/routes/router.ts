@@ -17,6 +17,9 @@ import products_routes from "./products.routes";
 import shippingRatesRoutes from "./shipping.rates.routes";
 import trackingRoutes from "./tracking.routes";
 import dispatchRoutes from "./dispatch.routes";
+import electricRoutes from "./electric.routes";
+import configRoutes from "./logs.config.routes";
+import logsRoutes from "./logs.routes";
 
 const router = Router();
 
@@ -41,4 +44,7 @@ router.use("/products", authMiddleware, products_routes);
 router.use("/shipping-rates", authMiddleware, shippingRatesRoutes);
 router.use("/dispatches", authMiddleware, dispatchRoutes);
 router.use("/tracking", trackingRoutes);
+router.use("/electric", authMiddleware, electricRoutes);
+router.use("/config", configRoutes);
+router.use("/logs", logsRoutes);
 export default router;

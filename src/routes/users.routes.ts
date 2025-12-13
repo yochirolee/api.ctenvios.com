@@ -1,9 +1,10 @@
-import { Router, Response } from "express";
+import { Router, Response, response } from "express";
 import { auth } from "../lib/auth";
 import { fromNodeHeaders } from "better-auth/node";
 import prisma from "../lib/prisma.client";
-import { authMiddleware } from "../middlewares/auth.middleware";
+import { authMiddleware, requireRoles } from "../middlewares/auth.middleware";
 import { Roles } from "@prisma/client";
+import { resend } from "../services/resend.service";
 
 const router = Router();
 
@@ -136,37 +137,42 @@ router.post("/sign-in/email", async (req, res) => {
       return res.status(400).json({ message: "Email and password are required" });
    }
 
-   try {
-      // signInEmail returns { token, user } when successful
-      const response = await auth.api.signInEmail({
-         body: { email, password },
-         headers: fromNodeHeaders(req.headers),
-      });
+   // signInEmail returns { token, user } when successful
+   const response = await auth.api.signInEmail({
+      body: { email, password },
+      headers: fromNodeHeaders(req.headers),
+   });
 
-      // Use the token to get the full session
-      const sessionHeaders = new Headers();
-      sessionHeaders.set("Authorization", `Bearer ${response.token}`);
-
-      const session = await auth.api.getSession({
-         headers: sessionHeaders,
-      });
-      const agency = await prisma.agency.findUnique({
-         where: {
-            id: session?.user.agency_id ?? 0,
-         },
-      });
-
-      res.status(200).json({
-         ...session,
-         agency,
-      });
-   } catch (error) {
-      console.error("Sign-in error:", error);
-      res.status(500).json({
-         error: "Login failed",
-         message: error instanceof Error ? error.message : "Unknown error",
-      });
+   if (!response?.token) {
+      return res.status(401).json({ message: "Invalid email or password" });
    }
+
+   // Use the token to get the full session
+   const sessionHeaders = fromNodeHeaders({
+      ...req.headers,
+      authorization: `Bearer ${response.token}`,
+   });
+
+   const session = await auth.api.getSession({
+      headers: sessionHeaders,
+   });
+
+   if (!session?.user) {
+      return res.status(401).json({ message: "Failed to retrieve user session" });
+   }
+
+   const agency = session.user.agency_id
+      ? await prisma.agency.findUnique({
+           where: {
+              id: session.user.agency_id,
+           },
+        })
+      : null;
+
+   res.status(200).json({
+      ...session,
+      agency,
+   });
 });
 
 router.get("/get-session", async (req, res) => {
@@ -186,35 +192,23 @@ router.post("/forgot-password", async (req, res) => {
 });
 
 router.post("/reset-password", async (req, res) => {
-   const { password, token } = req.body;
+   const { password } = req.body;
+   const resendResponse = await resend.emails.send({
+      from: "soporte@api.ctenvios.com",
+      to: "yleecruz@gmail.com",
+      subject: "Reset your password now!",
+      html: `<strong>it Works</strong> `,
+   });
+   console.log(resendResponse);
+   if (resendResponse.error) {
+      return res.status(500).json({ message: "Error sending email" });
+   }
    const response = await auth.api.resetPassword({
       headers: fromNodeHeaders(req.headers),
-      body: { newPassword: password, token },
+      body: { newPassword: password },
    });
    res.status(200).json(response);
 });
-
-/* router.post("/admin/change-password", async (req, res) => {
-	const { email, password } = req.body;
-	const user = await prisma.user.findUnique({
-		where: {
-			email,
-		},
-	});
-	const userId = user?.id;
-	if (!userId) {
-		return res.status(400).json({ message: "User not found" });
-	}
-	const data = await auth.api..setUserPassword({
-		body: {
-			newPassword: password,
-
-			userId: userId || "",
-		},
-		headers: fromNodeHeaders(req.headers),
-	});
-	res.status(200).json(data);
-}); */
 
 router.post("/sign-out", async (req, res) => {
    const user = await auth.api.signOut({

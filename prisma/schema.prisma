@@ -41,6 +41,7 @@ model User {
     paid_dispatches     Dispatch[]     @relation("paid_by")
     parcels             Parcel[]
     parcels_events      ParcelEvent[]
+    app_logs            AppLog[]
 
     @@index([agency_id, role])
     @@map("user")
@@ -740,7 +741,53 @@ model Verification {
     @@map("verification")
 }
 
-// --- ENUMS ---
+
+
+model AppLog {
+    id          Int      @id @default(autoincrement())
+    level       LogLevel @default(INFO)
+    message     String
+    source      String // "prisma" | "zod" | "application" | "system" | "http" | "auth" | "database"
+    code        String?
+    status_code Int?
+    details     Json?
+    stack       String?
+    path        String?
+    method      String?
+    ip_address  String?
+    user_agent  String?
+    user_id     String?
+    user_email  String?
+    user        User?    @relation(fields: [user_id], references: [id], onDelete: SetNull)
+    created_at  DateTime @default(now())
+
+    @@index([level, created_at(sort: Desc)])
+    @@index([source, created_at(sort: Desc)])
+    @@index([status_code, created_at(sort: Desc)])
+    @@index([user_id, created_at(sort: Desc)])
+    @@index([path, created_at(sort: Desc)])
+    @@index([created_at(sort: Desc)])
+    @@map("app_log")
+}
+
+model AppConfig {
+    id          Int      @id @default(autoincrement())
+    key         String   @unique
+    value       String
+    description String?
+    updated_at  DateTime @default(now()) @updatedAt
+    updated_by  String?
+
+    @@map("app_config")
+}
+
+enum LogLevel {
+    ERROR
+    WARN
+    INFO
+    HTTP
+    DEBUG
+}
 
 enum AgencyType {
     AGENCY

@@ -15,6 +15,7 @@ const analytics_controller_1 = __importDefault(require("./analytics.controller")
 const partners_controller_1 = __importDefault(require("./partners.controller"));
 const orders_controller_1 = __importDefault(require("./orders.controller"));
 const shipping_rates_controller_1 = __importDefault(require("./shipping.rates.controller"));
+const config_controller_1 = __importDefault(require("./config.controller"));
 const controllers = {
     agencies: agencies_controller_1.default,
     providers: providers_controller_1.default,
@@ -28,5 +29,6 @@ const controllers = {
     partners: partners_controller_1.default,
     orders: orders_controller_1.default,
     shippingRates: shipping_rates_controller_1.default,
+    config: config_controller_1.default,
 };
 exports.default = controllers;

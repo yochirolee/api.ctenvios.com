@@ -6,10 +6,12 @@ import customers from "./customers.controller";
 import provinces from "./provinces.controller";
 import receivers from "./receivers.controller";
 import customsRates from "./customs.rates.controller";
-import  analytics  from "./analytics.controller";
+import analytics from "./analytics.controller";
 import partners from "./partners.controller";
 import orders from "./orders.controller";
 import shippingRates from "./shipping.rates.controller";
+import config from "./config.controller";
+import logs from "./logs.controller";
 
 const controllers = {
    agencies,
@@ -24,6 +26,8 @@ const controllers = {
    partners,
    orders,
    shippingRates,
+   config,
+   logs,
 };
 
 export default controllers;

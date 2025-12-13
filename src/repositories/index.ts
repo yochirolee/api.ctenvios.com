@@ -6,7 +6,7 @@ import customers from "./customers.repository";
 import provinces from "./provinces.repository";
 import receivers from "./receivers.repository";
 import customsRates from "./customs.rates.repository";
-import  analytics  from "./analytics.repository";
+import analytics from "./analytics.repository";
 import partners from "./partners.repository";
 import orders from "./orders.repository";
 import payments from "./payments.repository";
@@ -14,6 +14,7 @@ import products from "./products.repository";
 import shippingRates from "./shipping.rates.repository";
 import dispatch from "./dispatch.repository";
 import parcels from "./parcels.repository";
+import appLogs from "./app-logs.repository";
 export const repository = {
    agencies,
    providers,
@@ -31,6 +32,7 @@ export const repository = {
    shippingRates,
    dispatch,
    parcels,
+   appLogs,
 };
 
 export default repository;

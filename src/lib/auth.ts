@@ -19,14 +19,15 @@ export const auth = betterAuth({
 
    emailAndPassword: {
       enabled: true,
-      sendResetPassword: async ({ user, url, token }, Request) => {
+      sendResetPassword: async ({ user, url, token }, request) => {
          await resend.emails.send({
             from: "soporte@ctenvios.com",
-            to: user.email,
+            to: "yleecruz@gmail.com",
             subject: "Reset your password now!",
             html: `<strong>it Works</strong> ${url}/reset-password?token=${token}`,
          });
       },
+
       forgotPassword: {
          enabled: true,
       },

@@ -12,8 +12,6 @@ const forwarderSchema = z.object({
    address: z.string().min(1),
 });
 
-const providersIdsSchema = z.array(z.number()).optional();
-
 export const forwarders = {
    getAll: async (req: Request, res: Response) => {
       const forwarders = await repository.forwarders.getAll();
