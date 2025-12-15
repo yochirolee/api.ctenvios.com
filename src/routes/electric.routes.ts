@@ -24,6 +24,8 @@ router.get("/shape", async (req, res) => {
 
    const response = await fetch(url);
 
+   console.log("response headers", response);
+
    // Forward ALL headers from Electric service response
    // This must be done before calling res.json() or res.send()
    response.headers.forEach((value, key) => {

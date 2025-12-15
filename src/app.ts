@@ -6,7 +6,6 @@ import { errorMiddleware } from "./middlewares/error.middleware";
 import { httpLoggerMiddleware } from "./middlewares/http-logger.middleware";
 import morgan from "morgan";
 import compression from "compression";
-import { logger } from "./utils/logger";
 
 const app: Application = express();
 

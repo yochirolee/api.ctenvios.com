@@ -12,6 +12,7 @@ import orders from "./orders.controller";
 import shippingRates from "./shipping.rates.controller";
 import config from "./config.controller";
 import logs from "./logs.controller";
+import issues from "./issues.controller";
 
 const controllers = {
    agencies,
@@ -28,6 +29,7 @@ const controllers = {
    shippingRates,
    config,
    logs,
+   issues,
 };
 
 export default controllers;

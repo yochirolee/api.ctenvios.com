@@ -60,7 +60,7 @@ services:
          DATABASE_URL: postgresql://${POSTGRES_USER:-ctenvios}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ctenvios}
          ELECTRIC_INSECURE: ${ELECTRIC_INSECURE:-true}
       ports:
-         - "3006:3001"
+         - "3006:3000"
       depends_on:
          postgres:
             condition: service_healthy

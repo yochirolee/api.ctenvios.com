@@ -20,6 +20,7 @@ import dispatchRoutes from "./dispatch.routes";
 import electricRoutes from "./electric.routes";
 import configRoutes from "./logs.config.routes";
 import logsRoutes from "./logs.routes";
+import issuesRoutes from "./issues.routes";
 
 const router = Router();
 
@@ -47,4 +48,5 @@ router.use("/tracking", trackingRoutes);
 router.use("/electric", authMiddleware, electricRoutes);
 router.use("/config", configRoutes);
 router.use("/logs", logsRoutes);
+router.use("/issues", authMiddleware, issuesRoutes);
 export default router;

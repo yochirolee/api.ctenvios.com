@@ -13,35 +13,40 @@ datasource db {
 // --- MODELOS PRINCIPALES (CORE) ---
 
 model User {
-    id                  String         @id @default(uuid())
+    id                  String            @id @default(uuid())
     name                String
-    email               String         @unique
-    emailVerified       Boolean        @default(false)
+    email               String            @unique
+    emailVerified       Boolean           @default(false)
     phone               String?
     image               String?
-    createdAt           DateTime       @default(now())
-    updatedAt           DateTime       @updatedAt
+    createdAt           DateTime          @default(now())
+    updatedAt           DateTime          @updatedAt
     created_by          String?
     forwarder_id        Int?
-    forwarder           Forwarder?     @relation(fields: [forwarder_id], references: [id])
+    forwarder           Forwarder?        @relation(fields: [forwarder_id], references: [id])
     agency_id           Int?
-    agency              Agency?        @relation(fields: [agency_id], references: [id], onDelete: Cascade)
-    role                Roles          @default(AGENCY_SALES)
+    agency              Agency?           @relation(fields: [agency_id], references: [id], onDelete: Cascade)
+    role                Roles             @default(AGENCY_SALES)
     payments            Payment[]
     discounts           Discount[]
     sessions            Session[]
     accounts            Account[]
-    banned              Boolean?       @default(false)
+    banned              Boolean?          @default(false)
     banReason           String?
     banExpires          DateTime?
-    orders              Order[]        @relation("user")
+    orders              Order[]           @relation("user")
     order_history       OrderHistory[]
-    created_dispatches  Dispatch[]     @relation("created_by")
-    received_dispatches Dispatch[]     @relation("received_by")
-    paid_dispatches     Dispatch[]     @relation("paid_by")
+    created_dispatches  Dispatch[]        @relation("created_by")
+    received_dispatches Dispatch[]        @relation("received_by")
+    paid_dispatches     Dispatch[]        @relation("paid_by")
     parcels             Parcel[]
     parcels_events      ParcelEvent[]
     app_logs            AppLog[]
+    created_issues      Issue[]           @relation("created_issues")
+    assigned_issues     Issue[]           @relation("assigned_issues")
+    resolved_issues     Issue[]           @relation("resolved_issues")
+    issue_comments      IssueComment[]
+    issue_attachments   IssueAttachment[]
 
     @@index([agency_id, role])
     @@map("user")
@@ -81,6 +86,7 @@ model Agency {
     created_dispatches  Dispatch[]     @relation("created_dispatches")
     received_dispatches Dispatch[]     @relation("received_dispatches")
     parcels             Parcel[]
+    issues              Issue[]
 
     @@index([forwarder_id, is_active])
     @@index([parent_agency_id])
@@ -169,6 +175,7 @@ model Order {
     status                 Status         @default(IN_AGENCY)
     partner                Partner?       @relation(fields: [partner_id], references: [id])
     partner_id             Int?
+    issues                 Issue[]
 
     @@index([agency_id, created_at(sort: Desc)]) // 🔥 MÁS IMPORTANTE
     @@index([created_at(sort: Desc)]) // Para admins
@@ -208,6 +215,7 @@ model OrderItem {
     order_id               Int
     parcel_id              Int
     parcel                 Parcel        @relation(fields: [parcel_id], references: [id])
+    issues                 Issue[]
 
     @@index([order_id])
     @@index([hbl])
@@ -237,6 +245,8 @@ model Parcel {
     dispatch            Dispatch?     @relation(fields: [dispatch_id], references: [id])
     user_id             String
     user                User          @relation(fields: [user_id], references: [id])
+    issues              Issue[]
+    issue_parcels       IssueParcel[] // Parcels afectados en issues
 
     @@index([tracking_number])
     @@index([dispatch_id]) // Add this for faster dispatch queries
@@ -741,8 +751,7 @@ model Verification {
     @@map("verification")
 }
 
-
-
+// --- MODELOS DE LOGGING ---
 model AppLog {
     id          Int      @id @default(autoincrement())
     level       LogLevel @default(INFO)
@@ -788,6 +797,8 @@ enum LogLevel {
     HTTP
     DEBUG
 }
+
+//END MODELOS DE LOGGING ---
 
 enum AgencyType {
     AGENCY
@@ -909,4 +920,130 @@ enum CityType {
     SPECIAL
     CAPITAL
     CITY
+}
+
+// --- MODELOS DE INCIDENCIAS Y RECLAMACIONES ---
+
+model Issue {
+    id          Int           @id @default(autoincrement())
+    title       String
+    description String
+    type        IssueType     @default(COMPLAINT)
+    priority    IssuePriority @default(MEDIUM)
+    status      IssueStatus   @default(OPEN)
+
+    // Relación con Order o Parcel (uno u otro, no ambos)
+    order_id       Int?
+    order          Order?     @relation(fields: [order_id], references: [id], onDelete: Cascade)
+    parcel_id      Int?
+    parcel         Parcel?    @relation(fields: [parcel_id], references: [id], onDelete: Cascade)
+    order_item_hbl String? // Para incidencias específicas de un item
+    order_item     OrderItem? @relation(fields: [order_item_hbl], references: [hbl], onDelete: SetNull)
+
+    // Usuario que crea la incidencia
+    created_by_id String
+    created_by    User   @relation("created_issues", fields: [created_by_id], references: [id])
+
+    // Usuario asignado para resolver (opcional)
+    assigned_to_id String?
+    assigned_to    User?   @relation("assigned_issues", fields: [assigned_to_id], references: [id], onDelete: SetNull)
+
+    // Agencia relacionada
+    agency_id Int
+    agency    Agency @relation(fields: [agency_id], references: [id], onDelete: Cascade)
+
+    // Relaciones
+    comments         IssueComment[]
+    attachments      IssueAttachment[]
+    affected_parcels IssueParcel[] // Parcels afectados por esta issue
+
+    // Metadata
+    resolved_at      DateTime?
+    resolved_by_id   String?
+    resolved_by      User?     @relation("resolved_issues", fields: [resolved_by_id], references: [id], onDelete: SetNull)
+    resolution_notes String?
+
+    created_at DateTime @default(now())
+    updated_at DateTime @updatedAt
+
+    @@index([order_id, created_at(sort: Desc)])
+    @@index([parcel_id, created_at(sort: Desc)])
+    @@index([order_item_hbl])
+    @@index([status, created_at(sort: Desc)])
+    @@index([agency_id, status])
+    @@index([created_by_id, created_at(sort: Desc)])
+    @@index([assigned_to_id, status])
+    @@index([created_at(sort: Desc)])
+}
+
+model IssueComment {
+    id          Int      @id @default(autoincrement())
+    issue_id    Int
+    issue       Issue    @relation(fields: [issue_id], references: [id], onDelete: Cascade)
+    user_id     String
+    user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+    content     String
+    is_internal Boolean  @default(false) // Si es true, solo visible para staff
+    created_at  DateTime @default(now())
+    updated_at  DateTime @updatedAt
+
+    @@index([issue_id, created_at(sort: Asc)])
+    @@index([user_id])
+}
+
+model IssueAttachment {
+    id             Int      @id @default(autoincrement())
+    issue_id       Int
+    issue          Issue    @relation(fields: [issue_id], references: [id], onDelete: Cascade)
+    file_url       String // URL del archivo (S3, Cloudinary, etc.)
+    file_name      String
+    file_type      String // MIME type: image/jpeg, image/png, application/pdf, etc.
+    file_size      Int? // Tamaño en bytes
+    uploaded_by_id String
+    uploaded_by    User     @relation(fields: [uploaded_by_id], references: [id], onDelete: Cascade)
+    description    String? // Descripción opcional de la imagen
+    created_at     DateTime @default(now())
+
+    @@index([issue_id, created_at(sort: Desc)])
+    @@index([uploaded_by_id])
+}
+
+// Tabla de relación many-to-many para parcels afectados por una issue
+model IssueParcel {
+    id         Int      @id @default(autoincrement())
+    issue_id   Int
+    issue      Issue    @relation(fields: [issue_id], references: [id], onDelete: Cascade)
+    parcel_id  Int
+    parcel     Parcel   @relation(fields: [parcel_id], references: [id], onDelete: Cascade)
+    created_at DateTime @default(now())
+
+    @@unique([issue_id, parcel_id]) // Evitar duplicados
+    @@index([issue_id])
+    @@index([parcel_id])
+}
+
+enum IssueType {
+    COMPLAINT // Reclamación
+    DAMAGE // Daño
+    LOSS // Pérdida
+    DELAY // Retraso
+    WRONG_ITEM // Artículo incorrecto
+    MISSING_ITEM // Artículo faltante
+    OTHER // Otro
+}
+
+enum IssuePriority {
+    LOW
+    MEDIUM
+    HIGH
+    URGENT
+}
+
+enum IssueStatus {
+    OPEN // Abierta
+    IN_PROGRESS // En progreso
+    PENDING // Pendiente de información
+    RESOLVED // Resuelta
+    CLOSED // Cerrada
+    CANCELLED // Cancelada
 }

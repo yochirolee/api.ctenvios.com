@@ -15,6 +15,7 @@ import shippingRates from "./shipping.rates.repository";
 import dispatch from "./dispatch.repository";
 import parcels from "./parcels.repository";
 import appLogs from "./app-logs.repository";
+import issues from "./issues.repository";
 export const repository = {
    agencies,
    providers,
@@ -33,6 +34,7 @@ export const repository = {
    dispatch,
    parcels,
    appLogs,
+   issues,
 };
 
 export default repository;
