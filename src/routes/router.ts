@@ -21,6 +21,7 @@ import electricRoutes from "./electric.routes";
 import configRoutes from "./logs.config.routes";
 import logsRoutes from "./logs.routes";
 import issuesRoutes from "./issues.routes";
+import parcelsRoutes from "./parcels.routes";
 
 const router = Router();
 
@@ -49,4 +50,5 @@ router.use("/electric", authMiddleware, electricRoutes);
 router.use("/config", configRoutes);
 router.use("/logs", logsRoutes);
 router.use("/issues", authMiddleware, issuesRoutes);
+router.use("/parcels", authMiddleware, parcelsRoutes);
 export default router;

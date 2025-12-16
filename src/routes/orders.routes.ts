@@ -17,7 +17,10 @@ router.get("/:id/hbls-pdf", controllers.orders.generateOrderHblPdf);
 // GET /orders - List and search orders (RESTful pattern)
 router.get("/", authMiddleware, validate({ query: searchSchema }), controllers.orders.search);
 
+// GET /orders/:id/parcels - Get parcels by order ID
+router.get("/:id/parcels", authMiddleware, controllers.orders.getParcelsByOrderId);
 // GET /orders/:id - Get order by ID
+
 router.get("/:id", authMiddleware, controllers.orders.getById);
 
 // POST /orders - Create new order

@@ -16,6 +16,27 @@ const orders = {
    getById: async (id: number) => {
       return await prisma.order.findUnique({ where: { id }, include: { order_items: true } });
    },
+   getParcelsByOrderId: async (orderId: number) => {
+      return await prisma.order.findUnique({
+         where: { id: orderId },
+         include: {
+            agency: true,
+            customer: true,
+            receiver: {
+               include: {
+                  province: true,
+                  city: true,
+               },
+            },
+            service: true,
+            parcels: true,
+            payments: true,
+            discounts: true,
+            issues: true,
+            user: true,
+         },
+      });
+   },
    getByIdWithDetails: async (id: number): Promise<OrderPdfDetails | null> => {
       console.log("getByIdWithDetails", id);
       return await prisma.order.findUnique({

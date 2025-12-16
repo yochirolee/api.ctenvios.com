@@ -14,20 +14,30 @@ const corsOptions = {
    origin: function (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
       const allowedOrigins = [
          "http://localhost:5173",
+         "http://localhost:5174",
          "http://localhost:3000",
          "https://api-ctenvios-com.vercel.app",
          "https://dev.ctenvios.com",
-         "https://systemcaribetravel.com/",
+         "https://systemcaribetravel.com",
          "http://192.168.1.157",
       ];
 
       // Allow requests with no origin (like mobile apps, Postman, etc.)
       if (!origin) return callback(null, true);
 
-      if (allowedOrigins.indexOf(origin) !== -1) {
+      // Normalize origin by removing trailing slash for comparison
+      const normalizedOrigin = origin.replace(/\/$/, "");
+      const normalizedAllowedOrigins = allowedOrigins.map((o) => o.replace(/\/$/, ""));
+
+      if (normalizedAllowedOrigins.indexOf(normalizedOrigin) !== -1) {
          callback(null, true);
       } else {
-         callback(new Error("Not allowed by CORS"));
+         // Log rejected origin for debugging (only in development)
+         if (process.env.NODE_ENV === "development") {
+            console.warn(`[CORS] Rejected origin: ${origin}`);
+            console.warn(`[CORS] Allowed origins:`, normalizedAllowedOrigins);
+         }
+         callback(new Error(`Not allowed by CORS. Origin: ${origin}`));
       }
    },
    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],

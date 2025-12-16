@@ -280,6 +280,16 @@ export const ordersController = {
          next(error);
       }
    },
+   getParcelsByOrderId: async (req: any, res: Response, next: NextFunction): Promise<void> => {
+      try {
+         const { id } = req.params;
+         const orderId = parseInt(id);
+         const parcels = await repository.orders.getParcelsByOrderId(orderId);
+         res.status(200).json(parcels);
+      } catch (error) {
+         next(error);
+      }
+   },
    payOrder: async (req: any, res: Response, next: NextFunction): Promise<void> => {
       try {
          const paymentData = req.body;
