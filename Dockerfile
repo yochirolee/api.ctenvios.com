@@ -1,32 +1,32 @@
 # ========= STAGE 1: BUILDER =========
 FROM node:22-alpine AS builder
 
-# Para Prisma (openssl)
+# Prisma needs OpenSSL on Alpine
 RUN apk add --no-cache openssl
 
 WORKDIR /app
 
-# 1) Copiar solo lo necesario para instalar deps y cachear bien
+# 1) Copy dependency manifests first for better caching
 COPY package.json package-lock.json* ./
-COPY prisma ./prisma
-COPY prisma.config.* ./  
 
-# 2) Definir un DATABASE_URL DUMMY solo para el build (para prisma generate)
-# No necesita apuntar a una base real, solo ser una URL válida.
+# 2) Copy Prisma schema/config early (so generate can run)
+COPY prisma ./prisma
+COPY prisma.config.* ./
+
+# 3) Dummy DATABASE_URL only for build-time `prisma generate`
+# (Generate does NOT need a real DB connection, but Prisma config validation needs a valid URL)
 ENV DATABASE_URL="postgresql://user:pass@localhost:5432/dummy"
 
-# 3) Instalar TODAS las dependencias (incluyendo devDependencies)
-# Asegúrate de que en package.json ya NO tienes "postinstall": "prisma generate"
+# 4) Install ALL deps (incl devDeps) to build
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
-# 4) Generar Prisma Client (usa schema + prisma.config.ts)
+# 5) Generate Prisma Client at build time
 RUN npx prisma generate
 
-# 5) Copiar el resto del código
+# 6) Copy the rest of the source and build
 COPY . .
-
-# 6) Build de TypeScript (asumo que genera dist/server.js)
 RUN npm run build
+
 
 # ========= STAGE 2: PRODUCTION =========
 FROM node:22-alpine AS production
@@ -36,38 +36,42 @@ RUN apk add --no-cache openssl
 WORKDIR /app
 ENV NODE_ENV=production
 
-# 1) Copiar node_modules desde el builder (incluye @prisma/client generado)
-COPY --from=builder /app/node_modules ./node_modules
-
-# 2) Copiar package.json
+# 1) Install PROD deps only
+# Copy lockfiles so npm ci can reproduce exact versions
 COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/package-lock.json ./package-lock.json
+RUN npm ci --omit=dev && npm cache clean --force
 
-# 3) Copiar prisma (schema + migrations)
+# 2) Copy Prisma artifacts needed at runtime
+# - schema + migrations for migrate deploy
+# - prisma.config.* for Prisma 7 config
 COPY --from=builder /app/prisma ./prisma
-
-# 3.1) Copiar prisma.config (ts/js) para Prisma 7 (migrate deploy, studio, etc.)
 COPY --from=builder /app/prisma.config.* ./
 
-# 4) Copiar el build compilado
-COPY --from=builder /app/dist ./dist
+# 3) Copy generated Prisma Client from builder
+# (it lives inside node_modules; copy only what’s necessary)
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
-# 5) Copiar assets si los usas en runtime
+# 4) Copy built app output + runtime assets
+COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/assets ./assets
 
-# (Opcional) Seeds TS u otros scripts que usen el código fuente
-COPY --from=builder /app/src ./src
-COPY --from=builder /app/tsconfig.json ./tsconfig.json
+# 5) Entry point: run migrations on startup (recommended for VPS/prod)
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# Usuario no root
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001 && \
-    chown -R nodejs:nodejs /app
+# Non-root user
+RUN addgroup -g 1001 -S nodejs \
+    && adduser -S nodejs -u 1001 \
+    && chown -R nodejs:nodejs /app
 USER nodejs
 
 EXPOSE 3000
 
-# Healthcheck opcional
+# Optional healthcheck (adjust /health path if needed)
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-    CMD node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+    CMD node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)}).on('error', () => process.exit(1))"
 
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["node", "dist/server.js"]
