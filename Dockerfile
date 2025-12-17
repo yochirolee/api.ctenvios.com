@@ -1,68 +1,73 @@
 # ========= STAGE 1: BUILDER =========
 FROM node:22-alpine AS builder
 
+# Para Prisma (openssl)
 RUN apk add --no-cache openssl
+
 WORKDIR /app
 
-# Cache deps
+# 1) Copiar solo lo necesario para instalar deps y cachear bien
 COPY package.json package-lock.json* ./
-
-# Copy Prisma files early
 COPY prisma ./prisma
-COPY prisma.config.* ./
+COPY prisma.config.* ./  
 
-# Dummy DATABASE_URL for prisma generate at build time
+# 2) Definir un DATABASE_URL DUMMY solo para el build (para prisma generate)
+# No necesita apuntar a una base real, solo ser una URL válida.
 ENV DATABASE_URL="postgresql://user:pass@localhost:5432/dummy"
 
-# Install all deps (incl devDeps)
+# 3) Instalar TODAS las dependencias (incluyendo devDependencies)
+# Asegúrate de que en package.json ya NO tienes "postinstall": "prisma generate"
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
-# Generate Prisma Client (build-time)
+# 4) Generar Prisma Client (usa schema + prisma.config.ts)
 RUN npx prisma generate
 
-# Copy source + build
+# 5) Copiar el resto del código
 COPY . .
-RUN npm run build
 
+# 6) Build de TypeScript (asumo que genera dist/server.js)
+RUN npm run build
 
 # ========= STAGE 2: PRODUCTION =========
 FROM node:22-alpine AS production
 
 RUN apk add --no-cache openssl
+
 WORKDIR /app
 ENV NODE_ENV=production
 
-# 0) Copy Prisma schema/config BEFORE npm ci (helps if any scripts ever run)
+# 1) Copiar node_modules desde el builder (incluye @prisma/client generado)
+COPY --from=builder /app/node_modules ./node_modules
+
+# 2) Copiar package.json
+COPY --from=builder /app/package.json ./package.json
+
+# 3) Copiar prisma (schema + migrations)
 COPY --from=builder /app/prisma ./prisma
+
+# 3.1) Copiar prisma.config (ts/js) para Prisma 7 (migrate deploy, studio, etc.)
 COPY --from=builder /app/prisma.config.* ./
 
-# 1) Install PROD deps only, but SKIP scripts (avoids postinstall prisma generate)
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/package-lock.json ./package-lock.json
-RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
-
-# 2) Copy generated Prisma Client artifacts from builder
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-
-# 3) Copy built output + assets
+# 4) Copiar el build compilado
 COPY --from=builder /app/dist ./dist
+
+# 5) Copiar assets si los usas en runtime
 COPY --from=builder /app/assets ./assets
 
-# 4) Entrypoint to apply migrations on startup (recommended)
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+# (Opcional) Seeds TS u otros scripts que usen el código fuente
+COPY --from=builder /app/src ./src
+COPY --from=builder /app/tsconfig.json ./tsconfig.json
 
-# Non-root
-RUN addgroup -g 1001 -S nodejs \
-    && adduser -S nodejs -u 1001 \
-    && chown -R nodejs:nodejs /app
+# Usuario no root
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001 && \
+    chown -R nodejs:nodejs /app
 USER nodejs
 
 EXPOSE 3000
 
+# Healthcheck opcional
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-    CMD node -e "require('http').get('http://localhost:3000/health', (r) => process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+    CMD node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
-ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["node", "dist/server.js"]
