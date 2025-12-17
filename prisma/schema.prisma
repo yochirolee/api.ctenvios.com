@@ -85,6 +85,7 @@ model Agency {
     counters            Counter[]
     partners            Partner[]
     issues              Issue[]
+    legacy_issues       LegacyIssue[]  @relation("legacy_issues")
     agency_type         AgencyType     @default(AGENCY)
     is_active           Boolean        @default(false)
     commission_rate     Float?         @default(0.0)
@@ -1053,6 +1054,10 @@ model LegacyIssue {
     assigned_to_id String?
     assigned_to    User?   @relation("assigned_legacy_issues", fields: [assigned_to_id], references: [id], onDelete: SetNull)
 
+    // Agencia relacionada (del usuario creador)
+    agency_id Int?
+    agency    Agency? @relation("legacy_issues", fields: [agency_id], references: [id], onDelete: SetNull)
+
     // Relaciones
     comments         LegacyIssueComment[]
     attachments      LegacyIssueAttachment[]
@@ -1072,6 +1077,7 @@ model LegacyIssue {
     @@index([legacy_parcel_id])
     @@index([legacy_hbl])
     @@index([status, created_at(sort: Desc)])
+    @@index([agency_id, status])
     @@index([created_by_id, created_at(sort: Desc)])
     @@index([assigned_to_id, status])
     @@index([created_at(sort: Desc)])

@@ -12,6 +12,7 @@ interface CreateLegacyIssueData {
    legacy_hbl?: string;
    affected_parcel_ids?: Array<number | { legacy_parcel_id: string; legacy_order_id?: number }>; // Parcels afectados del sistema legacy (acepta números o objetos)
    created_by_id: string;
+   agency_id?: number; // Agencia del usuario creador
    assigned_to_id?: string;
 }
 
@@ -68,6 +69,11 @@ export const legacyIssues = {
          created_by: {
             connect: { id: data.created_by_id },
          },
+         agency: data.agency_id
+            ? {
+                 connect: { id: data.agency_id },
+              }
+            : undefined,
          assigned_to: data.assigned_to_id
             ? {
                  connect: { id: data.assigned_to_id },
@@ -168,6 +174,7 @@ export const legacyIssues = {
                   id: true,
                   name: true,
                   email: true,
+                  agency_id: true,
                },
             },
             assigned_to: {
@@ -217,6 +224,12 @@ export const legacyIssues = {
                   created_at: "asc",
                },
             },
+            agency: {
+               select: {
+                  id: true,
+                  name: true,
+               },
+            },
          },
       });
    },
@@ -233,6 +246,7 @@ export const legacyIssues = {
          priority?: IssuePriority;
          type?: IssueType;
          created_by_id?: string;
+         agency_id?: number; // Filtrar por agencia directamente
          assigned_to_id?: string;
          legacy_invoice_id?: number;
          legacy_order_id?: number;
@@ -256,6 +270,10 @@ export const legacyIssues = {
 
       if (filters?.created_by_id) {
          where.created_by_id = filters.created_by_id;
+      }
+
+      if (filters?.agency_id) {
+         where.agency_id = filters.agency_id;
       }
 
       if (filters?.assigned_to_id) {
@@ -294,6 +312,12 @@ export const legacyIssues = {
                      id: true,
                      name: true,
                      email: true,
+                  },
+               },
+               agency: {
+                  select: {
+                     id: true,
+                     name: true,
                   },
                },
                _count: {
@@ -355,6 +379,12 @@ export const legacyIssues = {
                   email: true,
                },
             },
+            agency: {
+               select: {
+                  id: true,
+                  name: true,
+               },
+            },
          },
       });
    },
@@ -374,6 +404,12 @@ export const legacyIssues = {
                   id: true,
                   name: true,
                   email: true,
+               },
+            },
+            agency: {
+               select: {
+                  id: true,
+                  name: true,
                },
             },
          },
@@ -487,9 +523,7 @@ export const legacyIssues = {
       });
    },
 
- 
-
-   getStats: async (filters?: { created_by_id?: string }) => {
+   getStats: async (filters?: { created_by_id?: string; agency_id?: number }) => {
       const now = new Date();
       const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
       const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -498,6 +532,10 @@ export const legacyIssues = {
       const where: Prisma.LegacyIssueWhereInput = {};
       if (filters?.created_by_id) {
          where.created_by_id = filters.created_by_id;
+      }
+
+      if (filters?.agency_id) {
+         where.agency_id = filters.agency_id;
       }
 
       const [total, byStatus, byPriority, byType, last24Hours, last7Days, last30Days, resolvedIssues] =

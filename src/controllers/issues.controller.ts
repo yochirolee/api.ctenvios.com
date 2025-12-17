@@ -124,8 +124,8 @@ const issues = {
          parcel_id?: number;
       } = {};
 
-      // RBAC: Solo admins pueden ver todas las incidencias
-      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
+      // RBAC: Solo ROOT, ADMINISTRATOR y CARRIER_ADMIN pueden ver todas las incidencias
+      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR, Roles.CARRIER_ADMIN];
       if (!allowedRoles.includes(user.role as Roles)) {
          filters.agency_id = user.agency_id;
       } else if (req.query.agency_id) {
@@ -201,8 +201,8 @@ const issues = {
          throw new AppError(HttpStatusCodes.NOT_FOUND, "Issue not found");
       }
 
-      // RBAC: Verificar permisos
-      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
+      // RBAC: Verificar permisos - ROOT, ADMINISTRATOR y CARRIER_ADMIN pueden ver todas las issues
+      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR, Roles.CARRIER_ADMIN];
       if (!allowedRoles.includes(user.role as Roles) && issue.agency_id !== user.agency_id) {
          throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to view this issue");
       }
@@ -229,7 +229,7 @@ const issues = {
       }
 
       // RBAC: Solo el creador, asignado o admin puede actualizar
-      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
+      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR, Roles.CARRIER_ADMIN];
       const canUpdate =
          allowedRoles.includes(user.role as Roles) ||
          issue.created_by_id === user.id ||
@@ -274,7 +274,7 @@ const issues = {
       }
 
       // RBAC: Solo el asignado o admin puede resolver
-      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
+      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR, Roles.CARRIER_ADMIN];
       const canResolve = allowedRoles.includes(user.role as Roles) || issue.assigned_to_id === user.id;
 
       if (!canResolve) {
@@ -306,7 +306,7 @@ const issues = {
       }
 
       // RBAC: Solo admin puede eliminar
-      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
+      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR, Roles.CARRIER_ADMIN];
       if (!allowedRoles.includes(user.role as Roles)) {
          throw new AppError(HttpStatusCodes.FORBIDDEN, "Only administrators can delete issues");
       }
@@ -342,8 +342,8 @@ const issues = {
          throw new AppError(HttpStatusCodes.NOT_FOUND, "Issue not found");
       }
 
-      // RBAC: Verificar permisos
-      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
+      // RBAC: Verificar permisos - ROOT, ADMINISTRATOR y CARRIER_ADMIN pueden comentar en todas las issues
+      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR, Roles.CARRIER_ADMIN];
       if (!allowedRoles.includes(user.role as Roles) && issue.agency_id !== user.agency_id) {
          throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to comment on this issue");
       }
@@ -374,8 +374,8 @@ const issues = {
          throw new AppError(HttpStatusCodes.NOT_FOUND, "Issue not found");
       }
 
-      // RBAC: Verificar permisos
-      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
+      // RBAC: Verificar permisos - ROOT, ADMINISTRATOR y CARRIER_ADMIN pueden ver todas las issues
+      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR, Roles.CARRIER_ADMIN];
       if (!allowedRoles.includes(user.role as Roles) && issue.agency_id !== user.agency_id) {
          throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to view this issue");
       }
@@ -403,7 +403,7 @@ const issues = {
       }
 
       // Solo admin puede eliminar comentarios
-      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
+      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR, Roles.CARRIER_ADMIN];
       if (!allowedRoles.includes(user.role as Roles)) {
          throw new AppError(HttpStatusCodes.FORBIDDEN, "Only administrators can delete comments");
       }
@@ -436,8 +436,8 @@ const issues = {
          throw new AppError(HttpStatusCodes.NOT_FOUND, "Issue not found");
       }
 
-      // RBAC: Verificar permisos
-      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
+      // RBAC: Verificar permisos - ROOT, ADMINISTRATOR y CARRIER_ADMIN pueden agregar attachments a todas las issues
+      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR, Roles.CARRIER_ADMIN];
       if (!allowedRoles.includes(user.role as Roles) && issue.agency_id !== user.agency_id) {
          throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to add attachments to this issue");
       }
@@ -471,8 +471,8 @@ const issues = {
          throw new AppError(HttpStatusCodes.NOT_FOUND, "Issue not found");
       }
 
-      // RBAC: Verificar permisos
-      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
+      // RBAC: Verificar permisos - ROOT, ADMINISTRATOR y CARRIER_ADMIN pueden ver todas las issues
+      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR, Roles.CARRIER_ADMIN];
       if (!allowedRoles.includes(user.role as Roles) && issue.agency_id !== user.agency_id) {
          throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to view this issue");
       }
@@ -497,7 +497,7 @@ const issues = {
       }
 
       // Solo admin puede eliminar attachments
-      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
+      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR, Roles.CARRIER_ADMIN];
       if (!allowedRoles.includes(user.role as Roles)) {
          throw new AppError(HttpStatusCodes.FORBIDDEN, "Only administrators can delete attachments");
       }
@@ -516,8 +516,8 @@ const issues = {
          throw new AppError(HttpStatusCodes.UNAUTHORIZED, "User not authenticated");
       }
 
-      // RBAC: Solo admins pueden ver todas las estadísticas
-      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
+      // RBAC: Solo ROOT, ADMINISTRATOR y CARRIER_ADMIN pueden ver todas las estadísticas
+      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR, Roles.CARRIER_ADMIN];
       const filters: { agency_id?: number } = {};
 
       if (!allowedRoles.includes(user.role as Roles)) {
