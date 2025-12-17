@@ -16,6 +16,7 @@ import dispatch from "./dispatch.repository";
 import parcels from "./parcels.repository";
 import appLogs from "./app-logs.repository";
 import issues from "./issues.repository";
+import legacyIssues from "./legacy-issues.repository";
 export const repository = {
    agencies,
    providers,
@@ -35,6 +36,7 @@ export const repository = {
    parcels,
    appLogs,
    issues,
+   legacyIssues,
 };
 
 export default repository;

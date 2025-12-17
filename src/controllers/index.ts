@@ -13,6 +13,7 @@ import shippingRates from "./shipping.rates.controller";
 import config from "./config.controller";
 import logs from "./logs.controller";
 import issues from "./issues.controller";
+import legacyIssues from "./legacy-issues.controller";
 
 const controllers = {
    agencies,
@@ -30,6 +31,7 @@ const controllers = {
    config,
    logs,
    issues,
+   legacyIssues,
 };
 
 export default controllers;

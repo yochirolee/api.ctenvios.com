@@ -22,6 +22,8 @@ import configRoutes from "./logs.config.routes";
 import logsRoutes from "./logs.routes";
 import issuesRoutes from "./issues.routes";
 import parcelsRoutes from "./parcels.routes";
+import legacyRoutes from "./legacy.routes";
+import legacyIssuesRoutes from "./legacy-issues.routes";
 
 const router = Router();
 
@@ -51,4 +53,6 @@ router.use("/config", configRoutes);
 router.use("/logs", logsRoutes);
 router.use("/issues", authMiddleware, issuesRoutes);
 router.use("/parcels", authMiddleware, parcelsRoutes);
+router.use("/legacy", legacyRoutes);
+router.use("/legacy-issues", authMiddleware, legacyIssuesRoutes);
 export default router;

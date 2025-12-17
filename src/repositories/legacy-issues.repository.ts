@@ -1,21 +1,21 @@
 import prisma from "../lib/prisma.client";
 import { Prisma, IssueStatus, IssuePriority, IssueType } from "@prisma/client";
 
-interface CreateIssueData {
+interface CreateLegacyIssueData {
    title: string;
    description: string;
    type: IssueType;
    priority: IssuePriority;
-   order_id?: number;
-   parcel_id?: number;
-   affected_parcel_ids?: number[]; // IDs de parcels afectados (para casos como "2 de 3 parcels no entregados")
-   order_item_hbl?: string;
+   legacy_invoice_id?: number;
+   legacy_order_id?: number;
+   legacy_parcel_id?: number;
+   legacy_hbl?: string;
+   affected_parcel_ids?: Array<number | { legacy_parcel_id: string; legacy_order_id?: number }>; // Parcels afectados del sistema legacy (acepta números o objetos)
    created_by_id: string;
-   agency_id: number;
    assigned_to_id?: string;
 }
 
-interface UpdateIssueData {
+interface UpdateLegacyIssueData {
    title?: string;
    description?: string;
    type?: IssueType;
@@ -25,14 +25,14 @@ interface UpdateIssueData {
    resolution_notes?: string;
 }
 
-interface CreateCommentData {
+interface CreateLegacyCommentData {
    issue_id: number;
    user_id: string;
    content: string;
    is_internal?: boolean;
 }
 
-interface CreateAttachmentData {
+interface CreateLegacyAttachmentData {
    issue_id: number;
    file_url: string;
    file_name: string;
@@ -42,108 +42,76 @@ interface CreateAttachmentData {
    description?: string;
 }
 
-export const issues = {
-   create: async (data: CreateIssueData) => {
-      // Validar que solo uno de order_id o parcel_id esté presente (pero order_id puede tener affected_parcel_ids)
-      if (data.order_id && data.parcel_id) {
-         throw new Error("Cannot specify both order_id and parcel_id");
-      }
-      if (!data.order_id && !data.parcel_id && !data.affected_parcel_ids?.length) {
-         throw new Error("Must specify either order_id, parcel_id, or affected_parcel_ids");
+export const legacyIssues = {
+   create: async (data: CreateLegacyIssueData) => {
+      // Validar que haya al menos una referencia legacy
+      const hasLegacyReference =
+         data.legacy_order_id || (data.affected_parcel_ids && data.affected_parcel_ids.length > 0);
+
+      if (!hasLegacyReference) {
+         throw new Error(
+            "Must specify at least one legacy reference: legacy_invoice_id, legacy_order_id, legacy_parcel_id, legacy_hbl, or affected_parcel_ids"
+         );
       }
 
-      // Si hay affected_parcel_ids, debe haber order_id
-      if (data.affected_parcel_ids && data.affected_parcel_ids.length > 0 && !data.order_id) {
-         throw new Error("affected_parcel_ids requires order_id");
+      // Si hay affected_parcel_ids, debe haber legacy_order_id o legacy_invoice_id
+      if (data.affected_parcel_ids && data.affected_parcel_ids.length > 0 && !data.legacy_order_id) {
+         throw new Error("affected_parcel_ids requires legacy_order_id or legacy_invoice_id");
       }
 
-      const createData: any = {
+      const createData: Prisma.LegacyIssueCreateInput = {
          title: data.title,
          description: data.description,
          type: data.type,
          priority: data.priority,
-         order_id: data.order_id,
-         parcel_id: data.parcel_id,
-         order_item_hbl: data.order_item_hbl,
-         created_by_id: data.created_by_id,
-         agency_id: data.agency_id,
-         assigned_to_id: data.assigned_to_id,
+         legacy_order_id: data.legacy_order_id,
+         created_by: {
+            connect: { id: data.created_by_id },
+         },
+         assigned_to: data.assigned_to_id
+            ? {
+                 connect: { id: data.assigned_to_id },
+              }
+            : undefined,
       };
 
-      // Solo agregar affected_parcels si hay datos
+      // Agregar affected_parcels si hay datos
       if (data.affected_parcel_ids && data.affected_parcel_ids.length > 0) {
+         // Normalizar el formato: aceptar tanto números como objetos
+         const normalizedParcels = data.affected_parcel_ids.map((parcel) => {
+            // Si es un número, convertirlo a objeto
+            if (typeof parcel === "number") {
+               return {
+                  legacy_parcel_id: String(parcel),
+                  legacy_order_id: data.legacy_order_id,
+               };
+            }
+            // Si ya es un objeto, usarlo tal cual
+            return {
+               legacy_parcel_id: parcel.legacy_parcel_id,
+               legacy_order_id: parcel.legacy_order_id || data.legacy_order_id,
+            };
+         });
+
+         // Filtrar y validar parcels - legacy_parcel_id es requerido
+         const validParcels = normalizedParcels.filter(
+            (parcel) => parcel.legacy_parcel_id && parcel.legacy_parcel_id.trim().length > 0
+         );
+
+         if (validParcels.length === 0) {
+            throw new Error("At least one valid legacy_parcel_id is required in affected_parcel_ids");
+         }
+
          createData.affected_parcels = {
-            create: data.affected_parcel_ids.map((parcel_id) => ({
-               parcel_id,
+            create: validParcels.map((parcel) => ({
+               legacy_parcel_id: parcel.legacy_parcel_id!,
+               legacy_order_id: parcel.legacy_order_id || null,
             })),
          };
       }
 
-      const includeClause: any = {
-         created_by: {
-            select: {
-               id: true,
-               name: true,
-               email: true,
-            },
-         },
-         assigned_to: {
-            select: {
-               id: true,
-               name: true,
-               email: true,
-            },
-         },
-         order: {
-            select: {
-               id: true,
-               customer: {
-                  select: {
-                     first_name: true,
-                     last_name: true,
-                  },
-               },
-            },
-         },
-         parcel: {
-            select: {
-               id: true,
-               tracking_number: true,
-            },
-         },
-         agency: {
-            select: {
-               id: true,
-               name: true,
-            },
-         },
-      };
-
-      // Solo incluir affected_parcels si hay datos (evita error si Prisma no está regenerado)
-      if (data.affected_parcel_ids && data.affected_parcel_ids.length > 0) {
-         includeClause.affected_parcels = {
-            include: {
-               parcel: {
-                  select: {
-                     id: true,
-                     tracking_number: true,
-                     description: true,
-                     status: true,
-                  },
-               },
-            },
-         };
-      }
-
-      return await prisma.issue.create({
+      return await prisma.legacyIssue.create({
          data: createData,
-         include: includeClause,
-      });
-   },
-
-   getById: async (id: number) => {
-      return await prisma.issue.findUnique({
-         where: { id },
          include: {
             created_by: {
                select: {
@@ -157,57 +125,6 @@ export const issues = {
                   id: true,
                   name: true,
                   email: true,
-               },
-            },
-            resolved_by: {
-               select: {
-                  id: true,
-                  name: true,
-                  email: true,
-               },
-            },
-            order: {
-               select: {
-                  id: true,
-                  customer: {
-                     select: {
-                        first_name: true,
-                        last_name: true,
-                        email: true,
-                        mobile: true,
-                     },
-                  },
-               },
-            },
-            parcel: {
-               select: {
-                  id: true,
-                  tracking_number: true,
-                  description: true,
-               },
-            },
-            order_item: {
-               select: {
-                  hbl: true,
-                  description: true,
-               },
-            },
-            affected_parcels: {
-               include: {
-                  parcel: {
-                     select: {
-                        id: true,
-                        tracking_number: true,
-                        description: true,
-                        status: true,
-                     },
-                  },
-               },
-            },
-            agency: {
-               select: {
-                  id: true,
-                  name: true,
                },
             },
             comments: {
@@ -242,6 +159,68 @@ export const issues = {
       });
    },
 
+   getById: async (id: number) => {
+      return await prisma.legacyIssue.findUnique({
+         where: { id },
+         include: {
+            created_by: {
+               select: {
+                  id: true,
+                  name: true,
+                  email: true,
+               },
+            },
+            assigned_to: {
+               select: {
+                  id: true,
+                  name: true,
+                  email: true,
+               },
+            },
+            resolved_by: {
+               select: {
+                  id: true,
+                  name: true,
+                  email: true,
+               },
+            },
+            comments: {
+               include: {
+                  user: {
+                     select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                     },
+                  },
+               },
+               orderBy: {
+                  created_at: "asc",
+               },
+            },
+            attachments: {
+               include: {
+                  uploaded_by: {
+                     select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                     },
+                  },
+               },
+               orderBy: {
+                  created_at: "desc",
+               },
+            },
+            affected_parcels: {
+               orderBy: {
+                  created_at: "asc",
+               },
+            },
+         },
+      });
+   },
+
    getAll: async ({
       page,
       limit,
@@ -253,14 +232,15 @@ export const issues = {
          status?: IssueStatus;
          priority?: IssuePriority;
          type?: IssueType;
-         agency_id?: number;
          created_by_id?: string;
          assigned_to_id?: string;
-         order_id?: number;
-         parcel_id?: number;
+         legacy_invoice_id?: number;
+         legacy_order_id?: number;
+         legacy_parcel_id?: number;
+         legacy_hbl?: string;
       };
    }) => {
-      const where: Prisma.IssueWhereInput = {};
+      const where: Prisma.LegacyIssueWhereInput = {};
 
       if (filters?.status) {
          where.status = filters.status;
@@ -274,10 +254,6 @@ export const issues = {
          where.type = filters.type;
       }
 
-      if (filters?.agency_id) {
-         where.agency_id = filters.agency_id;
-      }
-
       if (filters?.created_by_id) {
          where.created_by_id = filters.created_by_id;
       }
@@ -286,16 +262,24 @@ export const issues = {
          where.assigned_to_id = filters.assigned_to_id;
       }
 
-      if (filters?.order_id) {
-         where.order_id = filters.order_id;
+      if (filters?.legacy_invoice_id) {
+         where.legacy_invoice_id = filters.legacy_invoice_id;
       }
 
-      if (filters?.parcel_id) {
-         where.parcel_id = filters.parcel_id;
+      if (filters?.legacy_order_id) {
+         where.legacy_order_id = filters.legacy_order_id;
       }
 
-      const [issues, total] = await Promise.all([
-         prisma.issue.findMany({
+      if (filters?.legacy_parcel_id) {
+         where.legacy_parcel_id = filters.legacy_parcel_id;
+      }
+
+      if (filters?.legacy_hbl) {
+         where.legacy_hbl = filters.legacy_hbl;
+      }
+
+      const [legacyIssues, total] = await Promise.all([
+         prisma.legacyIssue.findMany({
             where,
             include: {
                created_by: {
@@ -312,38 +296,11 @@ export const issues = {
                      email: true,
                   },
                },
-               order: {
-                  select: {
-                     id: true,
-                  },
-               },
-               parcel: {
-                  select: {
-                     id: true,
-                     tracking_number: true,
-                  },
-               },
-               affected_parcels: {
-                  include: {
-                     parcel: {
-                        select: {
-                           id: true,
-                           tracking_number: true,
-                           description: true,
-                        },
-                     },
-                  },
-               },
-               agency: {
-                  select: {
-                     id: true,
-                     name: true,
-                  },
-               },
                _count: {
                   select: {
                      comments: true,
                      attachments: true,
+                     affected_parcels: true,
                   },
                },
             },
@@ -353,14 +310,14 @@ export const issues = {
             take: limit,
             skip: (page - 1) * limit,
          }),
-         prisma.issue.count({ where }),
+         prisma.legacyIssue.count({ where }),
       ]);
 
-      return { issues, total };
+      return { legacyIssues, total };
    },
 
-   update: async (id: number, data: UpdateIssueData) => {
-      const updateData: Prisma.IssueUpdateInput = {};
+   update: async (id: number, data: UpdateLegacyIssueData) => {
+      const updateData: Prisma.LegacyIssueUpdateInput = {};
 
       if (data.title !== undefined) updateData.title = data.title;
       if (data.description !== undefined) updateData.description = data.description;
@@ -380,7 +337,7 @@ export const issues = {
          updateData.resolved_by = { disconnect: true };
       }
 
-      return await prisma.issue.update({
+      return await prisma.legacyIssue.update({
          where: { id },
          data: updateData,
          include: {
@@ -403,7 +360,7 @@ export const issues = {
    },
 
    resolve: async (id: number, resolved_by_id: string, resolution_notes?: string) => {
-      return await prisma.issue.update({
+      return await prisma.legacyIssue.update({
          where: { id },
          data: {
             status: IssueStatus.RESOLVED,
@@ -424,14 +381,14 @@ export const issues = {
    },
 
    delete: async (id: number): Promise<void> => {
-      await prisma.issue.delete({
+      await prisma.legacyIssue.delete({
          where: { id },
       });
    },
 
    // Comments
-   addComment: async (data: CreateCommentData) => {
-      return await prisma.issueComment.create({
+   addComment: async (data: CreateLegacyCommentData) => {
+      return await prisma.legacyIssueComment.create({
          data: {
             issue_id: data.issue_id,
             user_id: data.user_id,
@@ -451,7 +408,7 @@ export const issues = {
    },
 
    getComments: async (issueId: number, includeInternal: boolean = false) => {
-      const where: Prisma.IssueCommentWhereInput = {
+      const where: Prisma.LegacyIssueCommentWhereInput = {
          issue_id: issueId,
       };
 
@@ -459,7 +416,7 @@ export const issues = {
          where.is_internal = false;
       }
 
-      return await prisma.issueComment.findMany({
+      return await prisma.legacyIssueComment.findMany({
          where,
          include: {
             user: {
@@ -477,14 +434,14 @@ export const issues = {
    },
 
    deleteComment: async (id: number): Promise<void> => {
-      await prisma.issueComment.delete({
+      await prisma.legacyIssueComment.delete({
          where: { id },
       });
    },
 
    // Attachments
-   addAttachment: async (data: CreateAttachmentData) => {
-      return await prisma.issueAttachment.create({
+   addAttachment: async (data: CreateLegacyAttachmentData) => {
+      return await prisma.legacyIssueAttachment.create({
          data: {
             issue_id: data.issue_id,
             file_url: data.file_url,
@@ -507,7 +464,7 @@ export const issues = {
    },
 
    getAttachments: async (issueId: number) => {
-      return await prisma.issueAttachment.findMany({
+      return await prisma.legacyIssueAttachment.findMany({
          where: { issue_id: issueId },
          include: {
             uploaded_by: {
@@ -525,96 +482,61 @@ export const issues = {
    },
 
    deleteAttachment: async (id: number): Promise<void> => {
-      await prisma.issueAttachment.delete({
+      await prisma.legacyIssueAttachment.delete({
          where: { id },
       });
    },
 
-   // Affected Parcels
-   addAffectedParcels: async (issueId: number, parcelIds: number[]): Promise<void> => {
-      await prisma.issueParcel.createMany({
-         data: parcelIds.map((parcel_id) => ({
-            issue_id: issueId,
-            parcel_id,
-         })),
-         skipDuplicates: true,
-      });
-   },
+ 
 
-   removeAffectedParcel: async (issueId: number, parcelId: number): Promise<void> => {
-      await prisma.issueParcel.deleteMany({
-         where: {
-            issue_id: issueId,
-            parcel_id: parcelId,
-         },
-      });
-   },
-
-   getAffectedParcels: async (issueId: number) => {
-      return await prisma.issueParcel.findMany({
-         where: { issue_id: issueId },
-         include: {
-            parcel: {
-               select: {
-                  id: true,
-                  tracking_number: true,
-                  description: true,
-                  status: true,
-                  created_at: true,
-               },
-            },
-         },
-      });
-   },
-
-   getStats: async (filters?: { agency_id?: number }) => {
+   getStats: async (filters?: { created_by_id?: string }) => {
       const now = new Date();
       const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
       const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
       const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-      const where: Prisma.IssueWhereInput = {};
-      if (filters?.agency_id) {
-         where.agency_id = filters.agency_id;
+      const where: Prisma.LegacyIssueWhereInput = {};
+      if (filters?.created_by_id) {
+         where.created_by_id = filters.created_by_id;
       }
 
-      const [total, byStatus, byPriority, byType, last24Hours, last7Days, last30Days, resolvedIssues, byAgency] =
+      const [total, byStatus, byPriority, byType, last24Hours, last7Days, last30Days, resolvedIssues] =
          await Promise.all([
-            prisma.issue.count({ where }),
-            prisma.issue.groupBy({
+            prisma.legacyIssue.count({ where }),
+            prisma.legacyIssue.groupBy({
                by: ["status"],
                where,
                _count: { status: true },
             }),
-            prisma.issue.groupBy({
+            prisma.legacyIssue.groupBy({
                by: ["priority"],
                where,
                _count: { priority: true },
             }),
-            prisma.issue.groupBy({
+            prisma.legacyIssue.groupBy({
                by: ["type"],
                where,
                _count: { type: true },
             }),
-            prisma.issue.count({
+            prisma.legacyIssue.count({
                where: {
                   ...where,
                   created_at: { gte: oneDayAgo },
                },
             }),
-            prisma.issue.count({
+            prisma.legacyIssue.count({
                where: {
                   ...where,
                   created_at: { gte: sevenDaysAgo },
                },
             }),
-            prisma.issue.count({
+            prisma.legacyIssue.count({
                where: {
                   ...where,
                   created_at: { gte: thirtyDaysAgo },
                },
             }),
-            prisma.issue.findMany({
+            prisma.legacyIssue.findMany({
                where: {
                   ...where,
                   status: IssueStatus.RESOLVED,
@@ -625,13 +547,6 @@ export const issues = {
                   resolved_at: true,
                },
             }),
-            filters?.agency_id
-               ? null
-               : prisma.issue.groupBy({
-                    by: ["agency_id"],
-                    where,
-                    _count: { agency_id: true },
-                 }),
          ]);
 
       // Calculate average resolution time in hours
@@ -663,15 +578,6 @@ export const issues = {
          statsByType[item.type] = item._count.type;
       });
 
-      const statsByAgency: Array<{ agency_id: number; count: number }> | null = byAgency
-         ? byAgency
-              .filter((item) => item.agency_id !== null)
-              .map((item) => ({
-                 agency_id: item.agency_id!,
-                 count: item._count.agency_id,
-              }))
-         : null;
-
       return {
          total,
          by_status: statsByStatus,
@@ -686,9 +592,8 @@ export const issues = {
             resolved_count: resolvedIssues.length,
             average_resolution_hours: avgResolutionHours ? Math.round(avgResolutionHours * 100) / 100 : null,
          },
-         ...(statsByAgency && { by_agency: statsByAgency }),
       };
    },
 };
 
-export default issues;
+export default legacyIssues;

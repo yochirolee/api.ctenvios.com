@@ -13,40 +13,45 @@ datasource db {
 // --- MODELOS PRINCIPALES (CORE) ---
 
 model User {
-    id                  String            @id @default(uuid())
-    name                String
-    email               String            @unique
-    emailVerified       Boolean           @default(false)
-    phone               String?
-    image               String?
-    createdAt           DateTime          @default(now())
-    updatedAt           DateTime          @updatedAt
-    created_by          String?
-    forwarder_id        Int?
-    forwarder           Forwarder?        @relation(fields: [forwarder_id], references: [id])
-    agency_id           Int?
-    agency              Agency?           @relation(fields: [agency_id], references: [id], onDelete: Cascade)
-    role                Roles             @default(AGENCY_SALES)
-    payments            Payment[]
-    discounts           Discount[]
-    sessions            Session[]
-    accounts            Account[]
-    banned              Boolean?          @default(false)
-    banReason           String?
-    banExpires          DateTime?
-    orders              Order[]           @relation("user")
-    order_history       OrderHistory[]
-    created_dispatches  Dispatch[]        @relation("created_by")
-    received_dispatches Dispatch[]        @relation("received_by")
-    paid_dispatches     Dispatch[]        @relation("paid_by")
-    parcels             Parcel[]
-    parcels_events      ParcelEvent[]
-    app_logs            AppLog[]
-    created_issues      Issue[]           @relation("created_issues")
-    assigned_issues     Issue[]           @relation("assigned_issues")
-    resolved_issues     Issue[]           @relation("resolved_issues")
-    issue_comments      IssueComment[]
-    issue_attachments   IssueAttachment[]
+    id                       String                  @id @default(uuid())
+    name                     String
+    email                    String                  @unique
+    emailVerified            Boolean                 @default(false)
+    phone                    String?
+    image                    String?
+    createdAt                DateTime                @default(now())
+    updatedAt                DateTime                @updatedAt
+    created_by               String?
+    forwarder_id             Int?
+    forwarder                Forwarder?              @relation(fields: [forwarder_id], references: [id])
+    agency_id                Int?
+    agency                   Agency?                 @relation(fields: [agency_id], references: [id], onDelete: Cascade)
+    role                     Roles                   @default(AGENCY_SALES)
+    payments                 Payment[]
+    discounts                Discount[]
+    sessions                 Session[]
+    accounts                 Account[]
+    banned                   Boolean?                @default(false)
+    banReason                String?
+    banExpires               DateTime?
+    orders                   Order[]                 @relation("user")
+    order_history            OrderHistory[]
+    created_dispatches       Dispatch[]              @relation("created_by")
+    received_dispatches      Dispatch[]              @relation("received_by")
+    paid_dispatches          Dispatch[]              @relation("paid_by")
+    parcels                  Parcel[]
+    parcels_events           ParcelEvent[]
+    app_logs                 AppLog[]
+    created_issues           Issue[]                 @relation("created_issues")
+    assigned_issues          Issue[]                 @relation("assigned_issues")
+    resolved_issues          Issue[]                 @relation("resolved_issues")
+    issue_comments           IssueComment[]
+    issue_attachments        IssueAttachment[]
+    created_legacy_issues    LegacyIssue[]           @relation("created_legacy_issues")
+    assigned_legacy_issues   LegacyIssue[]           @relation("assigned_legacy_issues")
+    resolved_legacy_issues   LegacyIssue[]           @relation("resolved_legacy_issues")
+    legacy_issue_comments    LegacyIssueComment[]    @relation("legacy_issue_comments")
+    legacy_issue_attachments LegacyIssueAttachment[] @relation("legacy_issue_attachments")
 
     @@index([agency_id, role])
     @@map("user")
@@ -79,6 +84,7 @@ model Agency {
     order_items         OrderItem[]
     counters            Counter[]
     partners            Partner[]
+    issues              Issue[]
     agency_type         AgencyType     @default(AGENCY)
     is_active           Boolean        @default(false)
     commission_rate     Float?         @default(0.0)
@@ -86,7 +92,6 @@ model Agency {
     created_dispatches  Dispatch[]     @relation("created_dispatches")
     received_dispatches Dispatch[]     @relation("received_dispatches")
     parcels             Parcel[]
-    issues              Issue[]
 
     @@index([forwarder_id, is_active])
     @@index([parent_agency_id])
@@ -949,8 +954,8 @@ model Issue {
     assigned_to    User?   @relation("assigned_issues", fields: [assigned_to_id], references: [id], onDelete: SetNull)
 
     // Agencia relacionada
-    agency_id Int
-    agency    Agency @relation(fields: [agency_id], references: [id], onDelete: Cascade)
+    agency_id Int?
+    agency    Agency? @relation(fields: [agency_id], references: [id], onDelete: Cascade)
 
     // Relaciones
     comments         IssueComment[]
@@ -1022,13 +1027,109 @@ model IssueParcel {
     @@index([parcel_id])
 }
 
+// ============================================
+// LEGACY ISSUES - Sistema Legacy Separado
+// ============================================
+
+model LegacyIssue {
+    id          Int           @id @default(autoincrement())
+    title       String
+    description String
+    type        IssueType     @default(COMPLAINT)
+    priority    IssuePriority @default(MEDIUM)
+    status      IssueStatus   @default(OPEN)
+
+    // Referencias al sistema legacy MySQL
+    legacy_invoice_id Int? // Invoice ID del sistema MySQL
+    legacy_order_id   Int? // Order ID del sistema MySQL
+    legacy_parcel_id  Int? // Parcel ID del sistema MySQL
+    legacy_hbl        String? // HBL/tracking number del sistema legacy
+
+    // Usuario que crea la incidencia
+    created_by_id String
+    created_by    User   @relation("created_legacy_issues", fields: [created_by_id], references: [id])
+
+    // Usuario asignado para resolver (opcional)
+    assigned_to_id String?
+    assigned_to    User?   @relation("assigned_legacy_issues", fields: [assigned_to_id], references: [id], onDelete: SetNull)
+
+    // Relaciones
+    comments         LegacyIssueComment[]
+    attachments      LegacyIssueAttachment[]
+    affected_parcels LegacyIssueParcel[] // Parcels afectados del sistema legacy
+
+    // Metadata
+    resolved_at      DateTime?
+    resolved_by_id   String?
+    resolved_by      User?     @relation("resolved_legacy_issues", fields: [resolved_by_id], references: [id], onDelete: SetNull)
+    resolution_notes String?
+
+    created_at DateTime @default(now())
+    updated_at DateTime @updatedAt
+
+    @@index([legacy_invoice_id])
+    @@index([legacy_order_id])
+    @@index([legacy_parcel_id])
+    @@index([legacy_hbl])
+    @@index([status, created_at(sort: Desc)])
+    @@index([created_by_id, created_at(sort: Desc)])
+    @@index([assigned_to_id, status])
+    @@index([created_at(sort: Desc)])
+}
+
+// Tabla de relación para parcels afectados del sistema legacy
+model LegacyIssueParcel {
+    id               Int         @id @default(autoincrement())
+    issue_id         Int
+    issue            LegacyIssue @relation(fields: [issue_id], references: [id], onDelete: Cascade)
+    legacy_parcel_id String // HBL/tracking number del sistema legacy
+    legacy_order_id  Int? // Order ID del sistema legacy (opcional)
+    created_at       DateTime    @default(now())
+
+    @@unique([issue_id, legacy_parcel_id]) // Evitar duplicados
+    @@index([issue_id])
+    @@index([legacy_parcel_id])
+}
+
+model LegacyIssueComment {
+    id          Int         @id @default(autoincrement())
+    issue_id    Int
+    issue       LegacyIssue @relation(fields: [issue_id], references: [id], onDelete: Cascade)
+    user_id     String
+    user        User        @relation("legacy_issue_comments", fields: [user_id], references: [id], onDelete: Cascade)
+    content     String
+    is_internal Boolean     @default(false) // Si es true, solo visible para staff
+    created_at  DateTime    @default(now())
+    updated_at  DateTime    @updatedAt
+
+    @@index([issue_id, created_at(sort: Asc)])
+    @@index([user_id])
+}
+
+model LegacyIssueAttachment {
+    id             Int         @id @default(autoincrement())
+    issue_id       Int
+    issue          LegacyIssue @relation(fields: [issue_id], references: [id], onDelete: Cascade)
+    file_url       String // URL del archivo (S3, Cloudinary, etc.)
+    file_name      String
+    file_type      String // MIME type: image/jpeg, image/png, application/pdf, etc.
+    file_size      Int? // Tamaño en bytes
+    uploaded_by_id String
+    uploaded_by    User        @relation("legacy_issue_attachments", fields: [uploaded_by_id], references: [id], onDelete: Cascade)
+    description    String? // Descripción opcional de la imagen
+    created_at     DateTime    @default(now())
+
+    @@index([issue_id, created_at(sort: Desc)])
+    @@index([uploaded_by_id])
+}
+
 enum IssueType {
     COMPLAINT // Reclamación
     DAMAGE // Daño
     LOSS // Pérdida
     DELAY // Retraso
-    WRONG_ITEM // Artículo incorrecto
     MISSING_ITEM // Artículo faltante
+    WRONG_ADDRESS // Dirección incorrecta
     OTHER // Otro
 }
 

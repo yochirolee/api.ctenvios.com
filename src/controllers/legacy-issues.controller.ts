@@ -3,13 +3,13 @@ import { AppError } from "../common/app-errors";
 import HttpStatusCodes from "../common/https-status-codes";
 import repository from "../repositories";
 import { IssueType, IssuePriority, IssueStatus, Roles } from "@prisma/client";
+import { legacy_db_service } from "../services/legacy-myslq-db";
 
-interface IssuesRequest {
+interface LegacyIssuesRequest {
    user?: {
       id: string;
       email: string;
       role: string;
-      agency_id?: number;
    };
    query: {
       page?: string;
@@ -17,10 +17,10 @@ interface IssuesRequest {
       status?: string;
       priority?: string;
       type?: string;
-      order_id?: string;
-      parcel_id?: string;
+      legacy_order_id?: string;
+      legacy_parcel_id?: string;
+      legacy_hbl?: string;
       assigned_to_id?: string;
-      agency_id?: string;
    };
    body: {
       title?: string;
@@ -28,10 +28,10 @@ interface IssuesRequest {
       type?: IssueType;
       priority?: IssuePriority;
       status?: IssueStatus;
-      order_id?: number;
-      parcel_id?: number;
-      affected_parcel_ids?: number[];
-      order_item_hbl?: string;
+      legacy_order_id?: number;
+      legacy_parcel_id?: number;
+      legacy_hbl?: string;
+      affected_parcel_ids: Array<{ legacy_parcel_id: string }>;
       assigned_to_id?: string;
       resolution_notes?: string;
       content?: string;
@@ -48,57 +48,39 @@ interface IssuesRequest {
    };
 }
 
-const issues = {
-   create: async (req: IssuesRequest, res: Response): Promise<void> => {
+const legacyIssues = {
+   create: async (req: LegacyIssuesRequest, res: Response): Promise<void> => {
       const user = req.user;
       if (!user) {
          throw new AppError(HttpStatusCodes.UNAUTHORIZED, "User not authenticated");
       }
 
-      const {
-         title,
-         description,
-         type,
-         priority,
-         order_id,
-         parcel_id,
-         affected_parcel_ids,
-         order_item_hbl,
-         assigned_to_id,
-      } = req.body;
-
-      //verify if the order exist in the order system
-      const order = await repository.orders.getById(Number(order_id));
-      if (!order) {
-         throw new AppError(HttpStatusCodes.NOT_FOUND, "Order not found");
-      }
+      const { title, description, type, priority, legacy_order_id, affected_parcel_ids, assigned_to_id } = req.body;
 
       if (!title || !description) {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "Title and description are required");
       }
-
-      if (!user.agency_id) {
-         throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must belong to an agency");
+      //verify if the legacy order exist in the legacy system
+      const order = await legacy_db_service.getParcelsByOrderId(Number(legacy_order_id));
+      console.log(order, "order");
+      if (!order) {
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Order not found");
       }
-
-      const issue = await repository.issues.create({
+      const issue = await repository.legacyIssues.create({
          title,
          description,
          type: type || IssueType.COMPLAINT,
          priority: priority || IssuePriority.MEDIUM,
-         order_id,
-         parcel_id,
+         legacy_order_id,
          affected_parcel_ids,
-         order_item_hbl,
          created_by_id: user.id,
-         agency_id: user.agency_id,
          assigned_to_id,
       });
 
       res.status(201).json(issue);
    },
 
-   getAll: async (req: IssuesRequest, res: Response): Promise<void> => {
+   getAll: async (req: LegacyIssuesRequest, res: Response): Promise<void> => {
       const user = req.user;
       if (!user) {
          throw new AppError(HttpStatusCodes.UNAUTHORIZED, "User not authenticated");
@@ -118,18 +100,18 @@ const issues = {
          status?: IssueStatus;
          priority?: IssuePriority;
          type?: IssueType;
-         agency_id?: number;
+         created_by_id?: string;
          assigned_to_id?: string;
-         order_id?: number;
-         parcel_id?: number;
+         legacy_invoice_id?: number;
+         legacy_order_id?: number;
+         legacy_parcel_id?: number;
+         legacy_hbl?: string;
       } = {};
 
-      // RBAC: Solo admins pueden ver todas las incidencias
+      // RBAC: Solo admins pueden ver todas las incidencias legacy
       const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
       if (!allowedRoles.includes(user.role as Roles)) {
-         filters.agency_id = user.agency_id;
-      } else if (req.query.agency_id) {
-         filters.agency_id = parseInt(req.query.agency_id);
+         filters.created_by_id = user.id; // Usuarios regulares solo ven las que crearon
       }
 
       if (req.query.status) {
@@ -166,18 +148,22 @@ const issues = {
          filters.assigned_to_id = req.query.assigned_to_id;
       }
 
-      if (req.query.order_id) {
-         filters.order_id = parseInt(req.query.order_id);
+      if (req.query.legacy_order_id) {
+         filters.legacy_order_id = parseInt(req.query.legacy_order_id);
       }
 
-      if (req.query.parcel_id) {
-         filters.parcel_id = parseInt(req.query.parcel_id);
+      if (req.query.legacy_parcel_id) {
+         filters.legacy_parcel_id = parseInt(req.query.legacy_parcel_id);
       }
 
-      const { issues, total } = await repository.issues.getAll({ page, limit, filters });
+      if (req.query.legacy_hbl) {
+         filters.legacy_hbl = req.query.legacy_hbl;
+      }
+
+      const { legacyIssues, total } = await repository.legacyIssues.getAll({ page, limit, filters });
 
       res.status(200).json({
-         rows: issues,
+         rows: legacyIssues,
          total,
          page,
          limit,
@@ -185,7 +171,7 @@ const issues = {
       });
    },
 
-   getById: async (req: IssuesRequest & { params: { id: string } }, res: Response): Promise<void> => {
+   getById: async (req: LegacyIssuesRequest & { params: { id: string } }, res: Response): Promise<void> => {
       const user = req.user;
       if (!user) {
          throw new AppError(HttpStatusCodes.UNAUTHORIZED, "User not authenticated");
@@ -196,21 +182,21 @@ const issues = {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid issue ID");
       }
 
-      const issue = await repository.issues.getById(id);
+      const issue = await repository.legacyIssues.getById(id);
       if (!issue) {
-         throw new AppError(HttpStatusCodes.NOT_FOUND, "Issue not found");
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Legacy issue not found");
       }
 
-      // RBAC: Verificar permisos
+      // RBAC: Verificar permisos - solo el creador o admin puede ver
       const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
-      if (!allowedRoles.includes(user.role as Roles) && issue.agency_id !== user.agency_id) {
-         throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to view this issue");
+      if (!allowedRoles.includes(user.role as Roles) && issue.created_by_id !== user.id) {
+         throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to view this legacy issue");
       }
 
       res.status(200).json(issue);
    },
 
-   update: async (req: IssuesRequest & { params: { id: string } }, res: Response): Promise<void> => {
+   update: async (req: LegacyIssuesRequest & { params: { id: string } }, res: Response): Promise<void> => {
       const user = req.user;
       if (!user) {
          throw new AppError(HttpStatusCodes.UNAUTHORIZED, "User not authenticated");
@@ -223,9 +209,9 @@ const issues = {
 
       const { title, description, type, priority, status, assigned_to_id, resolution_notes } = req.body;
 
-      const issue = await repository.issues.getById(id);
+      const issue = await repository.legacyIssues.getById(id);
       if (!issue) {
-         throw new AppError(HttpStatusCodes.NOT_FOUND, "Issue not found");
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Legacy issue not found");
       }
 
       // RBAC: Solo el creador, asignado o admin puede actualizar
@@ -236,10 +222,10 @@ const issues = {
          issue.assigned_to_id === user.id;
 
       if (!canUpdate) {
-         throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to update this issue");
+         throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to update this legacy issue");
       }
 
-      const updatedIssue = await repository.issues.update(id, {
+      const updatedIssue = await repository.legacyIssues.update(id, {
          title,
          description,
          type,
@@ -255,7 +241,7 @@ const issues = {
       });
    },
 
-   resolve: async (req: IssuesRequest & { params: { id: string } }, res: Response): Promise<void> => {
+   resolve: async (req: LegacyIssuesRequest & { params: { id: string } }, res: Response): Promise<void> => {
       const user = req.user;
       if (!user) {
          throw new AppError(HttpStatusCodes.UNAUTHORIZED, "User not authenticated");
@@ -268,9 +254,9 @@ const issues = {
 
       const { resolution_notes } = req.body;
 
-      const issue = await repository.issues.getById(id);
+      const issue = await repository.legacyIssues.getById(id);
       if (!issue) {
-         throw new AppError(HttpStatusCodes.NOT_FOUND, "Issue not found");
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Legacy issue not found");
       }
 
       // RBAC: Solo el asignado o admin puede resolver
@@ -278,10 +264,10 @@ const issues = {
       const canResolve = allowedRoles.includes(user.role as Roles) || issue.assigned_to_id === user.id;
 
       if (!canResolve) {
-         throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to resolve this issue");
+         throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to resolve this legacy issue");
       }
 
-      const resolvedIssue = await repository.issues.resolve(id, user.id, resolution_notes);
+      const resolvedIssue = await repository.legacyIssues.resolve(id, user.id, resolution_notes);
 
       res.status(200).json({
          status: "success",
@@ -289,7 +275,7 @@ const issues = {
       });
    },
 
-   delete: async (req: IssuesRequest & { params: { id: string } }, res: Response): Promise<void> => {
+   delete: async (req: LegacyIssuesRequest & { params: { id: string } }, res: Response): Promise<void> => {
       const user = req.user;
       if (!user) {
          throw new AppError(HttpStatusCodes.UNAUTHORIZED, "User not authenticated");
@@ -300,27 +286,27 @@ const issues = {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid issue ID");
       }
 
-      const issue = await repository.issues.getById(id);
+      const issue = await repository.legacyIssues.getById(id);
       if (!issue) {
-         throw new AppError(HttpStatusCodes.NOT_FOUND, "Issue not found");
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Legacy issue not found");
       }
 
       // RBAC: Solo admin puede eliminar
       const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
       if (!allowedRoles.includes(user.role as Roles)) {
-         throw new AppError(HttpStatusCodes.FORBIDDEN, "Only administrators can delete issues");
+         throw new AppError(HttpStatusCodes.FORBIDDEN, "Only administrators can delete legacy issues");
       }
 
-      await repository.issues.delete(id);
+      await repository.legacyIssues.delete(id);
 
       res.status(200).json({
          status: "success",
-         message: "Issue deleted successfully",
+         message: "Legacy issue deleted successfully",
       });
    },
 
    // Comments
-   addComment: async (req: IssuesRequest & { params: { id: string } }, res: Response): Promise<void> => {
+   addComment: async (req: LegacyIssuesRequest & { params: { id: string } }, res: Response): Promise<void> => {
       const user = req.user;
       if (!user) {
          throw new AppError(HttpStatusCodes.UNAUTHORIZED, "User not authenticated");
@@ -337,28 +323,31 @@ const issues = {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "Content is required");
       }
 
-      const issue = await repository.issues.getById(issueId);
+      const issue = await repository.legacyIssues.getById(issueId);
       if (!issue) {
-         throw new AppError(HttpStatusCodes.NOT_FOUND, "Issue not found");
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Legacy issue not found");
       }
 
-      // RBAC: Verificar permisos
+      // RBAC: Solo el creador o admin puede comentar
       const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
-      if (!allowedRoles.includes(user.role as Roles) && issue.agency_id !== user.agency_id) {
-         throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to comment on this issue");
+      if (!allowedRoles.includes(user.role as Roles) && issue.created_by_id !== user.id) {
+         throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to comment on this legacy issue");
       }
 
-      const comment = await repository.issues.addComment({
+      const comment = await repository.legacyIssues.addComment({
          issue_id: issueId,
          user_id: user.id,
          content,
          is_internal: is_internal ?? false,
       });
 
-      res.status(201).json(comment);
+      res.status(201).json({
+         status: "success",
+         data: comment,
+      });
    },
 
-   getComments: async (req: IssuesRequest & { params: { id: string } }, res: Response): Promise<void> => {
+   getComments: async (req: LegacyIssuesRequest & { params: { id: string } }, res: Response): Promise<void> => {
       const user = req.user;
       if (!user) {
          throw new AppError(HttpStatusCodes.UNAUTHORIZED, "User not authenticated");
@@ -369,27 +358,30 @@ const issues = {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid issue ID");
       }
 
-      const issue = await repository.issues.getById(issueId);
+      const issue = await repository.legacyIssues.getById(issueId);
       if (!issue) {
-         throw new AppError(HttpStatusCodes.NOT_FOUND, "Issue not found");
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Legacy issue not found");
       }
 
       // RBAC: Verificar permisos
       const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
-      if (!allowedRoles.includes(user.role as Roles) && issue.agency_id !== user.agency_id) {
-         throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to view this issue");
+      if (!allowedRoles.includes(user.role as Roles) && issue.created_by_id !== user.id) {
+         throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to view this legacy issue");
       }
 
       // Solo staff puede ver comentarios internos
       const includeInternal = allowedRoles.includes(user.role as Roles);
 
-      const comments = await repository.issues.getComments(issueId, includeInternal);
+      const comments = await repository.legacyIssues.getComments(issueId, includeInternal);
 
-      res.status(200).json(comments);
+      res.status(200).json({
+         status: "success",
+         data: comments,
+      });
    },
 
    deleteComment: async (
-      req: IssuesRequest & { params: { id: string; commentId: string } },
+      req: LegacyIssuesRequest & { params: { id: string; commentId: string } },
       res: Response
    ): Promise<void> => {
       const user = req.user;
@@ -408,13 +400,16 @@ const issues = {
          throw new AppError(HttpStatusCodes.FORBIDDEN, "Only administrators can delete comments");
       }
 
-      await repository.issues.deleteComment(commentId);
+      await repository.legacyIssues.deleteComment(commentId);
 
-      res.status(200).json("Comment deleted successfully");
+      res.status(200).json({
+         status: "success",
+         message: "Comment deleted successfully",
+      });
    },
 
    // Attachments
-   addAttachment: async (req: IssuesRequest & { params: { id: string } }, res: Response): Promise<void> => {
+   addAttachment: async (req: LegacyIssuesRequest & { params: { id: string } }, res: Response): Promise<void> => {
       const user = req.user;
       if (!user) {
          throw new AppError(HttpStatusCodes.UNAUTHORIZED, "User not authenticated");
@@ -431,18 +426,21 @@ const issues = {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "file_url, file_name, and file_type are required");
       }
 
-      const issue = await repository.issues.getById(issueId);
+      const issue = await repository.legacyIssues.getById(issueId);
       if (!issue) {
-         throw new AppError(HttpStatusCodes.NOT_FOUND, "Issue not found");
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Legacy issue not found");
       }
 
-      // RBAC: Verificar permisos
+      // RBAC: Solo el creador o admin puede agregar attachments
       const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
-      if (!allowedRoles.includes(user.role as Roles) && issue.agency_id !== user.agency_id) {
-         throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to add attachments to this issue");
+      if (!allowedRoles.includes(user.role as Roles) && issue.created_by_id !== user.id) {
+         throw new AppError(
+            HttpStatusCodes.FORBIDDEN,
+            "You don't have permission to add attachments to this legacy issue"
+         );
       }
 
-      const attachment = await repository.issues.addAttachment({
+      const attachment = await repository.legacyIssues.addAttachment({
          issue_id: issueId,
          file_url,
          file_name,
@@ -452,10 +450,13 @@ const issues = {
          description,
       });
 
-      res.status(201).json(attachment);
+      res.status(201).json({
+         status: "success",
+         data: attachment,
+      });
    },
 
-   getAttachments: async (req: IssuesRequest & { params: { id: string } }, res: Response): Promise<void> => {
+   getAttachments: async (req: LegacyIssuesRequest & { params: { id: string } }, res: Response): Promise<void> => {
       const user = req.user;
       if (!user) {
          throw new AppError(HttpStatusCodes.UNAUTHORIZED, "User not authenticated");
@@ -466,24 +467,27 @@ const issues = {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid issue ID");
       }
 
-      const issue = await repository.issues.getById(issueId);
+      const issue = await repository.legacyIssues.getById(issueId);
       if (!issue) {
-         throw new AppError(HttpStatusCodes.NOT_FOUND, "Issue not found");
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Legacy issue not found");
       }
 
       // RBAC: Verificar permisos
       const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
-      if (!allowedRoles.includes(user.role as Roles) && issue.agency_id !== user.agency_id) {
-         throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to view this issue");
+      if (!allowedRoles.includes(user.role as Roles) && issue.created_by_id !== user.id) {
+         throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to view this legacy issue");
       }
 
-      const attachments = await repository.issues.getAttachments(issueId);
+      const attachments = await repository.legacyIssues.getAttachments(issueId);
 
-      res.status(200).json(attachments);
+      res.status(200).json({
+         status: "success",
+         data: attachments,
+      });
    },
 
    deleteAttachment: async (
-      req: IssuesRequest & { params: { id: string; attachmentId: string } },
+      req: LegacyIssuesRequest & { params: { id: string; attachmentId: string } },
       res: Response
    ): Promise<void> => {
       const user = req.user;
@@ -502,7 +506,7 @@ const issues = {
          throw new AppError(HttpStatusCodes.FORBIDDEN, "Only administrators can delete attachments");
       }
 
-      await repository.issues.deleteAttachment(attachmentId);
+      await repository.legacyIssues.deleteAttachment(attachmentId);
 
       res.status(200).json({
          status: "success",
@@ -510,7 +514,7 @@ const issues = {
       });
    },
 
-   getStats: async (req: IssuesRequest, res: Response): Promise<void> => {
+   getStats: async (req: LegacyIssuesRequest, res: Response): Promise<void> => {
       const user = req.user;
       if (!user) {
          throw new AppError(HttpStatusCodes.UNAUTHORIZED, "User not authenticated");
@@ -518,21 +522,19 @@ const issues = {
 
       // RBAC: Solo admins pueden ver todas las estadísticas
       const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
-      const filters: { agency_id?: number } = {};
+      const filters: { created_by_id?: string } = {};
 
       if (!allowedRoles.includes(user.role as Roles)) {
-         if (!user.agency_id) {
-            throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must belong to an agency");
-         }
-         filters.agency_id = user.agency_id;
-      } else if (req.query.agency_id) {
-         filters.agency_id = parseInt(req.query.agency_id);
+         filters.created_by_id = user.id; // Usuarios regulares solo ven sus propias stats
       }
 
-      const stats = await repository.issues.getStats(filters);
+      const stats = await repository.legacyIssues.getStats(filters);
 
-      res.status(200).json(stats);
+      res.status(200).json({
+         status: "success",
+         data: stats,
+      });
    },
 };
 
-export default issues;
+export default legacyIssues;
