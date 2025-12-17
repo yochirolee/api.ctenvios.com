@@ -28,7 +28,6 @@ const corsOptions = {
       // Normalize origin by removing trailing slash for comparison
       const normalizedOrigin = origin.replace(/\/$/, "");
       const normalizedAllowedOrigins = allowedOrigins.map((o) => o.replace(/\/$/, ""));
-
       if (normalizedAllowedOrigins.indexOf(normalizedOrigin) !== -1) {
          callback(null, true);
       } else {
