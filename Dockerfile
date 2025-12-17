@@ -1,29 +1,26 @@
 # ========= STAGE 1: BUILDER =========
 FROM node:22-alpine AS builder
 
-# Prisma needs OpenSSL on Alpine
 RUN apk add --no-cache openssl
-
 WORKDIR /app
 
-# 1) Copy dependency manifests first for better caching
+# Cache deps
 COPY package.json package-lock.json* ./
 
-# 2) Copy Prisma schema/config early (so generate can run)
+# Copy Prisma files early
 COPY prisma ./prisma
 COPY prisma.config.* ./
 
-# 3) Dummy DATABASE_URL only for build-time `prisma generate`
-# (Generate does NOT need a real DB connection, but Prisma config validation needs a valid URL)
+# Dummy DATABASE_URL for prisma generate at build time
 ENV DATABASE_URL="postgresql://user:pass@localhost:5432/dummy"
 
-# 4) Install ALL deps (incl devDeps) to build
+# Install all deps (incl devDeps)
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
-# 5) Generate Prisma Client at build time
+# Generate Prisma Client (build-time)
 RUN npx prisma generate
 
-# 6) Copy the rest of the source and build
+# Copy source + build
 COPY . .
 RUN npm run build
 
@@ -32,36 +29,31 @@ RUN npm run build
 FROM node:22-alpine AS production
 
 RUN apk add --no-cache openssl
-
 WORKDIR /app
 ENV NODE_ENV=production
 
-# 1) Install PROD deps only
-# Copy lockfiles so npm ci can reproduce exact versions
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/package-lock.json ./package-lock.json
-RUN npm ci --omit=dev && npm cache clean --force
-
-# 2) Copy Prisma artifacts needed at runtime
-# - schema + migrations for migrate deploy
-# - prisma.config.* for Prisma 7 config
+# 0) Copy Prisma schema/config BEFORE npm ci (helps if any scripts ever run)
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/prisma.config.* ./
 
-# 3) Copy generated Prisma Client from builder
-# (it lives inside node_modules; copy only what’s necessary)
+# 1) Install PROD deps only, but SKIP scripts (avoids postinstall prisma generate)
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/package-lock.json ./package-lock.json
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
+
+# 2) Copy generated Prisma Client artifacts from builder
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
-# 4) Copy built app output + runtime assets
+# 3) Copy built output + assets
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/assets ./assets
 
-# 5) Entry point: run migrations on startup (recommended for VPS/prod)
+# 4) Entrypoint to apply migrations on startup (recommended)
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# Non-root user
+# Non-root
 RUN addgroup -g 1001 -S nodejs \
     && adduser -S nodejs -u 1001 \
     && chown -R nodejs:nodejs /app
@@ -69,9 +61,8 @@ USER nodejs
 
 EXPOSE 3000
 
-# Optional healthcheck (adjust /health path if needed)
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-    CMD node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)}).on('error', () => process.exit(1))"
+    CMD node -e "require('http').get('http://localhost:3000/health', (r) => process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 
 ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["node", "dist/server.js"]
