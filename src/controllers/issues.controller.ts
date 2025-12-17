@@ -81,6 +81,14 @@ const issues = {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must belong to an agency");
       }
 
+      // Check if an issue with this order_id already exists
+      if (order_id) {
+         const existingIssue = await repository.issues.findByOrderId(order_id);
+         if (existingIssue) {
+            throw new AppError(HttpStatusCodes.CONFLICT, `An issue with order ID ${order_id} already exists`);
+         }
+      }
+
       const issue = await repository.issues.create({
          title,
          description,

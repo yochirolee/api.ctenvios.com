@@ -242,6 +242,12 @@ export const issues = {
       });
    },
 
+   findByOrderId: async (order_id: number) => {
+      return await prisma.issue.findFirst({
+         where: { order_id },
+      });
+   },
+
    getAll: async ({
       page,
       limit,

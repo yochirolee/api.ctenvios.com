@@ -72,6 +72,15 @@ const legacyIssues = {
       if (!order) {
          throw new AppError(HttpStatusCodes.NOT_FOUND, "Order not found");
       }
+
+      // Check if an issue with this legacy_order_id already exists
+      if (legacy_order_id) {
+         const existingIssue = await repository.legacyIssues.findByLegacyOrderId(legacy_order_id);
+         if (existingIssue) {
+            throw new AppError(HttpStatusCodes.CONFLICT, `An issue with order ID ${legacy_order_id} already exists`);
+         }
+      }
+
       const issue = await repository.legacyIssues.create({
          title,
          description,

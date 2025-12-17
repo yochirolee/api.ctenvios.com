@@ -234,6 +234,12 @@ export const legacyIssues = {
       });
    },
 
+   findByLegacyOrderId: async (legacy_order_id: number) => {
+      return await prisma.legacyIssue.findFirst({
+         where: { legacy_order_id },
+      });
+   },
+
    getAll: async ({
       page,
       limit,
