@@ -5,6 +5,9 @@ import prisma from "../lib/prisma.client";
 import { authMiddleware, requireRoles } from "../middlewares/auth.middleware";
 import { Roles } from "@prisma/client";
 import { resend } from "../services/resend.service";
+import controllers from "../controllers";
+import { validate } from "../middlewares/validate.middleware";
+import { z } from "zod";
 
 const router = Router();
 
@@ -23,11 +26,19 @@ router.get("/", authMiddleware, async (req: any, res: Response) => {
                role: true,
                createdAt: true,
                updatedAt: true,
+               agency_id: true,
+               carrier_id: true,
                agency: {
                   select: {
                      id: true,
                      name: true,
                      agency_type: true,
+                  },
+               },
+               carrier: {
+                  select: {
+                     id: true,
+                     name: true,
                   },
                },
             },
@@ -40,6 +51,40 @@ router.get("/", authMiddleware, async (req: any, res: Response) => {
       ]);
       res.status(200).json({ rows, total });
    } else {
+      // Si es usuario de carrier, mostrar usuarios de su carrier
+      if (user.carrier_id) {
+         const total = await prisma.user.count({
+            where: {
+               carrier_id: user.carrier_id,
+            },
+         });
+         const rows = await prisma.user.findMany({
+            select: {
+               id: true,
+               email: true,
+               name: true,
+               role: true,
+               createdAt: true,
+               updatedAt: true,
+               agency_id: true,
+               carrier_id: true,
+               carrier: {
+                  select: {
+                     id: true,
+                     name: true,
+                  },
+               },
+            },
+            where: {
+               carrier_id: user.carrier_id,
+            },
+            skip: (parseInt(page as string) - 1) * (parseInt(limit as string) || 25),
+            take: parseInt(limit as string) || 25,
+         });
+         res.status(200).json({ rows, total });
+         return;
+      }
+
       //return all users in the agency and children agencies
       const agency = await prisma.agency.findUnique({
          where: {
@@ -66,11 +111,19 @@ router.get("/", authMiddleware, async (req: any, res: Response) => {
             role: true,
             createdAt: true,
             updatedAt: true,
+            agency_id: true,
+            carrier_id: true,
             agency: {
                select: {
                   id: true,
                   name: true,
                   agency_type: true,
+               },
+            },
+            carrier: {
+               select: {
+                  id: true,
+                  name: true,
                },
             },
          },
@@ -95,6 +148,31 @@ router.get("/search", async (req, res) => {
    res.status(200).json(users);
 });
 
+// Schema de validación para crear usuario (acepta agency_id o carrier_id)
+const createUserSchema = z
+   .object({
+      email: z.string().email("Invalid email format"),
+      password: z.string().min(8, "Password must be at least 8 characters"),
+      name: z.string().min(1, "Name is required"),
+      phone: z.string().min(10, "Phone must be at least 10 characters").optional(),
+      role: z.nativeEnum(Roles),
+      agency_id: z.number().int().positive().optional(),
+      carrier_id: z.number().int().positive().optional(),
+   })
+   .refine((data) => !data.agency_id || !data.carrier_id, {
+      message: "Cannot specify both agency_id and carrier_id. User must belong to either an agency or a carrier.",
+   })
+   .refine((data) => data.agency_id || data.carrier_id, {
+      message: "Must specify either agency_id or carrier_id.",
+   });
+
+/**
+ * POST /api/v1/users
+ * Create a new user (for agency or carrier)
+ */
+router.post("/", authMiddleware, validate({ body: createUserSchema }), controllers.users.create);
+
+// Mantener el endpoint legacy por compatibilidad (deprecated)
 router.post("/sign-up/email", authMiddleware, async (req, res) => {
    try {
       const { email, password, agency_id, role, name } = req.body;

@@ -1,6 +1,7 @@
 import agencies from "./agencies.repository";
 import providers from "./providers.repository";
 import forwarders from "./forwarders.repository";
+import carriers from "./carriers.repository";
 import services from "./services.repository";
 import customers from "./customers.repository";
 import provinces from "./provinces.repository";
@@ -21,6 +22,7 @@ export const repository = {
    agencies,
    providers,
    forwarders,
+   carriers,
    services,
    customers,
    provinces,

@@ -26,6 +26,8 @@ model User {
     forwarder                Forwarder?              @relation(fields: [forwarder_id], references: [id])
     agency_id                Int?
     agency                   Agency?                 @relation(fields: [agency_id], references: [id], onDelete: Cascade)
+    carrier_id               Int?
+    carrier                  Carrier?                @relation(fields: [carrier_id], references: [id], onDelete: SetNull)
     role                     Roles                   @default(AGENCY_SALES)
     payments                 Payment[]
     discounts                Discount[]
@@ -54,6 +56,7 @@ model User {
     legacy_issue_attachments LegacyIssueAttachment[] @relation("legacy_issue_attachments")
 
     @@index([agency_id, role])
+    @@index([carrier_id, role])
     @@map("user")
 }
 
@@ -529,6 +532,7 @@ model Carrier {
     forwarder_id Int
     forwarder    Forwarder @relation(fields: [forwarder_id], references: [id])
     services     Service[]
+    users        User[]
 }
 
 model Provider {
@@ -820,7 +824,10 @@ enum Roles {
     AGENCY_ADMIN
     AGENCY_SUPERVISOR
     FORWARDER_ADMIN
+    CARRIER_OWNER
     CARRIER_ADMIN
+    CARRIER_ISSUES_MANAGER
+    CARRIER_WAREHOUSE_WORKER
     MESSENGER
     USER
 }

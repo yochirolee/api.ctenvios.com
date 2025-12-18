@@ -44,6 +44,11 @@ export const auth = betterAuth({
             required: false,
             input: false,
          },
+         carrier_id: {
+            type: "number",
+            required: false,
+            input: false,
+         },
       },
    },
 });

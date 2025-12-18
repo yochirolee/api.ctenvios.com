@@ -1,6 +1,7 @@
 import agencies from "./agencies.controller";
 import providers from "./providers.controller";
 import forwarders from "./forwarders.controller";
+import carriers from "./carriers.controller";
 import services from "./services.controller";
 import customers from "./customers.controller";
 import provinces from "./provinces.controller";
@@ -14,11 +15,13 @@ import config from "./config.controller";
 import logs from "./logs.controller";
 import issues from "./issues.controller";
 import legacyIssues from "./legacy-issues.controller";
+import users from "./users.controller";
 
 const controllers = {
    agencies,
    providers,
    forwarders,
+   carriers,
    services,
    customers,
    provinces,
@@ -32,6 +35,7 @@ const controllers = {
    logs,
    issues,
    legacyIssues,
+   users,
 };
 
 export default controllers;

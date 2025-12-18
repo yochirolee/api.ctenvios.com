@@ -2,14 +2,37 @@ import { fromNodeHeaders } from "better-auth/node";
 import { NextFunction, Response } from "express";
 import { Roles } from "@prisma/client";
 import { auth } from "../lib/auth";
+import prisma from "../lib/prisma.client";
 
 export const authMiddleware = async (req: any, res: Response, next: NextFunction): Promise<void> => {
    try {
       const session = await auth.api.getSession({
          headers: fromNodeHeaders(req.headers),
       });
-      if (session) {
-         req.user = session.user;
+      if (session && session.user) {
+         // Asegurar que carrier_id y agency_id estén disponibles en el objeto user
+         // Si no están en la sesión, obtenerlos de la base de datos
+         if (session.user.id && (session.user.carrier_id === undefined || session.user.agency_id === undefined)) {
+            const userFromDb = await prisma.user.findUnique({
+               where: { id: session.user.id },
+               select: {
+                  agency_id: true,
+                  carrier_id: true,
+               },
+            });
+
+            if (userFromDb) {
+               req.user = {
+                  ...session.user,
+                  agency_id: session.user.agency_id ?? userFromDb.agency_id ?? null,
+                  carrier_id: session.user.carrier_id ?? userFromDb.carrier_id ?? null,
+               };
+            } else {
+               req.user = session.user;
+            }
+         } else {
+            req.user = session.user;
+         }
          next();
       } else {
          res.status(401).json({ message: "Unauthorized" });

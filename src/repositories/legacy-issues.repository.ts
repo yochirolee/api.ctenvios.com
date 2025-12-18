@@ -124,6 +124,18 @@ export const legacyIssues = {
                   id: true,
                   name: true,
                   email: true,
+                  agency: {
+                     select: {
+                        id: true,
+                        name: true,
+                     },
+                  },
+                  carrier: {
+                     select: {
+                        id: true,
+                        name: true,
+                     },
+                  },
                },
             },
             assigned_to: {
@@ -131,6 +143,12 @@ export const legacyIssues = {
                   id: true,
                   name: true,
                   email: true,
+               },
+            },
+            agency: {
+               select: {
+                  id: true,
+                  name: true,
                },
             },
             comments: {
@@ -175,6 +193,18 @@ export const legacyIssues = {
                   name: true,
                   email: true,
                   agency_id: true,
+                  agency: {
+                     select: {
+                        id: true,
+                        name: true,
+                     },
+                  },
+                  carrier: {
+                     select: {
+                        id: true,
+                        name: true,
+                     },
+                  },
                },
             },
             assigned_to: {
@@ -311,6 +341,18 @@ export const legacyIssues = {
                      id: true,
                      name: true,
                      email: true,
+                     agency: {
+                        select: {
+                           id: true,
+                           name: true,
+                        },
+                     },
+                     carrier: {
+                        select: {
+                           id: true,
+                           name: true,
+                        },
+                     },
                   },
                },
                assigned_to: {

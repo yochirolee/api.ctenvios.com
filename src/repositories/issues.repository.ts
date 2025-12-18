@@ -11,7 +11,7 @@ interface CreateIssueData {
    affected_parcel_ids?: number[]; // IDs de parcels afectados (para casos como "2 de 3 parcels no entregados")
    order_item_hbl?: string;
    created_by_id: string;
-   agency_id: number;
+   agency_id: number | null;
    assigned_to_id?: string;
 }
 
@@ -66,7 +66,7 @@ export const issues = {
          parcel_id: data.parcel_id,
          order_item_hbl: data.order_item_hbl,
          created_by_id: data.created_by_id,
-         agency_id: data.agency_id,
+         agency_id: data.agency_id ?? null,
          assigned_to_id: data.assigned_to_id,
       };
 
@@ -85,6 +85,18 @@ export const issues = {
                id: true,
                name: true,
                email: true,
+               agency: {
+                  select: {
+                     id: true,
+                     name: true,
+                  },
+               },
+               carrier: {
+                  select: {
+                     id: true,
+                     name: true,
+                  },
+               },
             },
          },
          assigned_to: {
@@ -150,6 +162,18 @@ export const issues = {
                   id: true,
                   name: true,
                   email: true,
+                  agency: {
+                     select: {
+                        id: true,
+                        name: true,
+                     },
+                  },
+                  carrier: {
+                     select: {
+                        id: true,
+                        name: true,
+                     },
+                  },
                },
             },
             assigned_to: {
@@ -309,6 +333,18 @@ export const issues = {
                      id: true,
                      name: true,
                      email: true,
+                     agency: {
+                        select: {
+                           id: true,
+                           name: true,
+                        },
+                     },
+                     carrier: {
+                        select: {
+                           id: true,
+                           name: true,
+                        },
+                     },
                   },
                },
                assigned_to: {

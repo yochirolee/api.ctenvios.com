@@ -3,6 +3,7 @@ import { AppError } from "../common/app-errors";
 import HttpStatusCodes from "../common/https-status-codes";
 import repository from "../repositories";
 import { IssueType, IssuePriority, IssueStatus, Roles } from "@prisma/client";
+import { Permissions, canViewOwnResource, canViewResource, hasPermission } from "../utils/permissions";
 
 interface IssuesRequest {
    user?: {
@@ -10,6 +11,7 @@ interface IssuesRequest {
       email: string;
       role: string;
       agency_id?: number;
+      carrier_id?: number;
    };
    query: {
       page?: string;
@@ -77,8 +79,9 @@ const issues = {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "Title and description are required");
       }
 
-      if (!user.agency_id) {
-         throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must belong to an agency");
+      // Los usuarios deben pertenecer a una agencia o carrier
+      if (!user.agency_id && !user.carrier_id) {
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must belong to an agency or carrier");
       }
 
       // Check if an issue with this order_id already exists
@@ -88,6 +91,10 @@ const issues = {
             throw new AppError(HttpStatusCodes.CONFLICT, `An issue with order ID ${order_id} already exists`);
          }
       }
+
+      // Si el usuario es de carrier, usar el agency_id de la orden
+      // Si el usuario es de agencia, usar su propio agency_id
+      const issueAgencyId = user.agency_id || order.agency_id || null;
 
       const issue = await repository.issues.create({
          title,
@@ -99,7 +106,7 @@ const issues = {
          affected_parcel_ids,
          order_item_hbl,
          created_by_id: user.id,
-         agency_id: user.agency_id,
+         agency_id: issueAgencyId,
          assigned_to_id,
       });
 
@@ -132,10 +139,16 @@ const issues = {
          parcel_id?: number;
       } = {};
 
-      // RBAC: Solo ROOT, ADMINISTRATOR y CARRIER_ADMIN pueden ver todas las incidencias
-      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR, Roles.CARRIER_ADMIN];
-      if (!allowedRoles.includes(user.role as Roles)) {
-         filters.agency_id = user.agency_id;
+      // RBAC: Solo ROOT, ADMINISTRATOR y roles de carrier pueden ver todas las incidencias
+      if (!hasPermission(user.role as Roles, Permissions.ISSUE_VIEW_ALL)) {
+         // Si el usuario es de carrier, puede ver todas las issues
+         if (user.carrier_id) {
+            // Los usuarios de carrier pueden ver todas las issues (no aplicamos filtro)
+         } else if (user.agency_id) {
+            filters.agency_id = user.agency_id;
+         } else {
+            throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must belong to an agency or carrier");
+         }
       } else if (req.query.agency_id) {
          filters.agency_id = parseInt(req.query.agency_id);
       }
@@ -209,10 +222,15 @@ const issues = {
          throw new AppError(HttpStatusCodes.NOT_FOUND, "Issue not found");
       }
 
-      // RBAC: Verificar permisos - ROOT, ADMINISTRATOR y CARRIER_ADMIN pueden ver todas las issues
-      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR, Roles.CARRIER_ADMIN];
-      if (!allowedRoles.includes(user.role as Roles) && issue.agency_id !== user.agency_id) {
-         throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to view this issue");
+      // RBAC: Verificar permisos - ROOT, ADMINISTRATOR y roles de carrier pueden ver todas las issues
+      const canViewAll = hasPermission(user.role as Roles, Permissions.ISSUE_VIEW_ALL);
+      if (!canViewAll) {
+         // Si el usuario es de carrier, puede ver todas las issues
+         if (user.carrier_id) {
+            // Los usuarios de carrier pueden ver todas las issues
+         } else if (!user.agency_id || issue.agency_id !== user.agency_id) {
+            throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to view this issue");
+         }
       }
 
       res.status(200).json(issue);
@@ -237,9 +255,8 @@ const issues = {
       }
 
       // RBAC: Solo el creador, asignado o admin puede actualizar
-      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR, Roles.CARRIER_ADMIN];
       const canUpdate =
-         allowedRoles.includes(user.role as Roles) ||
+         hasPermission(user.role as Roles, Permissions.ISSUE_MANAGE) ||
          issue.created_by_id === user.id ||
          issue.assigned_to_id === user.id;
 
@@ -282,8 +299,7 @@ const issues = {
       }
 
       // RBAC: Solo el asignado o admin puede resolver
-      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR, Roles.CARRIER_ADMIN];
-      const canResolve = allowedRoles.includes(user.role as Roles) || issue.assigned_to_id === user.id;
+      const canResolve = hasPermission(user.role as Roles, Permissions.ISSUE_MANAGE) || issue.assigned_to_id === user.id;
 
       if (!canResolve) {
          throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to resolve this issue");
@@ -314,8 +330,7 @@ const issues = {
       }
 
       // RBAC: Solo admin puede eliminar
-      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR, Roles.CARRIER_ADMIN];
-      if (!allowedRoles.includes(user.role as Roles)) {
+      if (!hasPermission(user.role as Roles, Permissions.ISSUE_DELETE)) {
          throw new AppError(HttpStatusCodes.FORBIDDEN, "Only administrators can delete issues");
       }
 
@@ -350,10 +365,15 @@ const issues = {
          throw new AppError(HttpStatusCodes.NOT_FOUND, "Issue not found");
       }
 
-      // RBAC: Verificar permisos - ROOT, ADMINISTRATOR y CARRIER_ADMIN pueden comentar en todas las issues
-      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR, Roles.CARRIER_ADMIN];
-      if (!allowedRoles.includes(user.role as Roles) && issue.agency_id !== user.agency_id) {
-         throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to comment on this issue");
+      // RBAC: Verificar permisos - ROOT, ADMINISTRATOR y roles de carrier pueden comentar en todas las issues
+      const canManageAll = hasPermission(user.role as Roles, Permissions.ISSUE_MANAGE);
+      if (!canManageAll) {
+         // Si el usuario es de carrier, puede comentar en todas las issues
+         if (user.carrier_id) {
+            // Los usuarios de carrier pueden comentar en todas las issues
+         } else if (!user.agency_id || issue.agency_id !== user.agency_id) {
+            throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to comment on this issue");
+         }
       }
 
       const comment = await repository.issues.addComment({
@@ -382,14 +402,19 @@ const issues = {
          throw new AppError(HttpStatusCodes.NOT_FOUND, "Issue not found");
       }
 
-      // RBAC: Verificar permisos - ROOT, ADMINISTRATOR y CARRIER_ADMIN pueden ver todas las issues
-      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR, Roles.CARRIER_ADMIN];
-      if (!allowedRoles.includes(user.role as Roles) && issue.agency_id !== user.agency_id) {
-         throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to view this issue");
+      // RBAC: Verificar permisos - ROOT, ADMINISTRATOR y roles de carrier pueden ver todas las issues
+      const canViewAll = hasPermission(user.role as Roles, Permissions.ISSUE_VIEW_ALL);
+      if (!canViewAll) {
+         // Si el usuario es de carrier, puede ver todas las issues
+         if (user.carrier_id) {
+            // Los usuarios de carrier pueden ver todas las issues
+         } else if (!user.agency_id || issue.agency_id !== user.agency_id) {
+            throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to view this issue");
+         }
       }
 
       // Solo staff puede ver comentarios internos
-      const includeInternal = allowedRoles.includes(user.role as Roles);
+      const includeInternal = hasPermission(user.role as Roles, Permissions.ISSUE_VIEW_ALL);
 
       const comments = await repository.issues.getComments(issueId, includeInternal);
 
@@ -411,8 +436,7 @@ const issues = {
       }
 
       // Solo admin puede eliminar comentarios
-      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR, Roles.CARRIER_ADMIN];
-      if (!allowedRoles.includes(user.role as Roles)) {
+      if (!hasPermission(user.role as Roles, Permissions.ISSUE_DELETE)) {
          throw new AppError(HttpStatusCodes.FORBIDDEN, "Only administrators can delete comments");
       }
 
@@ -444,10 +468,15 @@ const issues = {
          throw new AppError(HttpStatusCodes.NOT_FOUND, "Issue not found");
       }
 
-      // RBAC: Verificar permisos - ROOT, ADMINISTRATOR y CARRIER_ADMIN pueden agregar attachments a todas las issues
-      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR, Roles.CARRIER_ADMIN];
-      if (!allowedRoles.includes(user.role as Roles) && issue.agency_id !== user.agency_id) {
-         throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to add attachments to this issue");
+      // RBAC: Verificar permisos - ROOT, ADMINISTRATOR y roles de carrier pueden agregar attachments a todas las issues
+      const canManageAll = hasPermission(user.role as Roles, Permissions.ISSUE_MANAGE);
+      if (!canManageAll) {
+         // Si el usuario es de carrier, puede agregar attachments a todas las issues
+         if (user.carrier_id) {
+            // Los usuarios de carrier pueden agregar attachments a todas las issues
+         } else if (!user.agency_id || issue.agency_id !== user.agency_id) {
+            throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to add attachments to this issue");
+         }
       }
 
       const attachment = await repository.issues.addAttachment({
@@ -479,10 +508,15 @@ const issues = {
          throw new AppError(HttpStatusCodes.NOT_FOUND, "Issue not found");
       }
 
-      // RBAC: Verificar permisos - ROOT, ADMINISTRATOR y CARRIER_ADMIN pueden ver todas las issues
-      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR, Roles.CARRIER_ADMIN];
-      if (!allowedRoles.includes(user.role as Roles) && issue.agency_id !== user.agency_id) {
-         throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to view this issue");
+      // RBAC: Verificar permisos - ROOT, ADMINISTRATOR y roles de carrier pueden ver todas las issues
+      const canViewAll = hasPermission(user.role as Roles, Permissions.ISSUE_VIEW_ALL);
+      if (!canViewAll) {
+         // Si el usuario es de carrier, puede ver todas las issues
+         if (user.carrier_id) {
+            // Los usuarios de carrier pueden ver todas las issues
+         } else if (!user.agency_id || issue.agency_id !== user.agency_id) {
+            throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to view this issue");
+         }
       }
 
       const attachments = await repository.issues.getAttachments(issueId);
@@ -505,8 +539,7 @@ const issues = {
       }
 
       // Solo admin puede eliminar attachments
-      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR, Roles.CARRIER_ADMIN];
-      if (!allowedRoles.includes(user.role as Roles)) {
+      if (!hasPermission(user.role as Roles, Permissions.ISSUE_DELETE)) {
          throw new AppError(HttpStatusCodes.FORBIDDEN, "Only administrators can delete attachments");
       }
 
@@ -524,15 +557,18 @@ const issues = {
          throw new AppError(HttpStatusCodes.UNAUTHORIZED, "User not authenticated");
       }
 
-      // RBAC: Solo ROOT, ADMINISTRATOR y CARRIER_ADMIN pueden ver todas las estadísticas
-      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR, Roles.CARRIER_ADMIN];
+      // RBAC: Solo ROOT, ADMINISTRATOR y roles de carrier pueden ver todas las estadísticas
       const filters: { agency_id?: number } = {};
 
-      if (!allowedRoles.includes(user.role as Roles)) {
-         if (!user.agency_id) {
-            throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must belong to an agency");
+      if (!hasPermission(user.role as Roles, Permissions.ISSUE_VIEW_ALL)) {
+         // Si el usuario es de carrier, puede ver todas las stats
+         if (user.carrier_id) {
+            // Los usuarios de carrier pueden ver todas las estadísticas
+         } else if (user.agency_id) {
+            filters.agency_id = user.agency_id;
+         } else {
+            throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must belong to an agency or carrier");
          }
-         filters.agency_id = user.agency_id;
       } else if (req.query.agency_id) {
          filters.agency_id = parseInt(req.query.agency_id);
       }

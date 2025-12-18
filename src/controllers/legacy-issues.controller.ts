@@ -4,6 +4,7 @@ import HttpStatusCodes from "../common/https-status-codes";
 import repository from "../repositories";
 import { IssueType, IssuePriority, IssueStatus, Roles } from "@prisma/client";
 import { legacy_db_service } from "../services/legacy-myslq-db";
+import { Permissions, hasPermission } from "../utils/permissions";
 
 interface LegacyIssuesRequest {
    user?: {
@@ -11,6 +12,7 @@ interface LegacyIssuesRequest {
       email: string;
       role: string;
       agency_id?: number;
+      carrier_id?: number;
    };
    query: {
       page?: string;
@@ -62,19 +64,20 @@ const legacyIssues = {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "Title and description are required");
       }
 
-      if (!user.agency_id) {
-         throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must belong to an agency");
+      // Los usuarios deben pertenecer a una agencia o carrier
+      if (!user.agency_id && !user.carrier_id) {
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must belong to an agency or carrier");
       }
 
-      //verify if the legacy order exist in the legacy system
-      const order = await legacy_db_service.getParcelsByOrderId(Number(legacy_order_id));
-      console.log(order, "order");
-      if (!order) {
-         throw new AppError(HttpStatusCodes.NOT_FOUND, "Order not found");
-      }
-
-      // Check if an issue with this legacy_order_id already exists
+      // Verify if the legacy order exists in the legacy system (only if legacy_order_id is provided)
       if (legacy_order_id) {
+         const order = await legacy_db_service.getParcelsByOrderId(Number(legacy_order_id));
+         console.log(order, "order");
+         if (!order) {
+            throw new AppError(HttpStatusCodes.NOT_FOUND, "Order not found");
+         }
+
+         // Check if an issue with this legacy_order_id already exists
          const existingIssue = await repository.legacyIssues.findByLegacyOrderId(legacy_order_id);
          if (existingIssue) {
             throw new AppError(HttpStatusCodes.CONFLICT, `An issue with order ID ${legacy_order_id} already exists`);
@@ -89,7 +92,7 @@ const legacyIssues = {
          legacy_order_id,
          affected_parcel_ids,
          created_by_id: user.id,
-         agency_id: user.agency_id,
+         agency_id: user.agency_id || null, // Puede ser null si es creada por un carrier
          assigned_to_id,
       });
 
@@ -125,14 +128,19 @@ const legacyIssues = {
          legacy_hbl?: string;
       } = {};
 
-      // RBAC: Solo ROOT y ADMINISTRATOR pueden ver todas las incidencias legacy
+      // RBAC: Solo ROOT, ADMINISTRATOR y roles de carrier pueden ver todas las incidencias legacy
       // Otros roles solo ven las de su agencia
-      const adminRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
-      if (!adminRoles.includes(user.role as Roles)) {
-         if (!user.agency_id) {
-            throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must belong to an agency");
+      const canViewAll = hasPermission(user.role as Roles, Permissions.LEGACY_ISSUE_VIEW_ALL);
+      if (!canViewAll) {
+         // Si el usuario es de carrier, puede ver todas las issues (los carriers resuelven issues de agencias)
+         if (user.carrier_id) {
+            // Los usuarios de carrier pueden ver todas las legacy issues
+            // No aplicamos filtro de agency_id
+         } else if (!user.agency_id) {
+            throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must belong to an agency or carrier");
+         } else {
+            filters.agency_id = user.agency_id; // Filtrar por agencia directamente
          }
-         filters.agency_id = user.agency_id; // Filtrar por agencia directamente
       }
 
       if (req.query.status) {
@@ -208,16 +216,19 @@ const legacyIssues = {
          throw new AppError(HttpStatusCodes.NOT_FOUND, "Legacy issue not found");
       }
 
-      // RBAC: Verificar permisos - ROOT y ADMINISTRATOR pueden ver todas las legacy issues
-      // Otros roles solo pueden ver las de su agencia
-      const adminRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
-      if (!adminRoles.includes(user.role as Roles)) {
-         if (!user.agency_id) {
-            throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must belong to an agency");
-         }
-         // Verificar que el creador de la issue pertenezca a la misma agencia
-         if (!issue.created_by?.agency_id || issue.created_by.agency_id !== user.agency_id) {
-            throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to view this legacy issue");
+      // RBAC: Verificar permisos - ROOT, ADMINISTRATOR y roles de carrier pueden ver todas las legacy issues
+      const canViewAll = hasPermission(user.role as Roles, Permissions.LEGACY_ISSUE_VIEW_ALL);
+      if (!canViewAll) {
+         // Si el usuario es de carrier, puede ver todas las issues
+         if (user.carrier_id) {
+            // Los usuarios de carrier pueden ver todas las legacy issues
+         } else if (!user.agency_id) {
+            throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must belong to an agency or carrier");
+         } else {
+            // Verificar que el creador de la issue pertenezca a la misma agencia
+            if (!issue.created_by?.agency_id || issue.created_by.agency_id !== user.agency_id) {
+               throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to view this legacy issue");
+            }
          }
       }
 
@@ -243,16 +254,18 @@ const legacyIssues = {
       }
 
       // RBAC: Solo el creador, asignado o admin puede actualizar
-      // ROOT y ADMINISTRATOR pueden actualizar todas, otros solo las de su agencia
-      const adminRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
-      const isAdmin = adminRoles.includes(user.role as Roles);
+      // ROOT, ADMINISTRATOR y roles de carrier pueden actualizar todas
+      const canManageAll = hasPermission(user.role as Roles, Permissions.LEGACY_ISSUE_VIEW_ALL);
+      const isCreator = issue.created_by_id === user.id;
+      const isAssigned = issue.assigned_to_id === user.id;
 
-      if (!isAdmin) {
-         if (!user.agency_id) {
-            throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must belong to an agency");
-         }
-         // Verificar que la issue pertenezca a la misma agencia
-         if (!issue.agency_id || issue.agency_id !== user.agency_id) {
+      if (!canManageAll && !isCreator && !isAssigned) {
+         // Si el usuario es de carrier, puede actualizar todas las issues
+         if (user.carrier_id) {
+            // Los usuarios de carrier pueden actualizar todas las legacy issues
+         } else if (!user.agency_id) {
+            throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must belong to an agency or carrier");
+         } else if (!issue.agency_id || issue.agency_id !== user.agency_id) {
             throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to update this legacy issue");
          }
       }
@@ -297,16 +310,17 @@ const legacyIssues = {
       }
 
       // RBAC: Solo el asignado o admin puede resolver
-      // ROOT y ADMINISTRATOR pueden resolver todas, otros solo las de su agencia
-      const adminRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
-      const isAdmin = adminRoles.includes(user.role as Roles);
+      // ROOT, ADMINISTRATOR y roles de carrier pueden resolver todas
+      const canManageAll = hasPermission(user.role as Roles, Permissions.LEGACY_ISSUE_VIEW_ALL);
+      const isAssigned = issue.assigned_to_id === user.id;
 
-      if (!isAdmin) {
-         if (!user.agency_id) {
-            throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must belong to an agency");
-         }
-         // Verificar que la issue pertenezca a la misma agencia
-         if (!issue.agency_id || issue.agency_id !== user.agency_id) {
+      if (!canManageAll && !isAssigned) {
+         // Si el usuario es de carrier, puede resolver todas las issues
+         if (user.carrier_id) {
+            // Los usuarios de carrier pueden resolver todas las legacy issues
+         } else if (!user.agency_id) {
+            throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must belong to an agency or carrier");
+         } else if (!issue.agency_id || issue.agency_id !== user.agency_id) {
             throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to resolve this legacy issue");
          }
       }
@@ -378,16 +392,17 @@ const legacyIssues = {
       }
 
       // RBAC: Solo el creador o admin puede comentar
-      // ROOT y ADMINISTRATOR pueden comentar en todas, otros solo en las de su agencia
-      const adminRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
-      const isAdmin = adminRoles.includes(user.role as Roles);
+      // ROOT, ADMINISTRATOR y roles de carrier pueden comentar en todas
+      const canManageAll = hasPermission(user.role as Roles, Permissions.LEGACY_ISSUE_VIEW_ALL);
+      const isCreator = issue.created_by_id === user.id;
 
-      if (!isAdmin) {
-         if (!user.agency_id) {
-            throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must belong to an agency");
-         }
-         // Verificar que la issue pertenezca a la misma agencia
-         if (!issue.agency_id || issue.agency_id !== user.agency_id) {
+      if (!canManageAll && !isCreator) {
+         // Si el usuario es de carrier, puede comentar en todas las issues
+         if (user.carrier_id) {
+            // Los usuarios de carrier pueden comentar en todas las legacy issues
+         } else if (!user.agency_id) {
+            throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must belong to an agency or carrier");
+         } else if (!issue.agency_id || issue.agency_id !== user.agency_id) {
             throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to comment on this legacy issue");
          }
       }
@@ -421,14 +436,14 @@ const legacyIssues = {
          throw new AppError(HttpStatusCodes.NOT_FOUND, "Legacy issue not found");
       }
 
-      // RBAC: Verificar permisos - ROOT, ADMINISTRATOR y CARRIER_ADMIN pueden ver todas las legacy issues
-      const allowedRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR, Roles.CARRIER_ADMIN];
-      if (!allowedRoles.includes(user.role as Roles) && issue.created_by_id !== user.id) {
+      // RBAC: Verificar permisos - ROOT, ADMINISTRATOR y roles de carrier pueden ver todas las legacy issues
+      const canViewAll = hasPermission(user.role as Roles, Permissions.LEGACY_ISSUE_VIEW_ALL);
+      if (!canViewAll && issue.created_by_id !== user.id) {
          throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to view this legacy issue");
       }
 
       // Solo staff puede ver comentarios internos
-      const includeInternal = allowedRoles.includes(user.role as Roles);
+      const includeInternal = hasPermission(user.role as Roles, Permissions.LEGACY_ISSUE_VIEW_ALL);
 
       const comments = await repository.legacyIssues.getComments(issueId, includeInternal);
 
@@ -452,9 +467,8 @@ const legacyIssues = {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid comment ID");
       }
 
-      // Solo ROOT y ADMINISTRATOR pueden eliminar comentarios
-      const adminRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
-      if (!adminRoles.includes(user.role as Roles)) {
+      // Solo ROOT, ADMINISTRATOR y roles de carrier pueden eliminar comentarios
+      if (!hasPermission(user.role as Roles, Permissions.ISSUE_DELETE)) {
          throw new AppError(HttpStatusCodes.FORBIDDEN, "Only administrators can delete comments");
       }
 
@@ -490,16 +504,17 @@ const legacyIssues = {
       }
 
       // RBAC: Solo el creador o admin puede agregar attachments
-      // ROOT y ADMINISTRATOR pueden agregar attachments a todas, otros solo a las de su agencia
-      const adminRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
-      const isAdmin = adminRoles.includes(user.role as Roles);
+      // ROOT, ADMINISTRATOR y roles de carrier pueden agregar attachments a todas
+      const canManageAll = hasPermission(user.role as Roles, Permissions.LEGACY_ISSUE_VIEW_ALL);
+      const isCreator = issue.created_by_id === user.id;
 
-      if (!isAdmin) {
-         if (!user.agency_id) {
-            throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must belong to an agency");
-         }
-         // Verificar que la issue pertenezca a la misma agencia
-         if (!issue.agency_id || issue.agency_id !== user.agency_id) {
+      if (!canManageAll && !isCreator) {
+         // Si el usuario es de carrier, puede agregar attachments a todas las issues
+         if (user.carrier_id) {
+            // Los usuarios de carrier pueden agregar attachments a todas las legacy issues
+         } else if (!user.agency_id) {
+            throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must belong to an agency or carrier");
+         } else if (!issue.agency_id || issue.agency_id !== user.agency_id) {
             throw new AppError(
                HttpStatusCodes.FORBIDDEN,
                "You don't have permission to add attachments to this legacy issue"
@@ -539,17 +554,15 @@ const legacyIssues = {
          throw new AppError(HttpStatusCodes.NOT_FOUND, "Legacy issue not found");
       }
 
-      // RBAC: Verificar permisos - ROOT y ADMINISTRATOR pueden ver todas las legacy issues
-      // Otros roles solo pueden ver las de su agencia
-      const adminRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
-      const isAdmin = adminRoles.includes(user.role as Roles);
-
-      if (!isAdmin) {
-         if (!user.agency_id) {
-            throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must belong to an agency");
-         }
-         // Verificar que la issue pertenezca a la misma agencia
-         if (!issue.agency_id || issue.agency_id !== user.agency_id) {
+      // RBAC: Verificar permisos - ROOT, ADMINISTRATOR y roles de carrier pueden ver todas las legacy issues
+      const canViewAll = hasPermission(user.role as Roles, Permissions.LEGACY_ISSUE_VIEW_ALL);
+      if (!canViewAll) {
+         // Si el usuario es de carrier, puede ver todas las issues
+         if (user.carrier_id) {
+            // Los usuarios de carrier pueden ver todas las legacy issues
+         } else if (!user.agency_id) {
+            throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must belong to an agency or carrier");
+         } else if (!issue.agency_id || issue.agency_id !== user.agency_id) {
             throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to view this legacy issue");
          }
       }
@@ -576,9 +589,8 @@ const legacyIssues = {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid attachment ID");
       }
 
-      // Solo ROOT y ADMINISTRATOR pueden eliminar attachments
-      const adminRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
-      if (!adminRoles.includes(user.role as Roles)) {
+      // Solo ROOT, ADMINISTRATOR y roles de carrier pueden eliminar attachments
+      if (!hasPermission(user.role as Roles, Permissions.ISSUE_DELETE)) {
          throw new AppError(HttpStatusCodes.FORBIDDEN, "Only administrators can delete attachments");
       }
 
@@ -596,16 +608,19 @@ const legacyIssues = {
          throw new AppError(HttpStatusCodes.UNAUTHORIZED, "User not authenticated");
       }
 
-      // RBAC: Solo ROOT y ADMINISTRATOR pueden ver todas las estadísticas
-      // Otros roles solo ven las de su agencia
-      const adminRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
+      // RBAC: Solo ROOT, ADMINISTRATOR y roles de carrier pueden ver todas las estadísticas
+      const canViewAll = hasPermission(user.role as Roles, Permissions.LEGACY_ISSUE_VIEW_ALL);
       const filters: { created_by_id?: string; agency_id?: number } = {};
 
-      if (!adminRoles.includes(user.role as Roles)) {
-         if (!user.agency_id) {
-            throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must belong to an agency");
+      if (!canViewAll) {
+         // Si el usuario es de carrier, puede ver todas las stats
+         if (user.carrier_id) {
+            // Los usuarios de carrier pueden ver todas las estadísticas
+         } else if (!user.agency_id) {
+            throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must belong to an agency or carrier");
+         } else {
+            filters.agency_id = user.agency_id; // Usuarios regulares solo ven las stats de su agencia
          }
-         filters.agency_id = user.agency_id; // Usuarios regulares solo ven las stats de su agencia
       }
 
       const stats = await repository.legacyIssues.getStats(filters);

@@ -4,6 +4,7 @@ import providers_routes from "./providers.routes";
 import agencies_routes from "./agencies.routes";
 import services_routes from "./services.routes";
 import forwarders_routes from "./forwarders.routes";
+import carriersRoutes from "./carriers.routes";
 import customers_routes from "./customers.routes";
 import provinces_routes from "./provinces.routes";
 import receivers_routes from "./receivers.routes";
@@ -34,6 +35,7 @@ router.get("/", (req: Request, res: Response) => {
 router.use("/providers", authMiddleware, providers_routes);
 router.use("/forwarders", authMiddleware, forwarders_routes);
 router.use("/agencies", authMiddleware, agencies_routes);
+router.use("/carriers", authMiddleware, carriersRoutes);
 router.use("/services", authMiddleware, services_routes);
 router.use("/customs-rates", authMiddleware, customs_rates_routes);
 router.use("/users", users_routes);
