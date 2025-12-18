@@ -12,7 +12,7 @@ interface CreateLegacyIssueData {
    legacy_hbl?: string;
    affected_parcel_ids?: Array<number | { legacy_parcel_id: string; legacy_order_id?: number }>; // Parcels afectados del sistema legacy (acepta números o objetos)
    created_by_id: string;
-   agency_id?: number; // Agencia del usuario creador
+   agency_id?: number | null; // Agencia del usuario creador
    assigned_to_id?: string;
 }
 

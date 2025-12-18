@@ -92,7 +92,7 @@ const legacyIssues = {
          legacy_order_id,
          affected_parcel_ids,
          created_by_id: user.id,
-         agency_id: user.agency_id || null, // Puede ser null si es creada por un carrier
+         agency_id: user.agency_id || undefined, // Puede ser undefined si es creada por un carrier
          assigned_to_id,
       });
 
@@ -270,11 +270,6 @@ const legacyIssues = {
          }
       }
 
-      const canUpdate = isAdmin || issue.created_by_id === user.id || issue.assigned_to_id === user.id;
-      if (!canUpdate) {
-         throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to update this legacy issue");
-      }
-
       const updatedIssue = await repository.legacyIssues.update(id, {
          title,
          description,
@@ -323,11 +318,6 @@ const legacyIssues = {
          } else if (!issue.agency_id || issue.agency_id !== user.agency_id) {
             throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to resolve this legacy issue");
          }
-      }
-
-      const canResolve = isAdmin || issue.assigned_to_id === user.id;
-      if (!canResolve) {
-         throw new AppError(HttpStatusCodes.FORBIDDEN, "You don't have permission to resolve this legacy issue");
       }
 
       const resolvedIssue = await repository.legacyIssues.resolve(id, user.id, resolution_notes);

@@ -79,13 +79,8 @@ const users = {
          }
 
          // Validar roles permitidos para usuarios de agencia
-         const agencyRoles = [
-            Roles.AGENCY_ADMIN,
-            Roles.AGENCY_SUPERVISOR,
-            Roles.AGENCY_SALES,
-            Roles.USER,
-         ];
-         if (!agencyRoles.includes(role)) {
+         const agencyRoles = [Roles.AGENCY_ADMIN, Roles.AGENCY_SUPERVISOR, Roles.AGENCY_SALES, Roles.USER] as const;
+         if (!(agencyRoles as readonly Roles[]).includes(role)) {
             throw new AppError(
                HttpStatusCodes.BAD_REQUEST,
                `Invalid role for agency user. Allowed roles: ${agencyRoles.join(", ")}`
@@ -113,8 +108,8 @@ const users = {
             Roles.CARRIER_ISSUES_MANAGER,
             Roles.CARRIER_WAREHOUSE_WORKER,
             Roles.MESSENGER,
-         ];
-         if (!carrierRoles.includes(role)) {
+         ] as const;
+         if (!(carrierRoles as readonly Roles[]).includes(role)) {
             throw new AppError(
                HttpStatusCodes.BAD_REQUEST,
                `Invalid role for carrier user. Allowed roles: ${carrierRoles.join(", ")}`
@@ -190,4 +185,3 @@ const users = {
 };
 
 export default users;
-
