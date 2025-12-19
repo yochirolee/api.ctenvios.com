@@ -288,6 +288,7 @@ export const legacyIssues = {
          legacy_order_id?: number;
          legacy_parcel_id?: number;
          legacy_hbl?: string;
+         issue_id?: number;
       };
    }) => {
       const where: Prisma.LegacyIssueWhereInput = {};
@@ -330,6 +331,10 @@ export const legacyIssues = {
 
       if (filters?.legacy_hbl) {
          where.legacy_hbl = filters.legacy_hbl;
+      }
+
+      if (filters?.issue_id) {
+         where.id = filters.issue_id;
       }
 
       const [legacyIssues, total] = await Promise.all([

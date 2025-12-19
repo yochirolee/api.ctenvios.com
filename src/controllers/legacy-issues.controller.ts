@@ -24,6 +24,7 @@ interface LegacyIssuesRequest {
       legacy_parcel_id?: string;
       legacy_hbl?: string;
       assigned_to_id?: string;
+      issue_id?: string;
    };
    body: {
       title?: string;
@@ -126,6 +127,7 @@ const legacyIssues = {
          legacy_order_id?: number;
          legacy_parcel_id?: number;
          legacy_hbl?: string;
+         issue_id?: number;
       } = {};
 
       // RBAC: Solo ROOT, ADMINISTRATOR y roles de carrier pueden ver todas las incidencias legacy
@@ -187,6 +189,10 @@ const legacyIssues = {
 
       if (req.query.legacy_hbl) {
          filters.legacy_hbl = req.query.legacy_hbl;
+      }
+
+      if (req.query.issue_id) {
+         filters.issue_id = parseInt(req.query.issue_id);
       }
 
       const { legacyIssues, total } = await repository.legacyIssues.getAll({ page, limit, filters });
