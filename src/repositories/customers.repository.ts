@@ -2,16 +2,32 @@ import { City, Customer, Prisma, Province, Receiver } from "@prisma/client";
 import prisma from "../lib/prisma.client";
 
 const customers = {
-   get: async (page: number = 1, limit: number = 10): Promise<{ rows: Customer[]; total: number }> => {
+   get: async (
+      agency_id: number | null,
+      page: number = 1,
+      limit: number = 10
+   ): Promise<{ rows: Customer[]; total: number }> => {
+      // Build where clause conditionally based on agency_id
+      const whereClause = agency_id
+         ? {
+              agencies: {
+                 some: { id: agency_id },
+              },
+           }
+         : {}; // Empty where clause returns all customers
+
       // Parallelize count and findMany queries for better performance
       const [total, rows] = await Promise.all([
-         prisma.customer.count(),
+         prisma.customer.count({
+            where: whereClause,
+         }),
          prisma.customer.findMany({
             skip: (page - 1) * limit,
             take: limit,
             orderBy: {
                first_name: "asc",
             },
+            where: whereClause,
          }),
       ]);
       return { rows, total };

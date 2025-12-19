@@ -93,6 +93,28 @@ export const agencies = {
 
       return getAllChildren(parentId);
    },
+   addCustomerToAgency: async (agency_id: number, customer_id: number) => {
+      //connect customer to agency
+      await prisma.agency.update({
+         where: { id: agency_id },
+         data: {
+            customers: {
+               connect: { id: customer_id },
+            },
+         },
+      });
+   },
+   addReceiverToAgency: async (agency_id: number, receiver_id: number) => {
+      //connect receiver to agency
+      await prisma.agency.update({
+         where: { id: agency_id },
+         data: {
+            receivers: {
+               connect: { id: receiver_id },
+            },
+         },
+      });
+   },
 };
 
 export default agencies;

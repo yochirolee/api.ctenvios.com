@@ -1,6 +1,5 @@
-import { Router, Request, Response } from "express";
+import { Router, Response } from "express";
 import { legacyMysqlDb } from "../services/legacy-myslq-db";
-import { legacyParserService } from "../services/legacy-parser.service";
 import { authMiddleware } from "../middlewares/auth.middleware";
 import { AppError } from "../common/app-errors";
 import HttpStatusCodes from "../common/https-status-codes";
@@ -14,9 +13,9 @@ router.get("/test", async (req, res) => {
 });
 
 /**
- * GET /api/v1/legacy/:id/parcels
+ * GET /api/v1/legacy/orders/:id/parcels
  * Get parcels for a specific invoice ID and return in API order format
- * Query params: resolveRelations (default: true), defaultUserId, defaultServiceId
+ * Query params: defaultUserId, defaultServiceId
  */
 router.get("/orders/:id/parcels", authMiddleware, async (req: any, res: Response): Promise<void> => {
    const user = req.user;
@@ -26,7 +25,7 @@ router.get("/orders/:id/parcels", authMiddleware, async (req: any, res: Response
    }
 
    const { id } = req.params;
-   const { resolveRelations = "true", defaultUserId, defaultServiceId } = req.query;
+   const { defaultUserId, defaultServiceId } = req.query;
 
    const invoiceId = parseInt(id);
    if (isNaN(invoiceId)) {
@@ -81,20 +80,78 @@ router.get("/orders/:id/parcels", authMiddleware, async (req: any, res: Response
       weight: row.weight || "0.00",
    }));
 
-   // Parse to API format
-   const parsedOrder = await legacyParserService.parseLegacyOrderByInvoiceId(invoiceId, legacyParcels, {
-      resolveRelations: resolveRelations !== "false",
-      defaultUserId: (defaultUserId as string) || user.id,
-      defaultServiceId: defaultServiceId ? parseInt(defaultServiceId as string) : 1,
-   });
+   // Format response without database searches
+   const firstParcel = legacyParcels[0];
 
-   if (!parsedOrder) {
-      throw new AppError(HttpStatusCodes.NOT_FOUND, `Failed to parse order for invoice ID ${invoiceId}`);
-   }
+   const formattedOrder = {
+      order_id: invoiceId,
+      customer_id: null,
+      customer: {
+         id: null,
+         first_name: firstParcel.sender?.split(" ")[0] || "",
+         middle_name: firstParcel.sender?.split(" ")[1] || null,
+         last_name: firstParcel.sender?.split(" ").slice(-1)[0] || "",
+         second_last_name: null,
+         mobile: firstParcel.senderMobile || "",
+         email: firstParcel.senderEmail || null,
+         address: null,
+         identity_document: null,
+      },
+      receiver_id: null,
+      receiver: {
+         id: null,
+         first_name: firstParcel.receiver?.split(" ")[0] || "",
+         middle_name: firstParcel.receiver?.split(" ")[1] || null,
+         last_name: firstParcel.receiver?.split(" ").slice(-1)[0] || "",
+         second_last_name: null,
+         ci: firstParcel.receiverCi || null,
+         mobile: firstParcel.receiverMobile || null,
+         email: null,
+         phone: null,
+         address:
+            [firstParcel.cll, firstParcel.entre_cll, firstParcel.no, firstParcel.apto, firstParcel.reparto]
+               .filter(Boolean)
+               .join(", ") || "",
+         province_id: firstParcel.stateId || null,
+         city_id: firstParcel.cityId || null,
+      },
+      service_id: defaultServiceId ? parseInt(defaultServiceId as string) : 1,
+      service: { id: defaultServiceId ? parseInt(defaultServiceId as string) : 1, name: "Maritimo" },
+      agency_id: firstParcel.agencyId || null,
+      agency: { id: firstParcel.agencyId || null, name: firstParcel.agency || "" },
+      parcels: legacyParcels.map((parcel) => ({
+         id: parcel.id,
+         tracking_number: parcel.hbl || "",
+         description: parcel.description || "",
+         weight: parseFloat(parcel.weight) || 0,
+         status: parcel.dispatchStatus === 3 ? "DELIVERED" : parcel.dispatchStatus === 4 ? "RETURNED" : "IN_TRANSIT",
+         agency_id: parcel.agencyId || null,
+         order_id: invoiceId,
+         service_id: defaultServiceId ? parseInt(defaultServiceId as string) : 1,
+         created_at: parcel.invoiceDate || new Date().toISOString(),
+         updated_at: new Date().toISOString(),
+         user_id: (defaultUserId as string) || user.id,
+         legacy_parcel_id: parcel.hbl || "",
+      })),
+      paid_in_cents: 0,
+      requires_home_delivery: true,
+      created_at: firstParcel.invoiceDate || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      user_id: (defaultUserId as string) || user.id,
+      user: null,
+      payment_status: "PENDING",
+      stage: "BILLING",
+      status:
+         firstParcel.dispatchStatus === 3 ? "DELIVERED" : firstParcel.dispatchStatus === 4 ? "RETURNED" : "IN_TRANSIT",
+      partner_id: null,
+      partner_order_id: null,
+      discounts: [],
+      payments: [],
+      issues: [],
+      legacy_invoice_id: invoiceId,
+   };
 
-   console.log("parsedOrder", parsedOrder);
-
-   res.status(200).json(parsedOrder);
+   res.status(200).json(formattedOrder);
 });
 
 export default router;

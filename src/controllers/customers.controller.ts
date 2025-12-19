@@ -1,25 +1,34 @@
 import { Request, RequestHandler, Response } from "express";
 import repository from "../repositories";
 import { AppError } from "../common/app-errors";
-import { Prisma, Customer } from "@prisma/client";
+import { Prisma, Customer, Roles } from "@prisma/client";
 import capitalize from "../utils/capitalize";
 import HttpStatusCodes from "../common/https-status-codes";
 
 export const customers = {
-   get: (async (req: Request, res: Response) => {
+   get: (async (req: any, res: Response) => {
+      const user = req.user;
       const { page, limit } = req.query;
+
+      // ROOT and ADMINISTRATOR can see all customers
+      const allowedRoles = [Roles.ROOT, Roles.ADMINISTRATOR];
+      const agency_id = allowedRoles.includes(user.role) ? null : user.agency_id;
+
       const { rows, total } = await repository.customers.get(
+         agency_id,
          parseInt(page as string) || 1,
          parseInt(limit as string) || 50
       );
       res.status(200).json({ rows, total });
    }) as RequestHandler,
 
-   search: (async (req: Request, res: Response) => {
+   search: (async (req: any, res: Response) => {
       if (!req.query.query) {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "Query is required");
       }
       const { page, limit } = req.query;
+
+      console.log("page", page);
 
       const data = await repository.customers.search(
          req.query.query as string,

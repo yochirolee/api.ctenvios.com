@@ -5,20 +5,29 @@ import { createRequestLogger } from "../utils/logger";
  * HTTP Request Logger Middleware
  * Logs all incoming HTTP requests with Winston
  * Should be used early in the middleware chain
+ * In development, only logs errors and warnings (skips HTTP level logs)
  */
 export const httpLoggerMiddleware = (req: Request, res: Response, next: NextFunction): void => {
+   const isDevelopment = process.env.NODE_ENV === "development";
    const requestLogger = createRequestLogger(req);
 
-   // Log request start
-   requestLogger.info(`Incoming request: ${req.method} ${req.path}`, {
-      source: "http",
-      statusCode: undefined, // Will be set when response is sent
-   });
+   // Log request start (only in production)
+   if (!isDevelopment) {
+      requestLogger.info(`Incoming request: ${req.method} ${req.path}`, {
+         source: "http",
+         statusCode: undefined, // Will be set when response is sent
+      });
+   }
 
    // Log response when finished
    res.on("finish", () => {
       const statusCode = res.statusCode;
       const level = statusCode >= 500 ? "error" : statusCode >= 400 ? "warn" : "http";
+
+      // In development, skip HTTP level logs (only log errors and warnings)
+      if (isDevelopment && level === "http") {
+         return;
+      }
 
       if (level === "error") {
          requestLogger.error(`Request failed: ${req.method} ${req.path}`, {

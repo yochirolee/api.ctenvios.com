@@ -82,8 +82,8 @@ model Agency {
     shipping_rates      ShippingRate[]
     customs_rates       CustomsRates[]
     surcharges          Surcharge[]
-    customers           Customer[]
-    receivers           Receiver[]
+    customers           Customer[]     @relation("AgencyToCustomer")
+    receivers           Receiver[]     @relation("AgencyToReceiver")
     order_items         OrderItem[]
     counters            Counter[]
     partners            Partner[]
@@ -113,18 +113,16 @@ model Customer {
     address           String?
     created_at        DateTime   @default(now())
     updated_at        DateTime   @updatedAt
-    receivers         Receiver[]
-    agency_id         Int?
-    agency            Agency?    @relation(fields: [agency_id], references: [id], onDelete: Cascade)
+    receivers         Receiver[] @relation("CustomerToReceiver")
+    agencies          Agency[]   @relation("AgencyToCustomer")
     is_active         Boolean    @default(true)
     orders            Order[]
 
     @@unique([mobile, first_name, last_name])
-    @@index([agency_id, created_at(sort: Desc)]) // 🔥 MÁS IMPORTANTE
     @@index([created_at(sort: Desc)]) // Para admins
     @@index([id]) // Para JOINs
-    @@index([first_name, last_name]) // For name searches
-    @@index([mobile]) // For mobile searches
+    @@index([first_name, last_name])
+    @@index([mobile])
 }
 
 model Receiver {
@@ -141,9 +139,8 @@ model Receiver {
     address          String
     created_at       DateTime   @default(now())
     updated_at       DateTime   @updatedAt
-    customers        Customer[]
-    agency_id        Int?
-    agency           Agency?    @relation(fields: [agency_id], references: [id], onDelete: Cascade)
+    customers        Customer[] @relation("CustomerToReceiver")
+    agencies         Agency[]   @relation("AgencyToReceiver")
     province_id      Int
     province         Province   @relation(fields: [province_id], references: [id])
     city_id          Int
@@ -153,7 +150,6 @@ model Receiver {
     @@index([mobile]) // 🔥 Búsqueda por móvil
     @@index([ci]) // 🔥 Búsqueda por CI
     @@index([first_name, last_name]) // 🔥 Búsqueda por nombre completo
-    @@index([agency_id]) // 🔥 Para JOINs
 }
 
 model Order {

@@ -123,7 +123,10 @@ export const ordersService = {
          repository.receivers
             .connect(receiver_id, customer_id)
             .catch((err) => console.error("Receiver connection failed (non-critical):", err));
-
+         //connect customer to agency
+         repository.agencies.addCustomerToAgency(agency_id, customer_id);
+         //connect receiver to agency
+         repository.agencies.addReceiverToAgency(agency_id, receiver_id);
          return order;
       }
 
@@ -188,7 +191,10 @@ export const ordersService = {
       repository.receivers
          .connect(resolvedReceiver.id, resolvedCustomer.id)
          .catch((err) => console.error("Receiver connection failed (non-critical):", err));
-      console.log("order", order);
+      //connect customer to agency
+      repository.agencies.addCustomerToAgency(agency_id, resolvedCustomer.id);
+      //connect receiver to agency
+      repository.agencies.addReceiverToAgency(agency_id, resolvedReceiver.id);
       return order;
    },
    payOrder: async (order_id: number, paymentData: Prisma.PaymentCreateInput, user_id: string): Promise<any> => {

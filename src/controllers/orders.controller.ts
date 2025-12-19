@@ -17,7 +17,7 @@ export const ordersController = {
     * Frontend: sends customer_id and receiver_id
     * Partners: send customer and receiver objects with location names
     */
-   create: async (req: any, res: Response, next: NextFunction): Promise<void> => {
+   create: async (req: any, res: Response): Promise<void> => {
       const {
          customer_id,
          receiver_id,

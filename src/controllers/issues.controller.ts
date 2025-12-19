@@ -3,7 +3,7 @@ import { AppError } from "../common/app-errors";
 import HttpStatusCodes from "../common/https-status-codes";
 import repository from "../repositories";
 import { IssueType, IssuePriority, IssueStatus, Roles } from "@prisma/client";
-import { Permissions, canViewOwnResource, canViewResource, hasPermission } from "../utils/permissions";
+import { Permissions, hasPermission } from "../utils/permissions";
 
 interface IssuesRequest {
    user?: {

@@ -3,22 +3,37 @@ import prisma from "../lib/prisma.client";
 
 const receivers = {
    get: async (
+      agency_id: number | null,
       page: number = 1,
       limit: number = 10
    ): Promise<{ rows: (Receiver & { province: Province; city: City })[]; total: number }> => {
-      // Ensure valid numeric values
-      const total = await prisma.receiver.count();
-      const rows = await prisma.receiver.findMany({
-         skip: (page - 1) * limit,
-         take: limit,
-         orderBy: {
-            first_name: "asc",
-         },
-         include: {
-            province: true,
-            city: true,
-         },
-      });
+      // Build where clause conditionally based on agency_id
+      const whereClause = agency_id
+         ? {
+              agencies: {
+                 some: { id: agency_id },
+              },
+           }
+         : {}; // Empty where clause returns all receivers
+
+      // Parallelize count and findMany queries for better performance
+      const [total, rows] = await Promise.all([
+         prisma.receiver.count({
+            where: whereClause,
+         }),
+         prisma.receiver.findMany({
+            skip: (page - 1) * limit,
+            take: limit,
+            orderBy: {
+               first_name: "asc",
+            },
+            where: whereClause,
+            include: {
+               province: true,
+               city: true,
+            },
+         }),
+      ]);
 
       return { rows, total };
    },

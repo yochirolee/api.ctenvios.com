@@ -64,12 +64,18 @@ const getDatabaseLogLevel = (): string => {
 
 /**
  * Determine which logs should be written to console
+ * Can be overridden with LOG_LEVEL environment variable
+ * Valid levels: error, warn, http, info, debug
  */
 const getConsoleLogLevel = (): string => {
+   // Allow override via environment variable
+   if (process.env.LOG_LEVEL) {
+      return process.env.LOG_LEVEL.toLowerCase();
+   }
    if (process.env.NODE_ENV === "production") {
       return "info"; // Only info and above in production
    }
-   return "debug"; // Everything in development
+   return "info"; // Changed from "debug" to reduce HTTP logs in development
 };
 
 /**

@@ -1,13 +1,20 @@
 import { Request, Response } from "express";
-import { Receiver } from "@prisma/client";
+import { Receiver, Roles } from "@prisma/client";
 import repository from "../repositories";
 import { createReceiverSchema } from "../types/types";
 import capitalize from "../utils/capitalize";
 
 export const receivers = {
-   get: async (req: Request, res: Response) => {
+   get: async (req: any, res: Response) => {
+      const user = req.user;
       const { page, limit } = req.query;
+      
+      // ROOT and ADMINISTRATOR can see all receivers
+      const allowedRoles = [Roles.ROOT, Roles.ADMINISTRATOR];
+      const agency_id = allowedRoles.includes(user.role) ? null : user.agency_id;
+      
       const { rows, total } = await repository.receivers.get(
+         agency_id,
          parseInt(page as string) || 1,
          parseInt(limit as string) || 50
       );

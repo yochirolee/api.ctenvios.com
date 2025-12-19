@@ -37,6 +37,7 @@ router.get("/ready-for-dispatch", async (req: any, res: Response) => {
 
 router.get("/:id/parcels", async (req: Request, res: Response) => {
    const dispatchId = parseInt(req.params.id);
+
    const { page = 1, limit = 25, status } = req.query;
    const { parcels, total } = await repository.dispatch.getParcelsInDispatch(
       dispatchId,
