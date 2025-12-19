@@ -33,9 +33,12 @@ router.get("/orders/:id/parcels", authMiddleware, async (req: any, res: Response
    }
 
    const db = await legacyMysqlDb();
+
+  
    const [rows] = await db.execute<any[]>("SELECT * from parcels where invoiceId = ?", [invoiceId]);
    await db.end();
 
+  
    if (!Array.isArray(rows) || rows.length === 0) {
       throw new AppError(HttpStatusCodes.NOT_FOUND, `No parcels found for invoice ID ${invoiceId}`);
    }
@@ -113,7 +116,9 @@ router.get("/orders/:id/parcels", authMiddleware, async (req: any, res: Response
                .filter(Boolean)
                .join(", ") || "",
          province_id: firstParcel.stateId || null,
+         province: firstParcel.province || null,
          city_id: firstParcel.cityId || null,
+         city: firstParcel.city || null,
       },
       service_id: defaultServiceId ? parseInt(defaultServiceId as string) : 1,
       service: { id: defaultServiceId ? parseInt(defaultServiceId as string) : 1, name: "Maritimo" },
