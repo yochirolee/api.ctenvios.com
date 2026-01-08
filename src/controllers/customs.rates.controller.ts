@@ -19,44 +19,24 @@ const customsRates = {
    },
    search: async (req: Request, res: Response) => {
       const { query, page, limit } = req.query;
-      const { rows, total } = await repository.customsRates.search(query as string, parseInt(page as string) || 1, parseInt(limit as string) || 25);
+      const { rows, total } = await repository.customsRates.search(
+         query as string,
+         parseInt(page as string) || 1,
+         parseInt(limit as string) || 25
+      );
       res.status(200).json({ rows, total });
    },
    create: async (req: Request, res: Response) => {
-      const schema = customsRatesSchema.safeParse(req.body);
-      if (!schema.success) {
-         const errors = schema.error.errors.map((err) => ({
-            field: err.path.length > 0 ? err.path.join(".") : "root",
-            message: err.message,
-         }));
-         return res.status(400).json({
-            error: "Validation failed",
-            source: "zod",
-            errors,
-         });
-      }
-      const customsRate = schema.data;
+      const customsRate = req.body;
       const rate = await repository.customsRates.create(customsRate as unknown as Prisma.CustomsRatesCreateInput);
       res.status(201).json(rate);
    },
    update: async (req: Request, res: Response) => {
       const { id } = req.params;
-      const schema = customsRatesSchema.safeParse(req.body);
-      if (!schema.success) {
-         const errors = schema.error.errors.map((err) => ({
-            field: err.path.length > 0 ? err.path.join(".") : "root",
-            message: err.message,
-         }));
-         return res.status(400).json({
-            error: "Validation failed",
-            source: "zod",
-            errors,
-         });
-      }
-      const customsRate = schema.data;
+      const customsRate = req.body;
       const rate = await repository.customsRates.update(
          Number(id),
-         customsRate as unknown as Prisma.CustomsRatesUpdateInput
+         customsRate as unknown as Prisma.CustomsRatesUncheckedUpdateInput
       );
       res.status(200).json(rate);
    },

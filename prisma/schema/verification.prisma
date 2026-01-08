@@ -1,0 +1,48 @@
+// ===========================================
+// VERIFICATION - Verificación de manifiestos
+// ===========================================
+
+model ManifestVerification {
+    id             Int                   @id @default(autoincrement())
+    container_id   Int?
+    container      Container?            @relation(fields: [container_id], references: [id])
+    flight_id      Int?
+    flight         Flight?               @relation(fields: [flight_id], references: [id])
+    status         VerificationStatus    @default(IN_PROGRESS)
+    expected_count Int
+    received_count Int                   @default(0)
+    missing_count  Int                   @default(0)
+    extra_count    Int                   @default(0)
+    discrepancies  ManifestDiscrepancy[]
+    verified_by_id String
+    verified_by    User                  @relation("manifest_verifications", fields: [verified_by_id], references: [id])
+    started_at     DateTime              @default(now())
+    completed_at   DateTime?
+    notes          String?
+    created_at     DateTime              @default(now())
+    updated_at     DateTime              @updatedAt
+
+    @@index([container_id])
+    @@index([flight_id])
+    @@index([status])
+}
+
+model ManifestDiscrepancy {
+    id               Int                  @id @default(autoincrement())
+    verification_id  Int
+    verification     ManifestVerification @relation(fields: [verification_id], references: [id], onDelete: Cascade)
+    parcel_id        Int?
+    parcel           Parcel?              @relation(fields: [parcel_id], references: [id])
+    tracking_number  String
+    discrepancy_type DiscrepancyType
+    resolution       String?
+    resolved_at      DateTime?
+    resolved_by_id   String?
+    resolved_by      User?                @relation("discrepancy_resolutions", fields: [resolved_by_id], references: [id])
+    created_at       DateTime             @default(now())
+    updated_at       DateTime             @updatedAt
+
+    @@index([verification_id])
+    @@index([parcel_id])
+    @@index([discrepancy_type])
+}

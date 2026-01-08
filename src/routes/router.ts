@@ -25,6 +25,13 @@ import issuesRoutes from "./issues.routes";
 import parcelsRoutes from "./parcels.routes";
 import legacyRoutes from "./legacy.routes";
 import legacyIssuesRoutes from "./legacy-issues.routes";
+import interAgencyDebtsRoutes from "./inter-agency-debts.routes";
+import containersRoutes from "./containers.routes";
+import flightsRoutes from "./flights.routes";
+import palletsRoutes from "./pallets.routes";
+import warehousesRoutes from "./warehouses.routes";
+import manifestVerificationRoutes from "./manifest-verification.routes";
+import deliveryRoutesRoutes from "./delivery-routes.routes";
 
 const router = Router();
 
@@ -57,4 +64,12 @@ router.use("/issues", authMiddleware, issuesRoutes);
 router.use("/parcels", authMiddleware, parcelsRoutes);
 router.use("/legacy", legacyRoutes);
 router.use("/legacy-issues", authMiddleware, legacyIssuesRoutes);
+router.use("/inter-agency-debts", interAgencyDebtsRoutes);
+router.use("/containers", authMiddleware, containersRoutes);
+router.use("/flights", authMiddleware, flightsRoutes);
+router.use("/pallets", authMiddleware, palletsRoutes);
+router.use("/warehouses", authMiddleware, warehousesRoutes);
+router.use("/manifest-verifications", authMiddleware, manifestVerificationRoutes);
+router.use("/delivery-routes", authMiddleware, deliveryRoutesRoutes);
+
 export default router;

@@ -1,0 +1,42 @@
+// ===========================================
+// LOGGING - Logs y configuración del sistema
+// ===========================================
+
+model AppLog {
+    id          Int      @id @default(autoincrement())
+    level       LogLevel @default(INFO)
+    message     String
+    source      String
+    code        String?
+    status_code Int?
+    details     Json?
+    stack       String?
+    path        String?
+    method      String?
+    ip_address  String?
+    user_agent  String?
+    user_id     String?
+    user_email  String?
+    user        User?    @relation(fields: [user_id], references: [id], onDelete: SetNull)
+    created_at  DateTime @default(now())
+
+    @@index([level, created_at(sort: Desc)])
+    @@index([source, created_at(sort: Desc)])
+    @@index([status_code, created_at(sort: Desc)])
+    @@index([user_id, created_at(sort: Desc)])
+    @@index([path, created_at(sort: Desc)])
+    @@index([created_at(sort: Desc)])
+    @@map("app_log")
+}
+
+model AppConfig {
+    id          Int      @id @default(autoincrement())
+    key         String   @unique
+    value       String
+    description String?
+    updated_at  DateTime @default(now()) @updatedAt
+    updated_by  String?
+
+    @@map("app_config")
+}
+

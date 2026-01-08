@@ -1,0 +1,205 @@
+// ===========================================
+// ORDERS - Órdenes, Items, Parcels, Dispatch
+// ===========================================
+
+model Order {
+    id                     Int            @id @default(autoincrement())
+    partner_order_id       String?
+    customer_id            Int
+    customer               Customer       @relation(fields: [customer_id], references: [id])
+    receiver_id            Int
+    receiver               Receiver       @relation(fields: [receiver_id], references: [id])
+    service_id             Int
+    service                Service        @relation(fields: [service_id], references: [id])
+    order_items            OrderItem[]
+    parcels                Parcel[]
+    total_in_cents         Int            @default(0)
+    paid_in_cents          Int            @default(0)
+    requires_home_delivery Boolean        @default(true)
+    created_at             DateTime       @default(now())
+    updated_at             DateTime       @updatedAt
+    user_id                String
+    user                   User           @relation("user", fields: [user_id], references: [id])
+    agency_id              Int
+    agency                 Agency         @relation(fields: [agency_id], references: [id], onDelete: Cascade)
+    order_history          OrderHistory[]
+    payments               Payment[]
+    payment_status         PaymentStatus  @default(PENDING)
+    discounts              Discount[]
+    stage                  OrderStage     @default(BILLING)
+    status                 Status         @default(IN_AGENCY)
+    partner                Partner?       @relation(fields: [partner_id], references: [id])
+    partner_id             Int?
+    issues                 Issue[]
+
+    @@index([agency_id, created_at(sort: Desc)])
+    @@index([created_at(sort: Desc)])
+    @@index([customer_id])
+    @@index([receiver_id])
+}
+
+model OrderItem {
+    hbl                    String        @id
+    description            String
+    created_at             DateTime      @default(now())
+    updated_at             DateTime      @updatedAt
+    weight                 Decimal       @default("0.00")
+    volume                 Float?        @default(0)
+    length                 Float?
+    width                  Float?
+    height                 Float?
+    service_id             Int
+    service                Service       @relation(fields: [service_id], references: [id])
+    quantity               Int           @default(1)
+    price_in_cents         Int           @default(0)
+    unit                   Unit          @default(PER_LB)
+    delivery_fee_in_cents  Int?          @default(0)
+    customs_fee_in_cents   Int           @default(0)
+    insurance_fee_in_cents Int?          @default(0)
+    charge_fee_in_cents    Int?          @default(0)
+    rate_id                Int
+    rate                   ShippingRate  @relation(fields: [rate_id], references: [id])
+    customs_rates_id       Int?
+    customs_rates          CustomsRates? @relation(fields: [customs_rates_id], references: [id])
+    agency_id              Int
+    agency                 Agency        @relation(fields: [agency_id], references: [id], onDelete: Cascade)
+    status                 Status        @default(IN_AGENCY)
+    order                  Order         @relation(fields: [order_id], references: [id], onDelete: Cascade)
+    order_id               Int
+    parcel_id              Int
+    parcel                 Parcel        @relation(fields: [parcel_id], references: [id])
+    issues                 Issue[]
+
+    @@index([order_id])
+    @@index([hbl])
+    @@index([agency_id, created_at])
+}
+
+model Parcel {
+    id                  Int           @id @default(autoincrement())
+    tracking_number     String        @unique
+    agency_id           Int?
+    agency              Agency?       @relation(fields: [agency_id], references: [id], onDelete: SetNull)
+    current_agency_id   Int?
+    order_id            Int?
+    order               Order?        @relation(fields: [order_id], references: [id], onDelete: SetNull)
+    service_id          Int?
+    service             Service?      @relation(fields: [service_id], references: [id], onDelete: SetNull)
+    description         String
+    weight              Decimal       @default("0.00")
+    status              Status        @default(IN_AGENCY)
+    current_location_id Int?
+    current_location    Location?     @relation(fields: [current_location_id], references: [id])
+    created_at          DateTime      @default(now())
+    updated_at          DateTime      @updatedAt
+    order_items         OrderItem[]
+    events              ParcelEvent[]
+    dispatch_id         Int?
+    dispatch            Dispatch?     @relation(fields: [dispatch_id], references: [id])
+    user_id             String
+    user                User          @relation(fields: [user_id], references: [id])
+    issues              Issue[]
+    issue_parcels       IssueParcel[]
+    // Pallet
+    pallet_id           Int?
+    pallet              Pallet?       @relation(fields: [pallet_id], references: [id], onDelete: SetNull)
+    // Transporte internacional
+    container_id        Int?
+    container           Container?    @relation(fields: [container_id], references: [id], onDelete: SetNull)
+    flight_id           Int?
+    flight              Flight?       @relation(fields: [flight_id], references: [id], onDelete: SetNull)
+    // Warehouse (carrier distribution)
+    current_warehouse_id Int?
+    current_warehouse    Warehouse?   @relation(fields: [current_warehouse_id], references: [id], onDelete: SetNull)
+    // Manifest discrepancies
+    discrepancies        ManifestDiscrepancy[]
+    // Delivery
+    delivery_assignment  DeliveryAssignment?
+
+    @@index([tracking_number])
+    @@index([dispatch_id])
+    @@index([pallet_id])
+    @@index([container_id])
+    @@index([flight_id])
+    @@index([current_warehouse_id])
+}
+
+model ParcelEvent {
+    id           Int              @id @default(autoincrement())
+    parcel_id    Int
+    parcel       Parcel           @relation(fields: [parcel_id], references: [id], onDelete: Cascade)
+    event_type   ParcelEventType  // Tipo de evento (define visibilidad pública/interna)
+    status       Status           @default(IN_AGENCY)
+    description  String?          // Descripción personalizada opcional
+    user_id      String
+    user         User             @relation(fields: [user_id], references: [id])
+    location_id  Int?
+    location     Location?        @relation(fields: [location_id], references: [id])
+    // Referencias para tracking completo
+    pallet_id    Int?
+    pallet       Pallet?          @relation(fields: [pallet_id], references: [id], onDelete: SetNull)
+    dispatch_id  Int?
+    dispatch     Dispatch?        @relation(fields: [dispatch_id], references: [id], onDelete: SetNull)
+    container_id Int?
+    container    Container?       @relation(fields: [container_id], references: [id], onDelete: SetNull)
+    flight_id    Int?
+    flight       Flight?          @relation(fields: [flight_id], references: [id], onDelete: SetNull)
+    warehouse_id Int?
+    warehouse    Warehouse?       @relation(fields: [warehouse_id], references: [id], onDelete: SetNull)
+    notes        String?          // Notas adicionales del evento
+    created_at   DateTime         @default(now())
+    updated_at   DateTime         @updatedAt
+
+    @@index([parcel_id, created_at(sort: Desc)])
+    @@index([event_type])
+    @@index([pallet_id])
+    @@index([dispatch_id])
+    @@index([container_id])
+    @@index([flight_id])
+    @@index([warehouse_id])
+}
+
+model Dispatch {
+    id                     Int               @id @default(autoincrement())
+    sender_agency_id       Int
+    sender_agency          Agency            @relation("created_dispatches", fields: [sender_agency_id], references: [id])
+    receiver_agency_id     Int?
+    receiver_agency        Agency?           @relation("received_dispatches", fields: [receiver_agency_id], references: [id], onDelete: SetNull)
+    status                 DispatchStatus    @default(DRAFT)
+    declared_parcels_count Int               @default(0)
+    received_parcels_count Int               @default(0)
+    parcels                Parcel[]
+    pallets                Pallet[]
+    declared_weight        Decimal           @default("0.00")
+    weight                 Decimal           @default("0.00")
+    declared_cost_in_cents Int               @default(0)
+    cost_in_cents          Int               @default(0)
+    payment_status         PaymentStatus     @default(PENDING)
+    payment_date           DateTime?
+    payment_method         PaymentMethod     @default(CASH)
+    payment_reference      String?
+    payment_notes          String?
+    paid_by_id             String?
+    paid_by                User?             @relation("paid_by", fields: [paid_by_id], references: [id])
+    created_at             DateTime          @default(now())
+    updated_at             DateTime          @updatedAt
+    created_by_id          String
+    created_by             User              @relation("created_by", fields: [created_by_id], references: [id])
+    received_by_id         String?
+    received_by            User?             @relation("received_by", fields: [received_by_id], references: [id])
+    inter_agency_debts     InterAgencyDebt[]
+    parcel_events          ParcelEvent[] // Historial de eventos relacionados
+}
+
+model OrderHistory {
+    id             Int            @id @default(autoincrement())
+    order_id       Int
+    order          Order          @relation(fields: [order_id], references: [id], onDelete: Cascade)
+    user_id        String
+    user           User           @relation(fields: [user_id], references: [id])
+    status         Status
+    changed_fields Json
+    type           OrderEventType @default(SYSTEM_ACTION)
+    comment        String?
+    created_at     DateTime       @default(now())
+}

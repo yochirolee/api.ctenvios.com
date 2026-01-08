@@ -1,0 +1,73 @@
+// ===========================================
+// PAYMENTS - Pagos, Descuentos, Deudas
+// ===========================================
+
+model Payment {
+    id              Int           @id @default(autoincrement())
+    order_id        Int
+    order           Order         @relation(fields: [order_id], references: [id], onDelete: Cascade)
+    amount_in_cents Int           @default(0)
+    charge_in_cents Int           @default(0)
+    method          PaymentMethod
+    reference       String?
+    date            DateTime      @default(now())
+    notes           String?
+    created_at      DateTime      @default(now())
+    updated_at      DateTime      @updatedAt
+    user_id         String
+    user            User          @relation(fields: [user_id], references: [id])
+}
+
+model Discount {
+    id                Int          @id @default(autoincrement())
+    order_id          Int
+    order             Order        @relation(fields: [order_id], references: [id], onDelete: Cascade)
+    user_id           String
+    user              User         @relation(fields: [user_id], references: [id], onDelete: Cascade)
+    type              DiscountType
+    description       String?
+    rate              Int?         @default(0)
+    discount_in_cents Int          @default(0)
+    created_at        DateTime     @default(now())
+}
+
+model InterAgencyDebt {
+    id                        Int        @id @default(autoincrement())
+    debtor_agency_id          Int
+    debtor_agency             Agency     @relation("DebtorAgency", fields: [debtor_agency_id], references: [id])
+    creditor_agency_id        Int
+    creditor_agency           Agency     @relation("CreditorAgency", fields: [creditor_agency_id], references: [id])
+    dispatch_id               Int
+    dispatch                  Dispatch   @relation(fields: [dispatch_id], references: [id], onDelete: Cascade)
+    amount_in_cents           Int        @default(0)
+    original_sender_agency_id Int
+    original_sender_agency    Agency     @relation("OriginalSenderAgency", fields: [original_sender_agency_id], references: [id])
+    relationship              String
+    status                    DebtStatus @default(PENDING)
+    created_at                DateTime   @default(now())
+    updated_at                DateTime   @updatedAt
+    paid_at                   DateTime?
+    paid_by_id                String?
+    paid_by                   User?      @relation("DebtPaidBy", fields: [paid_by_id], references: [id])
+    notes                     String?
+
+    @@index([debtor_agency_id, creditor_agency_id])
+    @@index([dispatch_id])
+    @@index([status])
+    @@index([original_sender_agency_id])
+    @@index([creditor_agency_id, status])
+    @@index([debtor_agency_id, status])
+}
+
+model Counter {
+    id         Int      @id @default(autoincrement())
+    date       String
+    agency_id  Int
+    agency     Agency   @relation(fields: [agency_id], references: [id], onDelete: Cascade)
+    counter    Int
+    created_at DateTime @default(now())
+    updated_at DateTime @updatedAt
+
+    @@unique([date, agency_id])
+}
+

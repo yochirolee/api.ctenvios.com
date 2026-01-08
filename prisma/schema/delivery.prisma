@@ -1,0 +1,57 @@
+// ===========================================
+// DELIVERY - Rutas y asignaciones de entrega
+// ===========================================
+
+model DeliveryRoute {
+    id             Int                  @id @default(autoincrement())
+    route_number   String               @unique
+    carrier_id     Int
+    carrier        Carrier              @relation(fields: [carrier_id], references: [id])
+    warehouse_id   Int
+    warehouse      Warehouse            @relation(fields: [warehouse_id], references: [id])
+    messenger_id   String
+    messenger      User                 @relation("route_messenger", fields: [messenger_id], references: [id])
+    province_id    Int
+    province       Province             @relation(fields: [province_id], references: [id])
+    status         RouteStatus          @default(PLANNING)
+    scheduled_date DateTime
+    started_at     DateTime?
+    completed_at   DateTime?
+    assignments    DeliveryAssignment[]
+    notes          String?
+    created_at     DateTime             @default(now())
+    updated_at     DateTime             @updatedAt
+    created_by_id  String
+    created_by     User                 @relation("route_created_by", fields: [created_by_id], references: [id])
+
+    @@index([carrier_id, status])
+    @@index([messenger_id, scheduled_date])
+    @@index([warehouse_id])
+    @@index([province_id])
+    @@index([scheduled_date])
+}
+
+model DeliveryAssignment {
+    id              Int            @id @default(autoincrement())
+    parcel_id       Int            @unique
+    parcel          Parcel         @relation(fields: [parcel_id], references: [id])
+    route_id        Int?
+    route           DeliveryRoute? @relation(fields: [route_id], references: [id])
+    messenger_id    String?        // Para asignación individual sin ruta
+    messenger       User?          @relation("assignment_messenger", fields: [messenger_id], references: [id])
+    status          DeliveryStatus @default(PENDING)
+    attempts        Int            @default(0)
+    last_attempt_at DateTime?
+    delivered_at    DateTime?
+    recipient_name  String?        // Quién recibió
+    recipient_ci    String?        // CI de quien recibió
+    signature       String?        // URL de firma digital
+    photo_proof     String?        // URL de foto de entrega
+    notes           String?
+    created_at      DateTime       @default(now())
+    updated_at      DateTime       @updatedAt
+
+    @@index([route_id, status])
+    @@index([messenger_id, status])
+    @@index([status])
+}

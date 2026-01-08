@@ -11,6 +11,8 @@ import { generateOrderPDF } from "../utils/generate-order-pdf";
 import { generateCTEnviosLabels } from "../utils/generate-labels-pdf";
 import { orderWithRelationsInclude } from "../types/order-with-relations";
 import { generateHblPdf } from "../utils/generate-hbl-pdf";
+import { getOrderStatusSummary } from "../utils/order-status-calculator";
+
 export const ordersController = {
    /**
     * Creates an order from frontend or partner API
@@ -286,6 +288,31 @@ export const ordersController = {
          const orderId = parseInt(id);
          const parcels = await repository.orders.getParcelsByOrderId(orderId);
          res.status(200).json(parcels);
+      } catch (error) {
+         next(error);
+      }
+   },
+   /**
+    * Get order status summary with parcel breakdown
+    * Returns: order_status, parcels_count, status_breakdown
+    */
+   getStatusSummary: async (req: any, res: Response, next: NextFunction): Promise<void> => {
+      try {
+         const { id } = req.params;
+         const orderId = parseInt(id);
+
+         // Verify order exists
+         const order = await prisma.order.findUnique({
+            where: { id: orderId },
+            select: { id: true },
+         });
+
+         if (!order) {
+            throw new AppError(HttpStatusCodes.NOT_FOUND, "Order not found");
+         }
+
+         const summary = await getOrderStatusSummary(orderId);
+         res.status(200).json(summary);
       } catch (error) {
          next(error);
       }

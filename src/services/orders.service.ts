@@ -59,7 +59,9 @@ export const ordersService = {
          // Create initial event when parcel is created
          events: {
             create: {
+               event_type: "BILLED" as const,
                user_id: user_id,
+               status: Status.IN_AGENCY,
             },
          },
       }));

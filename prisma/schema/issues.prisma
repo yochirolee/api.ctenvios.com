@@ -1,0 +1,175 @@
+// ===========================================
+// ISSUES - Incidencias y reclamaciones
+// ===========================================
+
+model Issue {
+    id               Int               @id @default(autoincrement())
+    title            String
+    description      String
+    type             IssueType         @default(COMPLAINT)
+    priority         IssuePriority     @default(MEDIUM)
+    status           IssueStatus       @default(OPEN)
+    order_id         Int?
+    order            Order?            @relation(fields: [order_id], references: [id], onDelete: Cascade)
+    parcel_id        Int?
+    parcel           Parcel?           @relation(fields: [parcel_id], references: [id], onDelete: Cascade)
+    order_item_hbl   String?
+    order_item       OrderItem?        @relation(fields: [order_item_hbl], references: [hbl], onDelete: SetNull)
+    created_by_id    String
+    created_by       User              @relation("created_issues", fields: [created_by_id], references: [id])
+    assigned_to_id   String?
+    assigned_to      User?             @relation("assigned_issues", fields: [assigned_to_id], references: [id], onDelete: SetNull)
+    agency_id        Int?
+    agency           Agency?           @relation(fields: [agency_id], references: [id], onDelete: Cascade)
+    comments         IssueComment[]
+    attachments      IssueAttachment[]
+    affected_parcels IssueParcel[]
+    resolved_at      DateTime?
+    resolved_by_id   String?
+    resolved_by      User?             @relation("resolved_issues", fields: [resolved_by_id], references: [id], onDelete: SetNull)
+    resolution_notes String?
+    created_at       DateTime          @default(now())
+    updated_at       DateTime          @updatedAt
+
+    @@index([order_id, created_at(sort: Desc)])
+    @@index([parcel_id, created_at(sort: Desc)])
+    @@index([order_item_hbl])
+    @@index([status, created_at(sort: Desc)])
+    @@index([agency_id, status])
+    @@index([created_by_id, created_at(sort: Desc)])
+    @@index([assigned_to_id, status])
+    @@index([created_at(sort: Desc)])
+}
+
+model IssueComment {
+    id          Int      @id @default(autoincrement())
+    issue_id    Int
+    issue       Issue    @relation(fields: [issue_id], references: [id], onDelete: Cascade)
+    user_id     String
+    user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+    content     String
+    is_internal Boolean  @default(false)
+    created_at  DateTime @default(now())
+    updated_at  DateTime @updatedAt
+
+    @@index([issue_id, created_at(sort: Asc)])
+    @@index([user_id])
+}
+
+model IssueAttachment {
+    id             Int      @id @default(autoincrement())
+    issue_id       Int
+    issue          Issue    @relation(fields: [issue_id], references: [id], onDelete: Cascade)
+    file_url       String
+    file_name      String
+    file_type      String
+    file_size      Int?
+    uploaded_by_id String
+    uploaded_by    User     @relation(fields: [uploaded_by_id], references: [id], onDelete: Cascade)
+    description    String?
+    created_at     DateTime @default(now())
+
+    @@index([issue_id, created_at(sort: Desc)])
+    @@index([uploaded_by_id])
+}
+
+model IssueParcel {
+    id         Int      @id @default(autoincrement())
+    issue_id   Int
+    issue      Issue    @relation(fields: [issue_id], references: [id], onDelete: Cascade)
+    parcel_id  Int
+    parcel     Parcel   @relation(fields: [parcel_id], references: [id], onDelete: Cascade)
+    created_at DateTime @default(now())
+
+    @@unique([issue_id, parcel_id])
+    @@index([issue_id])
+    @@index([parcel_id])
+}
+
+// ============================================
+// LEGACY ISSUES - Sistema Legacy Separado
+// ============================================
+
+model LegacyIssue {
+    id               Int                     @id @default(autoincrement())
+    title            String
+    description      String
+    type             IssueType               @default(COMPLAINT)
+    priority         IssuePriority           @default(MEDIUM)
+    status           IssueStatus             @default(OPEN)
+    legacy_invoice_id Int?
+    legacy_order_id   Int?
+    legacy_parcel_id  Int?
+    legacy_hbl        String?
+    created_by_id    String
+    created_by       User                    @relation("created_legacy_issues", fields: [created_by_id], references: [id])
+    assigned_to_id   String?
+    assigned_to      User?                   @relation("assigned_legacy_issues", fields: [assigned_to_id], references: [id], onDelete: SetNull)
+    agency_id        Int?
+    agency           Agency?                 @relation("legacy_issues", fields: [agency_id], references: [id], onDelete: SetNull)
+    comments         LegacyIssueComment[]
+    attachments      LegacyIssueAttachment[]
+    affected_parcels LegacyIssueParcel[]
+    resolved_at      DateTime?
+    resolved_by_id   String?
+    resolved_by      User?                   @relation("resolved_legacy_issues", fields: [resolved_by_id], references: [id], onDelete: SetNull)
+    resolution_notes String?
+    created_at       DateTime                @default(now())
+    updated_at       DateTime                @updatedAt
+
+    @@index([legacy_invoice_id])
+    @@index([legacy_order_id])
+    @@index([legacy_parcel_id])
+    @@index([legacy_hbl])
+    @@index([status, created_at(sort: Desc)])
+    @@index([agency_id, status])
+    @@index([created_by_id, created_at(sort: Desc)])
+    @@index([assigned_to_id, status])
+    @@index([created_at(sort: Desc)])
+}
+
+model LegacyIssueParcel {
+    id               Int         @id @default(autoincrement())
+    issue_id         Int
+    issue            LegacyIssue @relation(fields: [issue_id], references: [id], onDelete: Cascade)
+    legacy_parcel_id String
+    legacy_order_id  Int?
+    created_at       DateTime    @default(now())
+
+    @@unique([issue_id, legacy_parcel_id])
+    @@index([issue_id])
+    @@index([legacy_parcel_id])
+}
+
+model LegacyIssueComment {
+    id          Int         @id @default(autoincrement())
+    issue_id    Int
+    issue       LegacyIssue @relation(fields: [issue_id], references: [id], onDelete: Cascade)
+    user_id     String
+    user        User        @relation("legacy_issue_comments", fields: [user_id], references: [id], onDelete: Cascade)
+    content     String
+    is_internal Boolean     @default(false)
+    created_at  DateTime    @default(now())
+    updated_at  DateTime    @updatedAt
+
+    @@index([issue_id, created_at(sort: Asc)])
+    @@index([user_id])
+}
+
+model LegacyIssueAttachment {
+    id             Int         @id @default(autoincrement())
+    issue_id       Int
+    issue          LegacyIssue @relation(fields: [issue_id], references: [id], onDelete: Cascade)
+    file_url       String
+    file_name      String
+    file_type      String
+    file_size      Int?
+    uploaded_by_id String
+    uploaded_by    User        @relation("legacy_issue_attachments", fields: [uploaded_by_id], references: [id], onDelete: Cascade)
+    description    String?
+    created_at     DateTime    @default(now())
+
+    @@index([issue_id, created_at(sort: Desc)])
+    @@index([uploaded_by_id])
+}
+

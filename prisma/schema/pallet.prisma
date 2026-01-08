@@ -1,0 +1,26 @@
+// ===========================================
+// PALLET - Agrupación de paquetes para despachos
+// ===========================================
+
+model Pallet {
+    id              Int           @id @default(autoincrement())
+    pallet_number   String        @unique
+    agency_id       Int
+    agency          Agency        @relation(fields: [agency_id], references: [id])
+    status          PalletStatus  @default(OPEN)
+    total_weight_kg Decimal       @default("0.00")
+    parcels_count   Int           @default(0)
+    notes           String?
+    dispatch_id     Int?
+    dispatch        Dispatch?     @relation(fields: [dispatch_id], references: [id])
+    parcels         Parcel[]
+    parcel_events   ParcelEvent[]
+    created_at      DateTime      @default(now())
+    updated_at      DateTime      @updatedAt
+    created_by_id   String
+    created_by      User          @relation("created_pallets", fields: [created_by_id], references: [id])
+
+    @@index([agency_id, status])
+    @@index([pallet_number])
+    @@index([dispatch_id])
+}

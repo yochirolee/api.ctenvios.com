@@ -1,0 +1,13 @@
+// ===========================================
+// BASE - Generator y Datasource
+// ===========================================
+
+generator client {
+    provider        = "prisma-client-js"
+    previewFeatures = ["fullTextSearchPostgres"]
+}
+
+datasource db {
+    provider = "postgresql"
+}
+

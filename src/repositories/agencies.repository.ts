@@ -20,6 +20,7 @@ export const agencies = {
             phone: true,
             email: true,
             agency_type: true,
+            forwarder_id: true,
          },
          where: { id },
       });

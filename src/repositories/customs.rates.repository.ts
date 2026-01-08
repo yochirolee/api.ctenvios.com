@@ -36,8 +36,23 @@ export const customsRates = {
       const newRate = await prisma.customsRates.create({ data: rate });
       return newRate;
    },
-   update: async (id: number, rate: Prisma.CustomsRatesUpdateInput) => {
-      const updatedRate = await prisma.customsRates.update({ where: { id }, data: rate });
+   update: async (id: number, rate: Prisma.CustomsRatesUpdateInput | Prisma.CustomsRatesUncheckedUpdateInput) => {
+      // Transformar country_id a relación country si está presente
+      // Prisma requiere usar la relación incluso en UncheckedUpdateInput
+      const updateData: any = { ...rate };
+
+      // Si rate tiene country_id como campo directo, convertirlo a relación
+      if ("country_id" in updateData && typeof updateData.country_id === "number") {
+         updateData.country = {
+            connect: { id: updateData.country_id },
+         };
+         delete updateData.country_id;
+      }
+
+      const updatedRate = await prisma.customsRates.update({
+         where: { id },
+         data: updateData as Prisma.CustomsRatesUpdateInput,
+      });
       return updatedRate;
    },
    delete: async (id: number) => {

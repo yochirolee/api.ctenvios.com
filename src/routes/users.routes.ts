@@ -1,10 +1,9 @@
-import { Router, Response, response } from "express";
+import { Router, Response } from "express";
 import { auth } from "../lib/auth";
 import { fromNodeHeaders } from "better-auth/node";
 import prisma from "../lib/prisma.client";
-import { authMiddleware, requireRoles } from "../middlewares/auth.middleware";
+import { authMiddleware } from "../middlewares/auth.middleware";
 import { Roles } from "@prisma/client";
-import { resend } from "../services/resend.service";
 import controllers from "../controllers";
 import { validate } from "../middlewares/validate.middleware";
 import { z } from "zod";
@@ -81,6 +80,8 @@ router.get("/", authMiddleware, async (req: any, res: Response) => {
             skip: (parseInt(page as string) - 1) * (parseInt(limit as string) || 25),
             take: parseInt(limit as string) || 25,
          });
+
+         
          res.status(200).json({ rows, total });
          return;
       }
@@ -260,6 +261,13 @@ router.get("/get-session", async (req, res) => {
    res.status(200).json(session);
 });
 
+router.get("/list-user-sessions", async (req, res) => {
+   const sessions = await auth.api.listSessions({
+      headers: fromNodeHeaders(req.headers),
+   });
+   res.status(200).json(sessions);
+});
+
 router.post("/forgot-password", async (req, res) => {
    const { email } = req.body;
    const response = await auth.api.forgetPassword({
@@ -270,20 +278,18 @@ router.post("/forgot-password", async (req, res) => {
 });
 
 router.post("/reset-password", async (req, res) => {
-   const { password } = req.body;
-   const resendResponse = await resend.emails.send({
-      from: "soporte@api.ctenvios.com",
-      to: "yleecruz@gmail.com",
-      subject: "Reset your password now!",
-      html: `<strong>it Works</strong> `,
-   });
-   console.log(resendResponse);
-   if (resendResponse.error) {
-      return res.status(500).json({ message: "Error sending email" });
+   const { newPassword, token } = req.body;
+
+   if (!newPassword || !token) {
+      return res.status(400).json({ message: "Password and token are required" });
    }
+   await auth.api.revokeSessions({
+      headers: fromNodeHeaders(req.headers),
+   });
+
    const response = await auth.api.resetPassword({
       headers: fromNodeHeaders(req.headers),
-      body: { newPassword: password },
+      body: { newPassword, token },
    });
    res.status(200).json(response);
 });

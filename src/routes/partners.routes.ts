@@ -20,6 +20,18 @@ const router = Router();
  * GET /partners
  * Get all partners (admin only)
  */
+
+/**Find partner by agency id */
+router.get("/admin/agency/:agencyId", authMiddleware, async (req, res) => {
+   const { agencyId } = req.params;
+   const partners = await prisma.partner.findMany({
+      where: {
+         agency_id: parseInt(agencyId),
+      },
+   });
+   res.status(200).json(partners);
+});
+
 router.get("/admin", authMiddleware, async (req, res, next) => {
    try {
       await controllers.partners.getAll(req, res);

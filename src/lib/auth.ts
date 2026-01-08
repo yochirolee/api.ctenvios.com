@@ -4,7 +4,10 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import prisma from "./prisma.client";
 import { resend } from "../services/resend.service";
 
+const FRONTEND_URL = process.env.NODE_ENV === "production" ? "https://dev.ctenvios.com" : "http://localhost:5173";
+
 export const auth = betterAuth({
+   baseURL: FRONTEND_URL,
    plugins: [
       bearer(),
       admin({
@@ -20,11 +23,86 @@ export const auth = betterAuth({
    emailAndPassword: {
       enabled: true,
       sendResetPassword: async ({ user, url, token }, request) => {
+         const resetUrl = `${FRONTEND_URL}/reset-password?token=${token}`;
          await resend.emails.send({
-            from: "soporte@ctenvios.com",
-            to: "yleecruz@gmail.com",
-            subject: "Reset your password now!",
-            html: `<strong>it Works</strong> ${url}/reset-password?token=${token}`,
+            from: "CTEnvios <soporte@ctenvios.com>",
+            to: user.email,
+            subject: "Restablecer tu contraseña - CTEnvios",
+            html: `
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7fa;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f4f7fa; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 520px; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);">
+          <!-- Header -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%); padding: 32px 40px; border-radius: 12px 12px 0 0; text-align: center;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600; letter-spacing: -0.5px;">CTEnvios</h1>
+            </td>
+          </tr>
+          
+          <!-- Content -->
+          <tr>
+            <td style="padding: 40px;">
+              <h2 style="margin: 0 0 16px 0; color: #1e3a5f; font-size: 22px; font-weight: 600;">Restablecer contraseña</h2>
+              <p style="margin: 0 0 24px 0; color: #4a5568; font-size: 15px; line-height: 1.6;">
+                Hola${user.name ? ` <strong>${user.name}</strong>` : ""},
+              </p>
+              <p style="margin: 0 0 32px 0; color: #4a5568; font-size: 15px; line-height: 1.6;">
+                Recibimos una solicitud para restablecer la contraseña de tu cuenta. Haz clic en el botón para crear una nueva contraseña.
+              </p>
+              
+              <!-- Button -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td align="center" style="padding-bottom: 32px;">
+                    <a href="${resetUrl}" style="display: inline-block; background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%); color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 600; padding: 14px 36px; border-radius: 8px; box-shadow: 0 4px 12px rgba(30, 58, 95, 0.3);">
+                      Restablecer contraseña
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              
+              <p style="margin: 0 0 16px 0; color: #718096; font-size: 13px; line-height: 1.6;">
+                Este enlace expirará en 1 hora por seguridad.
+              </p>
+              <p style="margin: 0 0 24px 0; color: #718096; font-size: 13px; line-height: 1.6;">
+                Si no solicitaste este cambio, puedes ignorar este correo. Tu contraseña permanecerá igual.
+              </p>
+              
+              <!-- Divider -->
+              <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;">
+              
+              <p style="margin: 0; color: #a0aec0; font-size: 12px; line-height: 1.5;">
+                Si el botón no funciona, copia y pega este enlace en tu navegador:
+              </p>
+              <p style="margin: 8px 0 0 0; word-break: break-all;">
+                <a href="${resetUrl}" style="color: #2d5a87; font-size: 12px; text-decoration: underline;">${resetUrl}</a>
+              </p>
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #f8fafc; padding: 24px 40px; border-radius: 0 0 12px 12px; text-align: center;">
+              <p style="margin: 0; color: #a0aec0; font-size: 12px;">
+                © ${new Date().getFullYear()} CTEnvios. Todos los derechos reservados.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+            `,
          });
       },
 
@@ -52,3 +130,5 @@ export const auth = betterAuth({
       },
    },
 });
+
+

@@ -12,6 +12,7 @@ router.get("/", async (req: any, res: Response) => {
    if (!user.agency_id) {
       return res.status(HttpStatusCodes.BAD_REQUEST).json({ message: "User must be associated with an agency" });
    }
+   //TODO if agency is FORWARDER, get all dispatches
 
    const { dispatches: rows, total } = await repository.dispatch.get(
       parseInt(page as string),
@@ -45,6 +46,7 @@ router.get("/:id/parcels", async (req: Request, res: Response) => {
       parseInt(page as string),
       parseInt(limit as string)
    );
+   console.log(parcels);
    res.status(200).json({
       rows: parcels,
       total: total,

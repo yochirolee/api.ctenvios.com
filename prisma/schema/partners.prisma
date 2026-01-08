@@ -1,0 +1,84 @@
+// ===========================================
+// PARTNERS - API de integración externa
+// ===========================================
+
+model Partner {
+    id           Int          @id @default(autoincrement())
+    name         String
+    contact_name String
+    email        String       @unique
+    phone        String
+    is_active    Boolean      @default(true)
+    agency_id    Int
+    agency       Agency       @relation(fields: [agency_id], references: [id], onDelete: Cascade)
+    forwarder_id Int
+    forwarder    Forwarder    @relation(fields: [forwarder_id], references: [id])
+    rate_limit   Int?         @default(100)
+    created_at   DateTime     @default(now())
+    updated_at   DateTime     @updatedAt
+    orders       Order[]
+    api_keys     ApiKey[]
+    webhooks     Webhook[]
+    partner_logs PartnerLog[]
+}
+
+model ApiKey {
+    id         String       @id @default(uuid())
+    key_hash   String       @unique
+    prefix     String
+    name       String?
+    partner_id Int
+    partner    Partner      @relation(fields: [partner_id], references: [id], onDelete: Cascade)
+    is_active  Boolean      @default(true)
+    expires_at DateTime?
+    created_at DateTime     @default(now())
+    last_used  DateTime?
+    logs       PartnerLog[]
+
+    @@index([partner_id, is_active])
+    @@index([key_hash])
+}
+
+model Webhook {
+    id         String         @id @default(uuid())
+    partner_id Int
+    partner    Partner        @relation(fields: [partner_id], references: [id], onDelete: Cascade)
+    url        String
+    secret     String
+    is_active  Boolean        @default(true)
+    events     String[]
+    created_at DateTime       @default(now())
+    event_logs WebhookEvent[]
+}
+
+model WebhookEvent {
+    id          String   @id @default(uuid())
+    webhook_id  String
+    webhook     Webhook  @relation(fields: [webhook_id], references: [id], onDelete: Cascade)
+    event_type  String
+    payload     Json
+    status_code Int?
+    response    String?
+    is_success  Boolean
+    created_at  DateTime @default(now())
+}
+
+model PartnerLog {
+    id            Int      @id @default(autoincrement())
+    api_key_id    String
+    api_key       ApiKey   @relation(fields: [api_key_id], references: [id], onDelete: Cascade)
+    partner_id    Int
+    partner       Partner  @relation(fields: [partner_id], references: [id], onDelete: Cascade)
+    endpoint      String
+    method        String
+    status_code   Int
+    request_body  Json?
+    response_body Json?
+    ip_address    String?
+    user_agent    String?
+    created_at    DateTime @default(now())
+
+    @@index([api_key_id, created_at])
+    @@index([partner_id, created_at])
+}
+

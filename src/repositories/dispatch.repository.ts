@@ -1,9 +1,12 @@
 import HttpStatusCodes from "../common/https-status-codes";
 import prisma from "../lib/prisma.client";
-import { Dispatch, DispatchStatus, Parcel, Prisma, Status } from "@prisma/client";
+import { Dispatch, DispatchStatus, Parcel, Prisma, Status, DebtStatus } from "@prisma/client";
 import { AppError } from "../common/app-errors";
 import parcelsRepository from "./parcels.repository";
 import { calculateDispatchCost } from "../utils/dispatch-utils";
+import interAgencyDebtsRepository from "./inter-agency-debts.repository";
+import { determineHierarchyDebts } from "../utils/agency-hierarchy";
+import { updateOrderStatusFromParcel } from "../utils/order-status-calculator";
 
 // Allowed statuses for parcels to be added to dispatch
 const ALLOWED_DISPATCH_STATUSES: Status[] = [
@@ -288,6 +291,11 @@ const dispatch = {
 
       // Use transaction to ensure all updates succeed
       const deletedDispatch = await prisma.$transaction(async (tx) => {
+         // Si el despacho está DISPATCHED, cancelar todas las deudas relacionadas
+         if (dispatch.status === DispatchStatus.DISPATCHED) {
+            await interAgencyDebtsRepository.cancelByDispatch(id);
+         }
+
          // Restore all parcels from dispatch
          for (const parcel of dispatch.parcels) {
             // Get previous status from ParcelEvent history
@@ -302,6 +310,7 @@ const dispatch = {
                   status: statusToRestore,
                   events: {
                      create: {
+                        event_type: "REMOVED_FROM_PALLET",
                         user_id: user_id,
                         status: statusToRestore,
                      },
@@ -358,6 +367,7 @@ const dispatch = {
          await tx.parcelEvent.create({
             data: {
                parcel_id: parcel.id,
+               event_type: "ADDED_TO_DISPATCH",
                user_id: user_id,
                location_id: parcel.current_location_id || null,
                status: Status.IN_DISPATCH,
@@ -379,6 +389,9 @@ const dispatch = {
 
          return updatedDispatch;
       });
+
+      // Update order status based on parcel changes
+      await updateOrderStatusFromParcel(parcel.id);
 
       return updatedDispatch;
    },
@@ -427,8 +440,10 @@ const dispatch = {
                status: statusToRestore,
                events: {
                   create: {
+                     event_type: "NOTE_ADDED",
                      user_id: user_id,
                      status: statusToRestore,
+                     notes: "Removed from dispatch",
                   },
                },
             },
@@ -459,6 +474,9 @@ const dispatch = {
 
          return updated;
       });
+
+      // Update order status based on parcel changes
+      await updateOrderStatusFromParcel(parcel.id);
 
       return updatedParcel;
    },
@@ -521,6 +539,7 @@ const dispatch = {
          include: {
             parcels: {
                include: {
+                  agency: true, // Necesario para obtener agency_id
                   order_items: {
                      include: {
                         rate: {
@@ -543,15 +562,43 @@ const dispatch = {
       // Calculate declared_cost_in_cents using the utility function
       const declared_cost_in_cents = calculateDispatchCost(dispatch);
 
-      console.log("declared_cost_in_cents", declared_cost_in_cents);
+      // Determinar deudas jerárquicas
+      const hierarchyDebts = await determineHierarchyDebts(
+         sender_agency_id,
+         receiver_agency_id,
+         dispatch.parcels,
+         dispatchId
+      );
 
-      // Update dispatch with declared_cost_in_cents and status
-      const updatedDispatch = await prisma.dispatch.update({
-         where: { id: dispatchId },
-         data: {
-            declared_cost_in_cents,
-            status: DispatchStatus.DISPATCHED,
-         },
+      // Usar transacción para asegurar consistencia
+      const updatedDispatch = await prisma.$transaction(async (tx) => {
+         // Actualizar despacho
+         const updated = await tx.dispatch.update({
+            where: { id: dispatchId },
+            data: {
+               declared_cost_in_cents,
+               receiver_agency_id,
+               status: DispatchStatus.DISPATCHED,
+            },
+         });
+
+         // Crear registros de deuda usando el cliente de transacción
+         if (hierarchyDebts.length > 0) {
+            await tx.interAgencyDebt.createMany({
+               data: hierarchyDebts.map((debtInfo) => ({
+                  debtor_agency_id: debtInfo.debtor_agency_id,
+                  creditor_agency_id: debtInfo.creditor_agency_id,
+                  dispatch_id: dispatchId,
+                  amount_in_cents: debtInfo.amount_in_cents,
+                  original_sender_agency_id: debtInfo.original_sender_agency_id,
+                  relationship: debtInfo.relationship,
+                  status: DebtStatus.PENDING,
+                  notes: `Deuda generada por despacho ${dispatchId}. Relación: ${debtInfo.relationship}`,
+               })),
+            });
+         }
+
+         return updated;
       });
 
       return updatedDispatch;
@@ -596,6 +643,7 @@ const dispatch = {
                status: Status.RECEIVED_IN_DISPATCH,
                events: {
                   create: {
+                     event_type: "RECEIVED_IN_DISPATCH",
                      user_id: user_id,
                      status: Status.RECEIVED_IN_DISPATCH,
                   },
@@ -624,6 +672,7 @@ const dispatch = {
                status: Status.RECEIVED_IN_DISPATCH,
                events: {
                   create: {
+                     event_type: "RECEIVED_IN_DISPATCH",
                      user_id: user_id,
                      status: Status.RECEIVED_IN_DISPATCH,
                   },
@@ -640,6 +689,9 @@ const dispatch = {
 
          return updated;
       });
+
+      // Update order status based on parcel changes
+      await updateOrderStatusFromParcel(existingParcel.id);
 
       return { parcel: updatedParcel, wasAdded: true };
    },

@@ -16,6 +16,9 @@ import logs from "./logs.controller";
 import issues from "./issues.controller";
 import legacyIssues from "./legacy-issues.controller";
 import users from "./users.controller";
+import containers from "./containers.controller";
+import flights from "./flights.controller";
+import parcels from "./parcels.controller";
 
 const controllers = {
    agencies,
@@ -36,6 +39,9 @@ const controllers = {
    issues,
    legacyIssues,
    users,
+   containers,
+   flights,
+   parcels,
 };
 
 export default controllers;

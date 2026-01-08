@@ -19,6 +19,10 @@ router.get("/", authMiddleware, validate({ query: searchSchema }), controllers.o
 
 // GET /orders/:id/parcels - Get parcels by order ID
 router.get("/:id/parcels", authMiddleware, controllers.orders.getParcelsByOrderId);
+
+// GET /orders/:id/status-summary - Get order status summary with parcel breakdown
+router.get("/:id/status-summary", authMiddleware, controllers.orders.getStatusSummary);
+
 // GET /orders/:id - Get order by ID
 
 router.get("/:id", authMiddleware, controllers.orders.getById);
