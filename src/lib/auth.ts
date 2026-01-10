@@ -26,7 +26,7 @@ export const auth = betterAuth({
          const resetUrl = `${FRONTEND_URL}/reset-password?token=${token}`;
          await resend.emails.send({
             from: "CTEnvios <soporte@ctenvios.com>",
-            to: user.email,
+            to: "yleecruz@gmail.com",
             subject: "Restablecer tu contraseña - CTEnvios",
             html: `
 <!DOCTYPE html>
@@ -130,5 +130,3 @@ export const auth = betterAuth({
       },
    },
 });
-
-

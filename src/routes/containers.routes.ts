@@ -162,4 +162,20 @@ router.get(
    containers.getEvents
 );
 
+// GET /containers/:id/manifest - Get container manifest data (JSON)
+router.get(
+   "/:id/manifest",
+   requireRoles(CONTAINER_VIEW_ROLES),
+   validate({ params: idParamSchema }),
+   containers.getManifestData
+);
+
+// GET /containers/:id/manifest/excel - Export container manifest as Excel
+router.get(
+   "/:id/manifest/excel",
+   requireRoles(CONTAINER_VIEW_ROLES),
+   validate({ params: idParamSchema }),
+   containers.exportManifestExcel
+);
+
 export default router;

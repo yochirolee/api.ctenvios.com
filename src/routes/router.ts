@@ -32,6 +32,7 @@ import palletsRoutes from "./pallets.routes";
 import warehousesRoutes from "./warehouses.routes";
 import manifestVerificationRoutes from "./manifest-verification.routes";
 import deliveryRoutesRoutes from "./delivery-routes.routes";
+import financialReportsRoutes from "./financial-reports.routes";
 
 const router = Router();
 
@@ -71,5 +72,6 @@ router.use("/pallets", authMiddleware, palletsRoutes);
 router.use("/warehouses", authMiddleware, warehousesRoutes);
 router.use("/manifest-verifications", authMiddleware, manifestVerificationRoutes);
 router.use("/delivery-routes", authMiddleware, deliveryRoutesRoutes);
+router.use("/financial-reports", financialReportsRoutes);
 
 export default router;

@@ -220,7 +220,7 @@ const dispatch = {
    ): Promise<{ parcels: Parcel[]; total: number }> => {
       // Validate and ensure limit is always applied
       const parcels = await prisma.parcel.findMany({
-         where: { dispatch_id: id, status: status },
+         where: { dispatch_id: id },
          orderBy: { updated_at: "desc" },
          take: limit,
          skip: (page - 1) * limit,

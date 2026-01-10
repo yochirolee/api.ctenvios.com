@@ -4,6 +4,7 @@ import containersRepository from "../repositories/containers.repository";
 import AppError from "../utils/app.error";
 import prisma from "../lib/prisma.client";
 import repository from "../repositories";
+import { generateContainerManifestExcel, getContainerManifestData } from "../utils/generate-container-manifest-excel";
 
 interface ContainerRequest {
    user?: {
@@ -251,6 +252,43 @@ export const containers = {
          page,
          limit,
       });
+   },
+
+   /**
+    * Export container manifest as Excel file
+    */
+   exportManifestExcel: async (req: ContainerRequest, res: Response): Promise<void> => {
+      const { id } = req.params;
+      const containerId = Number(id);
+
+      const buffer = await generateContainerManifestExcel(containerId);
+
+      // Get container info for filename
+      const container = await prisma.container.findUnique({
+         where: { id: containerId },
+         select: { container_number: true, container_name: true },
+      });
+
+      const filename = container
+         ? `Manifiesto_${container.container_number}_${new Date().toISOString().split("T")[0]}.xlsx`
+         : `Manifiesto_${containerId}.xlsx`;
+
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader("Content-Length", buffer.length);
+      res.send(buffer);
+   },
+
+   /**
+    * Get container manifest data (JSON) for frontend rendering
+    */
+   getManifestData: async (req: ContainerRequest, res: Response): Promise<void> => {
+      const { id } = req.params;
+      const containerId = Number(id);
+
+      const data = await getContainerManifestData(containerId);
+
+      res.status(200).json(data);
    },
 };
 

@@ -1,0 +1,388 @@
+import ExcelJS from "exceljs";
+import prisma from "../lib/prisma.client";
+import { AppError } from "../common/app-errors";
+import HttpStatusCodes from "../common/https-status-codes";
+
+// Conversion factor: 1 lb = 0.453592 kg
+const LBS_TO_KG = 0.453592;
+
+const convertLbsToKg = (lbs: number): number => {
+   return Math.round(lbs * LBS_TO_KG * 100) / 100; // Round to 2 decimal places
+};
+
+// Interface for each row in the manifest (one per OrderItem/HBL)
+interface ManifestItem {
+   hbl_number: string; // OrderItem HBL
+   packages: number;
+   weight_kg: number;
+   volume_m3: number;
+   sender_name: string;
+   receiver_name: string;
+   address: string;
+   municipality: string;
+   province: string;
+   phone: string;
+   ci: string;
+   email: string;
+   content: string;
+   service_type: string;
+   pickup_date: string;
+   travel_date: string;
+}
+
+interface ManifestHeader {
+   origin_agency: string;
+   country: string;
+   consignee: string;
+   container_number: string;
+   date: string;
+   hbls_count: number; // Total OrderItems (HBLs)
+   total_packages: number; // Total Parcels (bultos/cajas)
+   bl_number: string;
+   manifest_number: string;
+   total_weight_kg: number;
+}
+
+/**
+ * Get container manifest data for Excel export
+ * - HBLs count = Total OrderItems
+ * - Total Packages = Total Parcels (bultos/cajas)
+ * - One row per OrderItem
+ */
+export const getContainerManifestData = async (
+   containerId: number
+): Promise<{ header: ManifestHeader; items: ManifestItem[] }> => {
+   const container = await prisma.container.findUnique({
+      where: { id: containerId },
+      include: {
+         forwarder: { select: { name: true } },
+         provider: { select: { name: true } },
+         parcels: {
+            include: {
+               order: {
+                  include: {
+                     customer: {
+                        select: {
+                           first_name: true,
+                           last_name: true,
+                           mobile: true,
+                           email: true,
+                        },
+                     },
+                     receiver: {
+                        select: {
+                           first_name: true,
+                           last_name: true,
+                           address: true,
+                           phone: true,
+                           mobile: true,
+                           ci: true,
+                           email: true,
+                           city: { select: { name: true } },
+                           province: { select: { name: true } },
+                        },
+                     },
+                     agency: { select: { name: true } },
+                  },
+               },
+               service: { select: { name: true, service_type: true } },
+               // Include OrderItems for each parcel
+               order_items: {
+                  select: {
+                     hbl: true,
+                     description: true,
+                     weight: true,
+                     volume: true,
+                     quantity: true,
+                  },
+                  orderBy: { hbl: "asc" },
+               },
+            },
+            orderBy: { tracking_number: "asc" },
+         },
+      },
+   });
+
+   if (!container) {
+      throw new AppError(HttpStatusCodes.NOT_FOUND, "Container not found");
+   }
+
+   // Calculate totals
+   const totalParcels = container.parcels.length;
+   const totalItems = container.parcels.reduce((sum, p) => sum + p.order_items.length, 0);
+   const totalWeightLbs = Number(container.current_weight_kg) || 0;
+
+   // Build header
+   const header: ManifestHeader = {
+      origin_agency: container.parcels[0]?.order?.agency?.name || "N/A",
+      country: "USA",
+      consignee: container.provider?.name || "N/A",
+      container_number: container.container_number,
+      date: container.created_at.toISOString().split("T")[0],
+      hbls_count: totalItems, // Total OrderItems (HBLs)
+      total_packages: totalParcels, // Total Parcels (bultos/cajas)
+      bl_number: container.bl_number || "",
+      manifest_number: `MAN-${container.id}`,
+      total_weight_kg: convertLbsToKg(totalWeightLbs),
+   };
+
+   // Build items data - one row per OrderItem
+   const travelDate = container.estimated_departure
+      ? container.estimated_departure.toISOString().split("T")[0]
+      : container.actual_departure
+      ? container.actual_departure.toISOString().split("T")[0]
+      : "";
+
+   const items: ManifestItem[] = container.parcels.flatMap((parcel) => {
+      const order = parcel.order;
+      const customer = order?.customer;
+      const receiver = order?.receiver;
+
+      // Combine phone and mobile if both exist
+      const phoneNumbers = [receiver?.phone, receiver?.mobile].filter(Boolean).join(" / ") || "N/A";
+
+      // If parcel has order_items, create one row per item
+      if (parcel.order_items.length > 0) {
+         return parcel.order_items.map((item) => ({
+            hbl_number: item.hbl,
+            packages: item.quantity || 1,
+            weight_kg: convertLbsToKg(Number(item.weight) || 0),
+            volume_m3: Number(item.volume) || 0.3,
+            sender_name: customer ? `${customer.first_name} ${customer.last_name}` : "N/A",
+            receiver_name: receiver ? `${receiver.first_name} ${receiver.last_name}` : "N/A",
+            address: receiver?.address || "N/A",
+            municipality: receiver?.city?.name || "N/A",
+            province: receiver?.province?.name || "N/A",
+            phone: phoneNumbers,
+            ci: receiver?.ci || "N/A",
+            email: receiver?.email || customer?.email || "",
+            content: item.description || "N/A",
+            service_type: parcel.service?.service_type || "ENVIO",
+            pickup_date: parcel.created_at.toISOString().split("T")[0],
+            travel_date: travelDate,
+         }));
+      }
+
+      // Fallback: if no order_items, use parcel data (backward compatibility)
+      return [
+         {
+            hbl_number: parcel.tracking_number,
+            packages: 1,
+            weight_kg: convertLbsToKg(Number(parcel.weight) || 0),
+            volume_m3: 0.3,
+            sender_name: customer ? `${customer.first_name} ${customer.last_name}` : "N/A",
+            receiver_name: receiver ? `${receiver.first_name} ${receiver.last_name}` : "N/A",
+            address: receiver?.address || "N/A",
+            municipality: receiver?.city?.name || "N/A",
+            province: receiver?.province?.name || "N/A",
+            phone: phoneNumbers,
+            ci: receiver?.ci || "N/A",
+            email: receiver?.email || customer?.email || "",
+            content: parcel.description || "N/A",
+            service_type: parcel.service?.service_type || "ENVIO",
+            pickup_date: parcel.created_at.toISOString().split("T")[0],
+            travel_date: travelDate,
+         },
+      ];
+   });
+
+   return { header, items };
+};
+
+/**
+ * Generate Excel buffer for container manifest
+ */
+export const generateContainerManifestExcel = async (containerId: number): Promise<Buffer> => {
+   const { header, items } = await getContainerManifestData(containerId);
+
+   const workbook = new ExcelJS.Workbook();
+   workbook.creator = "CTEnvios";
+   workbook.created = new Date();
+
+   const worksheet = workbook.addWorksheet("Manifiesto", {
+      pageSetup: {
+         paperSize: 9, // A4
+         orientation: "landscape",
+         fitToPage: true,
+         fitToWidth: 1,
+         fitToHeight: 0,
+      },
+   });
+
+   // Define column widths
+   worksheet.columns = [
+      { key: "hbl", width: 18 },
+      { key: "bultos", width: 8 },
+      { key: "peso", width: 10 },
+      { key: "m3", width: 6 },
+      { key: "remitente", width: 18 },
+      { key: "destinatario", width: 18 },
+      { key: "direccion", width: 25 },
+      { key: "municipio", width: 14 },
+      { key: "provincia", width: 12 },
+      { key: "telefono", width: 12 },
+      { key: "ci", width: 14 },
+      { key: "email", width: 18 },
+      { key: "contenido", width: 18 },
+      { key: "tipo", width: 8 },
+      { key: "fecha_recogida", width: 12 },
+      { key: "fecha_viaje", width: 12 },
+   ];
+
+   // Style definitions
+   const headerStyle: Partial<ExcelJS.Style> = {
+      font: { bold: true, size: 10 },
+      fill: {
+         type: "pattern",
+         pattern: "solid",
+         fgColor: { argb: "FFE0E0E0" },
+      },
+      border: {
+         top: { style: "thin" },
+         left: { style: "thin" },
+         bottom: { style: "thin" },
+         right: { style: "thin" },
+      },
+      alignment: { horizontal: "center", vertical: "middle", wrapText: true },
+   };
+
+   const dataStyle: Partial<ExcelJS.Style> = {
+      font: { size: 9 },
+      border: {
+         top: { style: "thin" },
+         left: { style: "thin" },
+         bottom: { style: "thin" },
+         right: { style: "thin" },
+      },
+      alignment: { vertical: "middle", wrapText: true },
+   };
+
+   // ========== HEADER SECTION ==========
+   // Row 1: Agency info
+   worksheet.mergeCells("A1:B1");
+   worksheet.getCell("A1").value = "Agencia origen:";
+   worksheet.getCell("A1").font = { bold: true, size: 10 };
+   worksheet.mergeCells("C1:E1");
+   worksheet.getCell("C1").value = header.origin_agency;
+
+   // Row 2: Country
+   worksheet.mergeCells("A2:B2");
+   worksheet.getCell("A2").value = "País:";
+   worksheet.getCell("A2").font = { bold: true, size: 10 };
+   worksheet.mergeCells("C2:E2");
+   worksheet.getCell("C2").value = header.country;
+
+   // Row 3: Consignee
+   worksheet.mergeCells("A3:B3");
+   worksheet.getCell("A3").value = "Consignatario:";
+   worksheet.getCell("A3").font = { bold: true, size: 10 };
+   worksheet.mergeCells("C3:E3");
+   worksheet.getCell("C3").value = header.consignee;
+
+   // Row 4: Container
+   worksheet.mergeCells("A4:B4");
+   worksheet.getCell("A4").value = "Contenedor:";
+   worksheet.getCell("A4").font = { bold: true, size: 10 };
+   worksheet.mergeCells("C4:E4");
+   worksheet.getCell("C4").value = header.container_number;
+
+   // Row 5: Date
+   worksheet.mergeCells("A5:B5");
+   worksheet.getCell("A5").value = "Fecha:";
+   worksheet.getCell("A5").font = { bold: true, size: 10 };
+   worksheet.mergeCells("C5:E5");
+   worksheet.getCell("C5").value = header.date;
+
+   // Right side header info
+   worksheet.getCell("G1").value = "BL";
+   worksheet.getCell("G1").font = { bold: true, size: 10 };
+   worksheet.mergeCells("H1:I1");
+   worksheet.getCell("H1").value = header.bl_number;
+
+   worksheet.getCell("L1").value = "MANIFIESTO";
+   worksheet.getCell("L1").font = { bold: true, size: 10 };
+   worksheet.mergeCells("M1:N1");
+   worksheet.getCell("M1").value = header.manifest_number;
+
+   worksheet.getCell("G3").value = "HBLs";
+   worksheet.getCell("G3").font = { bold: true, size: 10 };
+   worksheet.getCell("H3").value = header.hbls_count;
+
+   worksheet.getCell("J3").value = "TOTAL BULTOS";
+   worksheet.getCell("J3").font = { bold: true, size: 10 };
+   worksheet.getCell("K3").value = header.total_packages;
+
+   worksheet.getCell("L3").value = "KGs";
+   worksheet.getCell("L3").font = { bold: true, size: 10 };
+   worksheet.getCell("M3").value = header.total_weight_kg;
+
+   // ========== TABLE HEADER ==========
+   const tableHeaderRow = 7;
+   const tableHeaders = [
+      "HBL Número",
+      "Bultos",
+      "Peso (Kg)",
+      "M3",
+      "REMITENTE",
+      "DESTINATARIO",
+      "Dirección",
+      "Municipio",
+      "Provincia",
+      "Teléfono",
+      "No. de Carnet de Identidad",
+      "Correo electrónico",
+      "Contenido del paquete (Descripción)",
+      "Tipo",
+      "Fecha recogida",
+      "Fecha de Viaje",
+   ];
+
+   tableHeaders.forEach((headerText, index) => {
+      const cell = worksheet.getCell(tableHeaderRow, index + 1);
+      cell.value = headerText;
+      cell.style = headerStyle;
+   });
+
+   // Set row height for header
+   worksheet.getRow(tableHeaderRow).height = 35;
+
+   // ========== DATA ROWS ==========
+   const dataRowStart = tableHeaderRow + 1;
+   items.forEach((item, index) => {
+      const rowNum = dataRowStart + index;
+      const row = worksheet.getRow(rowNum);
+
+      row.values = [
+         item.hbl_number,
+         item.packages,
+         item.weight_kg,
+         item.volume_m3,
+         item.sender_name,
+         item.receiver_name,
+         item.address,
+         item.municipality,
+         item.province,
+         item.phone,
+         item.ci,
+         "", // Email column left empty
+         item.content,
+         item.service_type,
+         item.pickup_date,
+         item.travel_date,
+      ];
+
+      // Apply style to each cell
+      for (let col = 1; col <= 16; col++) {
+         const cell = row.getCell(col);
+         cell.style = dataStyle;
+      }
+
+      row.height = 25;
+   });
+
+   // Generate buffer
+   const buffer = await workbook.xlsx.writeBuffer();
+   return Buffer.from(buffer);
+};
+
+export default generateContainerManifestExcel;
