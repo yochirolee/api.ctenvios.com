@@ -2,6 +2,7 @@ import { Response, NextFunction } from "express";
 import financialReportsRepository from "../repositories/financial-reports.repository";
 import { AppError } from "../common/app-errors";
 import HttpStatusCodes from "../common/https-status-codes";
+import { Roles } from "@prisma/client";
 
 /**
  * Financial Reports Controller
@@ -241,7 +242,7 @@ export const financialReportsController = {
    getDashboard: async (req: any, res: Response, next: NextFunction): Promise<void> => {
       try {
          const user = req.user;
-         const isAdmin = ["ROOT", "ADMINISTRATOR"].includes(user.role);
+         const isAdmin = [Roles.ROOT, Roles.ADMINISTRATOR].includes(user.role);
          const agencyFilter = isAdmin ? undefined : user.agency_id;
 
          const [today, month, paymentBreakdown, customerDebts, comparison] = await Promise.all([

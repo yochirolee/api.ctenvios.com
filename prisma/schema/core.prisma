@@ -62,6 +62,8 @@ model User {
     messenger_routes         DeliveryRoute[]         @relation("route_messenger")
     created_routes           DeliveryRoute[]         @relation("route_created_by")
     messenger_assignments    DeliveryAssignment[]    @relation("assignment_messenger")
+    // Soft deleted orders
+    deleted_orders           Order[]                 @relation("deleted_orders")
 
     @@index([agency_id, role])
     @@index([carrier_id, role])
@@ -224,17 +226,17 @@ model Carrier {
 }
 
 model Warehouse {
-    id            Int           @id @default(autoincrement())
-    name          String
-    address       String
-    carrier_id    Int
-    carrier       Carrier       @relation(fields: [carrier_id], references: [id])
-    province_id   Int
-    province      Province      @relation(fields: [province_id], references: [id])
-    is_main       Boolean       @default(false) // Almacén principal del carrier
-    is_active     Boolean       @default(true)
-    manager_id    String?       // Jefe de almacén
-    manager       User?         @relation("warehouse_manager", fields: [manager_id], references: [id])
+    id              Int             @id @default(autoincrement())
+    name            String
+    address         String
+    carrier_id      Int
+    carrier         Carrier         @relation(fields: [carrier_id], references: [id])
+    province_id     Int
+    province        Province        @relation(fields: [province_id], references: [id])
+    is_main         Boolean         @default(false) // Almacén principal del carrier
+    is_active       Boolean         @default(true)
+    manager_id      String? // Jefe de almacén
+    manager         User?           @relation("warehouse_manager", fields: [manager_id], references: [id])
     parcels         Parcel[]
     parcel_events   ParcelEvent[]
     delivery_routes DeliveryRoute[]
@@ -300,4 +302,3 @@ model Location {
     parcels        Parcel[]
     parcels_events ParcelEvent[]
 }
-

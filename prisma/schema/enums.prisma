@@ -119,6 +119,7 @@ enum Status {
     FAILED_DELIVERY
     DELIVERED
     RETURNED_TO_SENDER
+    CANCELLED // Orden cancelada/eliminada
 
     // Estados parciales para órdenes (cuando parcels están en diferentes etapas)
     PARTIALLY_IN_PALLET

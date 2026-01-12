@@ -370,8 +370,46 @@ export const ordersController = {
    delete: async (req: any, res: Response, next: NextFunction): Promise<void> => {
       try {
          const { id } = req.params;
+         const { reason } = req.body;
          const orderId = parseInt(id);
-         const result = await repository.orders.delete(orderId);
+         const user = req.user;
+
+         const result = await repository.orders.softDelete(
+            orderId,
+            {
+               userId: user.id,
+               userRole: user.role,
+               userAgencyId: user.agency_id,
+            },
+            reason
+         );
+         res.status(200).json(result);
+      } catch (error) {
+         next(error);
+      }
+   },
+
+   restore: async (req: any, res: Response, next: NextFunction): Promise<void> => {
+      try {
+         const { id } = req.params;
+         const orderId = parseInt(id);
+         const result = await repository.orders.restore(orderId);
+         res.status(200).json({ success: true, order: result });
+      } catch (error) {
+         next(error);
+      }
+   },
+
+   getDeleted: async (req: any, res: Response, next: NextFunction): Promise<void> => {
+      try {
+         const { page = 1, limit = 25 } = req.query;
+         const user = req.user;
+         const isAdmin = ["ROOT", "ADMINISTRATOR"].includes(user.role);
+         const result = await repository.orders.getDeleted({
+            page: parseInt(page as string),
+            limit: parseInt(limit as string),
+            agency_id: isAdmin ? undefined : user.agency_id,
+         });
          res.status(200).json(result);
       } catch (error) {
          next(error);

@@ -43,6 +43,7 @@ const analytics = {
       	FROM "Order"
       WHERE  "created_at" >= '${startDate ? startDate.toISOString() : `${year}-01-01`}'
         AND "created_at" < '${endDate ? endDate.toISOString() : `${year}-12-31`}'
+        AND "deleted_at" IS NULL
         ${agencyFilter}
       GROUP BY day
       ORDER BY day;
@@ -55,6 +56,7 @@ const analytics = {
       FROM "Order"
       WHERE  "created_at" >= '${startDate ? startDate.toISOString() : `${year}-01-01`}'
         AND "created_at" < '${endDate ? endDate.toISOString() : `${year}-12-31`}'
+        AND "deleted_at" IS NULL
         ${agencyFilter}
       GROUP BY week
       ORDER BY week;
@@ -67,6 +69,7 @@ const analytics = {
       FROM "Order"
       WHERE  "created_at" >= '${startDate ? startDate.toISOString() : `${year}-01-01`}'
         AND "created_at" < '${endDate ? endDate.toISOString() : `${year}-12-31`}'
+        AND "deleted_at" IS NULL
         ${agencyFilter}
       GROUP BY month
       ORDER BY month;
@@ -107,6 +110,7 @@ const analytics = {
       	FROM "Order"
       WHERE  "created_at" >= '${startDate ? startDate.toISOString() : `${year}-01-01`}'
         AND "created_at" < '${endDate ? endDate.toISOString() : `${year}-12-31`}'
+        AND "deleted_at" IS NULL
         ${agencyFilter}
       GROUP BY day
       ORDER BY day;
@@ -119,6 +123,7 @@ const analytics = {
       FROM "Order"
       WHERE  "created_at" >= '${startDate ? startDate.toISOString() : `${year}-01-01`}'
         AND "created_at" < '${endDate ? endDate.toISOString() : `${year}-12-31`}'
+        AND "deleted_at" IS NULL
         ${agencyFilter}
       GROUP BY week
       ORDER BY week;
@@ -131,6 +136,7 @@ const analytics = {
       FROM "Order"
       WHERE  "created_at" >= '${startDate ? startDate.toISOString() : `${year}-01-01`}'
         AND "created_at" < '${endDate ? endDate.toISOString() : `${year}-12-31`}'
+        AND "deleted_at" IS NULL
         ${agencyFilter}
       GROUP BY month
       ORDER BY month;
@@ -162,9 +168,12 @@ const analytics = {
    getDailySalesByAgency: async (
       year: number,
       startDate: Date | undefined,
-      endDate: Date | undefined
+      endDate: Date | undefined,
+      agencyId: number | undefined
    ): Promise<DailySalesByAgencyResponse> => {
-      // Query to get daily sales grouped by agency
+      const agencyFilter = agencyId ? `AND o."agency_id" = ${agencyId}` : "";
+
+      // Query to get daily sales grouped by agency (exclude soft-deleted orders)
       const rawData = (await prisma.$queryRawUnsafe(`
          SELECT
             o."agency_id",
@@ -175,6 +184,8 @@ const analytics = {
          INNER JOIN "Agency" a ON a.id = o."agency_id"
          WHERE o."created_at" >= '${startDate ? startDate.toISOString() : `${year}-01-01`}'
            AND o."created_at" < '${endDate ? endDate.toISOString() : `${year}-12-31`}'
+           AND o."deleted_at" IS NULL
+           ${agencyFilter}
          GROUP BY o."agency_id", a."name", DATE(o."created_at")
          ORDER BY o."agency_id", day;
       `)) as unknown as Array<{
@@ -220,13 +231,16 @@ const analytics = {
       };
    },
 
-   getTodaySalesByAgency: async (): Promise<DailySalesByAgencyResponse> => {
+   getTodaySalesByAgency: async (agencyId?: number): Promise<DailySalesByAgencyResponse> => {
       // Get today's date range (start and end of today)
       const today = new Date();
       const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
       const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
 
-      // Query to get today's sales grouped by agency
+      // Build agency filter
+      const agencyFilter = agencyId ? `AND o."agency_id" = ${agencyId}` : "";
+
+      // Query to get today's sales grouped by agency (exclude soft-deleted orders)
       const rawData = (await prisma.$queryRawUnsafe(`
          SELECT
             o."agency_id",
@@ -236,6 +250,8 @@ const analytics = {
          INNER JOIN "Agency" a ON a.id = o."agency_id"
          WHERE o."created_at" >= '${startOfToday.toISOString()}'
            AND o."created_at" <= '${endOfToday.toISOString()}'
+           AND o."deleted_at" IS NULL
+           ${agencyFilter}
          GROUP BY o."agency_id", a."name"
          ORDER BY total DESC;
       `)) as unknown as Array<{

@@ -154,8 +154,16 @@ const recalculateDispatchWeight = async (
 }; */
 
 const dispatch = {
-   get: async (page: number, limit: number) => {
+   get: async (page: number, limit: number, agency_id?: number) => {
+      // If agency_id is provided, filter by sender or receiver agency
+      // If undefined (admin), return all dispatches
+      const where: Prisma.DispatchWhereInput = agency_id
+         ? {
+              OR: [{ sender_agency_id: agency_id }, { receiver_agency_id: agency_id }],
+           }
+         : {};
       const dispatches = await prisma.dispatch.findMany({
+         where,
          skip: (page - 1) * limit,
          take: limit,
          select: {
@@ -203,7 +211,7 @@ const dispatch = {
             created_at: "desc",
          },
       });
-      const total = await prisma.dispatch.count();
+      const total = await prisma.dispatch.count({ where });
       return { dispatches, total };
    },
    getById: async (id: number): Promise<Dispatch | null> => {

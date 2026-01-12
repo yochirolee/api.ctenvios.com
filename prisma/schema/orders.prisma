@@ -32,10 +32,17 @@ model Order {
     partner_id             Int?
     issues                 Issue[]
 
+    // Soft delete fields
+    deleted_at      DateTime?
+    deleted_by_id   String?
+    deleted_by      User?     @relation("deleted_orders", fields: [deleted_by_id], references: [id])
+    deletion_reason String?
+
     @@index([agency_id, created_at(sort: Desc)])
     @@index([created_at(sort: Desc)])
     @@index([customer_id])
     @@index([receiver_id])
+    @@index([deleted_at])
 }
 
 model OrderItem {
@@ -76,41 +83,41 @@ model OrderItem {
 }
 
 model Parcel {
-    id                  Int           @id @default(autoincrement())
-    tracking_number     String        @unique
-    agency_id           Int?
-    agency              Agency?       @relation(fields: [agency_id], references: [id], onDelete: SetNull)
-    current_agency_id   Int?
-    order_id            Int?
-    order               Order?        @relation(fields: [order_id], references: [id], onDelete: SetNull)
-    service_id          Int?
-    service             Service?      @relation(fields: [service_id], references: [id], onDelete: SetNull)
-    description         String
-    weight              Decimal       @default("0.00")
-    status              Status        @default(IN_AGENCY)
-    current_location_id Int?
-    current_location    Location?     @relation(fields: [current_location_id], references: [id])
-    created_at          DateTime      @default(now())
-    updated_at          DateTime      @updatedAt
-    order_items         OrderItem[]
-    events              ParcelEvent[]
-    dispatch_id         Int?
-    dispatch            Dispatch?     @relation(fields: [dispatch_id], references: [id])
-    user_id             String
-    user                User          @relation(fields: [user_id], references: [id])
-    issues              Issue[]
-    issue_parcels       IssueParcel[]
+    id                   Int                   @id @default(autoincrement())
+    tracking_number      String                @unique
+    agency_id            Int?
+    agency               Agency?               @relation(fields: [agency_id], references: [id], onDelete: SetNull)
+    current_agency_id    Int?
+    order_id             Int?
+    order                Order?                @relation(fields: [order_id], references: [id], onDelete: SetNull)
+    service_id           Int?
+    service              Service?              @relation(fields: [service_id], references: [id], onDelete: SetNull)
+    description          String
+    weight               Decimal               @default("0.00")
+    status               Status                @default(IN_AGENCY)
+    current_location_id  Int?
+    current_location     Location?             @relation(fields: [current_location_id], references: [id])
+    created_at           DateTime              @default(now())
+    updated_at           DateTime              @updatedAt
+    order_items          OrderItem[]
+    events               ParcelEvent[]
+    dispatch_id          Int?
+    dispatch             Dispatch?             @relation(fields: [dispatch_id], references: [id])
+    user_id              String
+    user                 User                  @relation(fields: [user_id], references: [id])
+    issues               Issue[]
+    issue_parcels        IssueParcel[]
     // Pallet
-    pallet_id           Int?
-    pallet              Pallet?       @relation(fields: [pallet_id], references: [id], onDelete: SetNull)
+    pallet_id            Int?
+    pallet               Pallet?               @relation(fields: [pallet_id], references: [id], onDelete: SetNull)
     // Transporte internacional
-    container_id        Int?
-    container           Container?    @relation(fields: [container_id], references: [id], onDelete: SetNull)
-    flight_id           Int?
-    flight              Flight?       @relation(fields: [flight_id], references: [id], onDelete: SetNull)
+    container_id         Int?
+    container            Container?            @relation(fields: [container_id], references: [id], onDelete: SetNull)
+    flight_id            Int?
+    flight               Flight?               @relation(fields: [flight_id], references: [id], onDelete: SetNull)
     // Warehouse (carrier distribution)
     current_warehouse_id Int?
-    current_warehouse    Warehouse?   @relation(fields: [current_warehouse_id], references: [id], onDelete: SetNull)
+    current_warehouse    Warehouse?            @relation(fields: [current_warehouse_id], references: [id], onDelete: SetNull)
     // Manifest discrepancies
     discrepancies        ManifestDiscrepancy[]
     // Delivery
@@ -125,30 +132,30 @@ model Parcel {
 }
 
 model ParcelEvent {
-    id           Int              @id @default(autoincrement())
+    id           Int             @id @default(autoincrement())
     parcel_id    Int
-    parcel       Parcel           @relation(fields: [parcel_id], references: [id], onDelete: Cascade)
-    event_type   ParcelEventType  // Tipo de evento (define visibilidad pública/interna)
-    status       Status           @default(IN_AGENCY)
-    description  String?          // Descripción personalizada opcional
+    parcel       Parcel          @relation(fields: [parcel_id], references: [id], onDelete: Cascade)
+    event_type   ParcelEventType // Tipo de evento (define visibilidad pública/interna)
+    status       Status          @default(IN_AGENCY)
+    description  String? // Descripción personalizada opcional
     user_id      String
-    user         User             @relation(fields: [user_id], references: [id])
+    user         User            @relation(fields: [user_id], references: [id])
     location_id  Int?
-    location     Location?        @relation(fields: [location_id], references: [id])
+    location     Location?       @relation(fields: [location_id], references: [id])
     // Referencias para tracking completo
     pallet_id    Int?
-    pallet       Pallet?          @relation(fields: [pallet_id], references: [id], onDelete: SetNull)
+    pallet       Pallet?         @relation(fields: [pallet_id], references: [id], onDelete: SetNull)
     dispatch_id  Int?
-    dispatch     Dispatch?        @relation(fields: [dispatch_id], references: [id], onDelete: SetNull)
+    dispatch     Dispatch?       @relation(fields: [dispatch_id], references: [id], onDelete: SetNull)
     container_id Int?
-    container    Container?       @relation(fields: [container_id], references: [id], onDelete: SetNull)
+    container    Container?      @relation(fields: [container_id], references: [id], onDelete: SetNull)
     flight_id    Int?
-    flight       Flight?          @relation(fields: [flight_id], references: [id], onDelete: SetNull)
+    flight       Flight?         @relation(fields: [flight_id], references: [id], onDelete: SetNull)
     warehouse_id Int?
-    warehouse    Warehouse?       @relation(fields: [warehouse_id], references: [id], onDelete: SetNull)
-    notes        String?          // Notas adicionales del evento
-    created_at   DateTime         @default(now())
-    updated_at   DateTime         @updatedAt
+    warehouse    Warehouse?      @relation(fields: [warehouse_id], references: [id], onDelete: SetNull)
+    notes        String? // Notas adicionales del evento
+    created_at   DateTime        @default(now())
+    updated_at   DateTime        @updatedAt
 
     @@index([parcel_id, created_at(sort: Desc)])
     @@index([event_type])

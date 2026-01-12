@@ -17,6 +17,9 @@ router.get("/:id/hbls-pdf", controllers.orders.generateOrderHblPdf);
 // GET /orders - List and search orders (RESTful pattern)
 router.get("/", authMiddleware, validate({ query: searchSchema }), controllers.orders.search);
 
+// GET /orders/deleted - List soft-deleted orders (admin/manager) - MUST be before /:id routes
+router.get("/deleted", authMiddleware, controllers.orders.getDeleted);
+
 // GET /orders/:id/parcels - Get parcels by order ID
 router.get("/:id/parcels", authMiddleware, controllers.orders.getParcelsByOrderId);
 
@@ -73,7 +76,10 @@ router.delete(
    controllers.orders.removePayment
 );
 
-// DELETE /orders/:id - Delete order
+// DELETE /orders/:id - Soft delete order (only IN_AGENCY status, no payments)
 router.delete("/:id", authMiddleware, controllers.orders.delete);
+
+// POST /orders/:id/restore - Restore soft-deleted order
+router.post("/:id/restore", authMiddleware, controllers.orders.restore);
 
 export default router;

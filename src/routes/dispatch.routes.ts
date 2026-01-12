@@ -9,14 +9,18 @@ const router = Router();
 router.get("/", async (req: any, res: Response) => {
    const { page = 1, limit = 25 } = req.query;
    const user = req.user;
-   if (!user.agency_id) {
+
+   // ROOT and ADMINISTRATOR can see all dispatches
+   const isAdmin = [Roles.ROOT, Roles.ADMINISTRATOR].includes(user.role);
+
+   if (!isAdmin && !user.agency_id) {
       return res.status(HttpStatusCodes.BAD_REQUEST).json({ message: "User must be associated with an agency" });
    }
-   //TODO if agency is FORWARDER, get all dispatches
 
    const { dispatches: rows, total } = await repository.dispatch.get(
       parseInt(page as string),
-      parseInt(limit as string)
+      parseInt(limit as string),
+      isAdmin ? undefined : user.agency_id // Pass undefined to get all dispatches
    );
    res.status(200).json({ rows, total });
 });
@@ -46,7 +50,7 @@ router.get("/:id/parcels", async (req: Request, res: Response) => {
       parseInt(page as string),
       parseInt(limit as string)
    );
-   console.log(parcels);
+
    res.status(200).json({
       rows: parcels,
       total: total,

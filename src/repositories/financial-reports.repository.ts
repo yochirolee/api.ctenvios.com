@@ -128,6 +128,7 @@ const financialReports = {
 
       const where: any = {
          created_at: { gte: start, lte: end },
+         deleted_at: null, // Exclude soft-deleted orders
       };
 
       if (agency_id) {
@@ -201,6 +202,7 @@ const financialReports = {
 
       const where: any = {
          created_at: { gte: start, lte: end },
+         deleted_at: null, // Exclude soft-deleted orders
       };
 
       if (agency_id) {
@@ -296,6 +298,7 @@ const financialReports = {
    getCustomerDebts: async (agency_id?: number, limit: number = 50): Promise<CustomerDebt[]> => {
       const where: any = {
          payment_status: { in: [PaymentStatus.PENDING, PaymentStatus.PARTIALLY_PAID] },
+         deleted_at: null, // Exclude soft-deleted orders
       };
 
       if (agency_id) {
@@ -350,6 +353,7 @@ const financialReports = {
 
       const where: any = {
          created_at: { gte: start, lte: end },
+         deleted_at: null, // Exclude soft-deleted orders
       };
 
       if (agency_id) {
@@ -460,6 +464,7 @@ const financialReports = {
          where: {
             customer_id,
             payment_status: { in: [PaymentStatus.PENDING, PaymentStatus.PARTIALLY_PAID] },
+            deleted_at: null, // Exclude soft-deleted orders
          },
          select: {
             id: true,
@@ -554,6 +559,7 @@ const financialReports = {
 
       const where: any = {
          created_at: { gte: start, lte: end },
+         deleted_at: null, // Exclude soft-deleted orders
       };
 
       if (agency_id) {
@@ -711,7 +717,8 @@ const financialReports = {
 
    /**
     * Get daily closing report by user
-    * Shows each user's orders and totals for a specific day
+    * Shows each user's orders and debt collections for a specific day
+    * Debt collections (payments from older orders) appear as separate rows marked is_debt_collection: true
     */
    getDailyClosingByUser: async (
       date: Date,
@@ -720,272 +727,424 @@ const financialReports = {
    ): Promise<{
       date: string;
       date_range: { start: string; end: string };
-      total_orders_found: number;
       agency?: { id: number; name: string };
       user?: { id: string; name: string; email: string };
-      users: UserDailyClosing[];
+      users: Array<{
+         user_id: string;
+         user_name: string;
+         user_email: string;
+         summary: {
+            total_orders: number;
+            total_hbls: number;
+            total_weight_lbs: number;
+            total_billed_cents: number;
+            total_collected_cents: number;
+            total_charges_cents: number;
+            total_discounts_cents: number;
+            total_pending_cents: number;
+            debt_collections_cents: number;
+         };
+         payment_breakdown: PaymentMethodBreakdown[];
+         orders: Array<{
+            order_id: number;
+            created_at: Date;
+            original_order_date?: Date;
+            customer: { id: number; name: string; phone: string | null };
+            receiver: { id: number; name: string; city: string | null };
+            service: string;
+            hbl_count: number;
+            total_weight_lbs: number;
+            total_in_cents: number;
+            paid_in_cents: number;
+            pending_in_cents: number;
+            discounts_in_cents: number;
+            payment_status: PaymentStatus;
+            payment_methods: PaymentMethod[];
+            is_debt_collection: boolean;
+         }>;
+      }>;
       totals: {
          total_orders: number;
          total_hbls: number;
          total_weight_lbs: number;
          total_billed_cents: number;
-         total_paid_cents: number;
-         total_charges_cents: number; // Card processing fees
-         grand_total_collected_cents: number; // paid
+         total_collected_cents: number;
+         total_charges_cents: number;
          total_pending_cents: number;
          total_discounts_cents: number;
+         debt_collections_cents: number;
          payment_breakdown: PaymentMethodBreakdown[];
       };
    }> => {
       const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
       const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
 
-      const where: any = {
+      // 1. Get orders created today (exclude soft-deleted)
+      const orderWhere: any = {
          created_at: { gte: startOfDay, lte: endOfDay },
+         deleted_at: null, // Exclude soft-deleted orders
       };
+      if (agency_id) orderWhere.agency_id = agency_id;
+      if (user_id) orderWhere.user_id = user_id;
 
-      if (agency_id) {
-         where.agency_id = agency_id;
-      }
-
-      if (user_id) {
-         where.user_id = user_id;
-      }
-
-      // Get all orders for the day with full details
-      const orders = await prisma.order.findMany({
-         where,
+      const ordersToday = await prisma.order.findMany({
+         where: orderWhere,
          orderBy: { created_at: "asc" },
          include: {
             user: { select: { id: true, name: true, email: true } },
-            agency: { select: { id: true, name: true } },
             customer: { select: { id: true, first_name: true, last_name: true, mobile: true } },
             receiver: {
                select: {
                   id: true,
                   first_name: true,
                   last_name: true,
-                  phone: true,
-                  address: true,
                   city: { select: { name: true } },
                },
             },
-            service: { select: { id: true, name: true, service_type: true } },
-            parcels: { select: { id: true, tracking_number: true, weight: true, status: true } },
-            payments: { select: { id: true, amount_in_cents: true, charge_in_cents: true, method: true, date: true } },
-            discounts: { select: { id: true, discount_in_cents: true, type: true, description: true } },
+            service: { select: { name: true } },
+            parcels: { select: { id: true, weight: true } },
+            payments: { select: { amount_in_cents: true, charge_in_cents: true, method: true, date: true } },
+            discounts: { select: { discount_in_cents: true } },
          },
       });
 
-      // Group by user
+      // 2. Get debt payments (payments from older orders received today, exclude soft-deleted)
+      const debtPaymentsWhere: any = {
+         date: { gte: startOfDay, lte: endOfDay },
+         order: { created_at: { lt: startOfDay }, deleted_at: null },
+      };
+      if (agency_id) debtPaymentsWhere.order.agency_id = agency_id;
+      if (user_id) debtPaymentsWhere.order.user_id = user_id;
+
+      const debtPayments = await prisma.payment.findMany({
+         where: debtPaymentsWhere,
+         include: {
+            order: {
+               include: {
+                  user: { select: { id: true, name: true, email: true } },
+                  customer: { select: { id: true, first_name: true, last_name: true, mobile: true } },
+                  receiver: {
+                     select: {
+                        id: true,
+                        first_name: true,
+                        last_name: true,
+                        city: { select: { name: true } },
+                     },
+                  },
+                  service: { select: { name: true } },
+                  parcels: { select: { id: true, weight: true } },
+               },
+            },
+         },
+         orderBy: { date: "asc" },
+      });
+
+      // Group data by user
+      interface OrderRow {
+         order_id: number;
+         created_at: Date;
+         original_order_date?: Date;
+         customer: { id: number; name: string; phone: string | null };
+         receiver: { id: number; name: string; city: string | null };
+         service: string;
+         hbl_count: number;
+         total_weight_lbs: number;
+         total_in_cents: number;
+         paid_in_cents: number;
+         pending_in_cents: number;
+         discounts_in_cents: number;
+         payment_status: PaymentStatus;
+         payment_methods: PaymentMethod[];
+         is_debt_collection: boolean;
+      }
+
       const userMap = new Map<
          string,
          {
             user: { id: string; name: string | null; email: string };
-            orders: typeof orders;
+            orderRows: OrderRow[];
+            stats: {
+               totalOrders: number;
+               totalHbls: number;
+               totalWeight: number;
+               totalBilled: number;
+               totalCollected: number;
+               totalCharges: number;
+               totalDiscounts: number;
+               debtCollections: number;
+            };
+            paymentMap: Map<PaymentMethod, number>;
          }
       >();
 
-      for (const order of orders) {
+      // Process today's orders
+      for (const order of ordersToday) {
          if (!userMap.has(order.user_id)) {
             userMap.set(order.user_id, {
                user: order.user,
-               orders: [],
+               orderRows: [],
+               stats: {
+                  totalOrders: 0,
+                  totalHbls: 0,
+                  totalWeight: 0,
+                  totalBilled: 0,
+                  totalCollected: 0,
+                  totalCharges: 0,
+                  totalDiscounts: 0,
+                  debtCollections: 0,
+               },
+               paymentMap: new Map(),
             });
          }
-         userMap.get(order.user_id)!.orders.push(order);
+
+         const userData = userMap.get(order.user_id)!;
+         const hblCount = order.parcels.length;
+         const weight = order.parcels.reduce((sum, p) => sum + Number(p.weight), 0);
+         const discounts = order.discounts.reduce((sum, d) => sum + d.discount_in_cents, 0);
+         const paymentMethods = [...new Set(order.payments.map((p) => p.method))];
+
+         // IMPORTANT: total_in_cents includes card charges, so collected = amount + charge
+         const paymentsToday = order.payments.filter((p) => p.date >= startOfDay && p.date <= endOfDay);
+         const amountToday = paymentsToday.reduce((sum, p) => sum + p.amount_in_cents, 0);
+         const chargesToday = paymentsToday.reduce((sum, p) => sum + p.charge_in_cents, 0);
+         const paidToday = amountToday + chargesToday; // Total collected includes charges
+
+         userData.stats.totalOrders++;
+         userData.stats.totalHbls += hblCount;
+         userData.stats.totalWeight += weight;
+         userData.stats.totalBilled += order.total_in_cents;
+         userData.stats.totalCollected += paidToday; // Now includes charges
+         userData.stats.totalCharges += chargesToday;
+         userData.stats.totalDiscounts += discounts;
+
+         for (const payment of paymentsToday) {
+            // Payment total = amount + charge (since total_in_cents includes charges)
+            const paymentTotal = payment.amount_in_cents + payment.charge_in_cents;
+            userData.paymentMap.set(payment.method, (userData.paymentMap.get(payment.method) || 0) + paymentTotal);
+         }
+
+         userData.orderRows.push({
+            order_id: order.id,
+            created_at: order.created_at,
+            customer: {
+               id: order.customer.id,
+               name: `${order.customer.first_name} ${order.customer.last_name}`,
+               phone: order.customer.mobile,
+            },
+            receiver: {
+               id: order.receiver.id,
+               name: `${order.receiver.first_name} ${order.receiver.last_name}`,
+               city: order.receiver.city?.name || null,
+            },
+            service: order.service.name,
+            hbl_count: hblCount,
+            total_weight_lbs: Math.round(weight * 100) / 100,
+            total_in_cents: order.total_in_cents,
+            paid_in_cents: paidToday, // Includes charges
+            pending_in_cents: order.total_in_cents - order.paid_in_cents, // paid_in_cents in DB includes charges
+            discounts_in_cents: discounts,
+            payment_status: order.payment_status,
+            payment_methods: paymentMethods,
+            is_debt_collection: false,
+         });
       }
 
-      // Build user closing reports
-      const users: UserDailyClosing[] = [];
+      // Process debt payments - group by order
+      const debtOrderMap = new Map<
+         number,
+         { order: (typeof debtPayments)[0]["order"]; payments: typeof debtPayments }
+      >();
+      for (const payment of debtPayments) {
+         if (!debtOrderMap.has(payment.order.id)) {
+            debtOrderMap.set(payment.order.id, { order: payment.order, payments: [] });
+         }
+         debtOrderMap.get(payment.order.id)!.payments.push(payment);
+      }
 
-      for (const [userId, data] of userMap) {
-         const userOrders = data.orders;
+      for (const [, debtData] of debtOrderMap) {
+         const order = debtData.order;
+         const payments = debtData.payments;
 
-         // Payment method breakdown for this user
-         const paymentMap = new Map<PaymentMethod, { count: number; amount: number; charges: number }>();
-
-         let totalHbls = 0;
-         let totalWeight = 0;
-         let totalBilled = 0;
-         let totalPaid = 0;
-         let totalCharges = 0;
-         let totalDiscounts = 0;
-
-         // Build order details
-         const orderDetails: UserOrderDetail[] = userOrders.map((order) => {
-            const orderWeight = order.parcels.reduce((sum, p) => sum + Number(p.weight), 0);
-            const orderDiscounts = order.discounts.reduce((sum, d) => sum + d.discount_in_cents, 0);
-            const paymentMethods = [...new Set(order.payments.map((p) => p.method))];
-
-            totalHbls += order.parcels.length;
-            totalWeight += orderWeight;
-            totalBilled += order.total_in_cents;
-            totalPaid += order.paid_in_cents;
-            totalDiscounts += orderDiscounts;
-
-            for (const payment of order.payments) {
-               if (!paymentMap.has(payment.method)) {
-                  paymentMap.set(payment.method, { count: 0, amount: 0, charges: 0 });
-               }
-               const pm = paymentMap.get(payment.method)!;
-               pm.count++;
-               pm.amount += payment.amount_in_cents;
-               pm.charges += payment.charge_in_cents;
-               totalCharges += payment.charge_in_cents;
-            }
-
-            return {
-               order_id: order.id,
-               created_at: order.created_at,
-               customer: {
-                  id: order.customer.id,
-                  name: `${order.customer.first_name} ${order.customer.last_name}`,
-                  phone: order.customer.mobile,
+         if (!userMap.has(order.user_id)) {
+            userMap.set(order.user_id, {
+               user: order.user,
+               orderRows: [],
+               stats: {
+                  totalOrders: 0,
+                  totalHbls: 0,
+                  totalWeight: 0,
+                  totalBilled: 0,
+                  totalCollected: 0,
+                  totalCharges: 0,
+                  totalDiscounts: 0,
+                  debtCollections: 0,
                },
-               receiver: {
-                  id: order.receiver.id,
-                  name: `${order.receiver.first_name} ${order.receiver.last_name}`,
-                  city: order.receiver.city?.name || null,
-               },
-               service: order.service.name,
-               hbl_count: order.parcels.length,
-               total_weight_lbs: Math.round(orderWeight * 100) / 100,
-               total_in_cents: order.total_in_cents,
-               paid_in_cents: order.paid_in_cents,
-               pending_in_cents: order.total_in_cents - order.paid_in_cents,
-               discounts_in_cents: orderDiscounts,
-               payment_status: order.payment_status,
-               payment_methods: paymentMethods,
-               payments: order.payments.map((p) => ({
-                  amount_cents: p.amount_in_cents,
-                  charge_cents: p.charge_in_cents,
-                  total_cents: p.amount_in_cents + p.charge_in_cents,
-                  method: p.method,
-                  date: p.date,
-               })),
-            };
+               paymentMap: new Map(),
+            });
+         }
+
+         const userData = userMap.get(order.user_id)!;
+         // IMPORTANT: Include charges since total_in_cents includes them
+         const amountToday = payments.reduce((sum, p) => sum + p.amount_in_cents, 0);
+         const chargesToday = payments.reduce((sum, p) => sum + p.charge_in_cents, 0);
+         const paidToday = amountToday + chargesToday; // Total includes charges
+         const paymentMethods = [...new Set(payments.map((p) => p.method))];
+         const hblCount = order.parcels.length;
+         const weight = order.parcels.reduce((sum, p) => sum + Number(p.weight), 0);
+
+         userData.stats.totalCollected += paidToday;
+         userData.stats.totalCharges += chargesToday;
+         userData.stats.debtCollections += paidToday;
+
+         for (const payment of payments) {
+            const paymentTotal = payment.amount_in_cents + payment.charge_in_cents;
+            userData.paymentMap.set(payment.method, (userData.paymentMap.get(payment.method) || 0) + paymentTotal);
+         }
+
+         userData.orderRows.push({
+            order_id: order.id,
+            created_at: new Date(),
+            original_order_date: order.created_at,
+            customer: {
+               id: order.customer.id,
+               name: `${order.customer.first_name} ${order.customer.last_name}`,
+               phone: order.customer.mobile,
+            },
+            receiver: {
+               id: order.receiver.id,
+               name: `${order.receiver.first_name} ${order.receiver.last_name}`,
+               city: order.receiver.city?.name || null,
+            },
+            service: order.service.name,
+            hbl_count: hblCount,
+            total_weight_lbs: Math.round(weight * 100) / 100,
+            total_in_cents: paidToday, // Total paid today (amount + charges)
+            paid_in_cents: paidToday,
+            pending_in_cents: 0,
+            discounts_in_cents: 0,
+            payment_status: PaymentStatus.PAID,
+            payment_methods: paymentMethods,
+            is_debt_collection: true,
          });
+      }
+
+      // Build users array
+      const users: Array<{
+         user_id: string;
+         user_name: string;
+         user_email: string;
+         summary: {
+            total_orders: number;
+            total_hbls: number;
+            total_weight_lbs: number;
+            total_billed_cents: number;
+            total_collected_cents: number;
+            total_charges_cents: number;
+            total_discounts_cents: number;
+            total_pending_cents: number;
+            debt_collections_cents: number;
+         };
+         payment_breakdown: PaymentMethodBreakdown[];
+         orders: OrderRow[];
+      }> = [];
+
+      const overallPaymentMap = new Map<PaymentMethod, { count: number; amount: number; charges: number }>();
+      let totalOrders = 0,
+         totalHbls = 0,
+         totalWeight = 0,
+         totalBilled = 0,
+         totalCollected = 0,
+         totalCharges = 0,
+         totalDiscounts = 0,
+         totalDebtCollections = 0;
+
+      for (const [uId, userData] of userMap) {
+         userData.orderRows.sort((a, b) =>
+            a.is_debt_collection === b.is_debt_collection ? 0 : a.is_debt_collection ? 1 : -1
+         );
 
          const paymentBreakdown: PaymentMethodBreakdown[] = [];
-         for (const [method, stats] of paymentMap) {
-            paymentBreakdown.push({
-               method,
-               total_payments: stats.count,
-               total_amount_cents: stats.amount,
-               total_charges_cents: stats.charges,
-            });
+         for (const [method, amount] of userData.paymentMap) {
+            paymentBreakdown.push({ method, total_payments: 1, total_amount_cents: amount, total_charges_cents: 0 });
+            if (!overallPaymentMap.has(method)) overallPaymentMap.set(method, { count: 0, amount: 0, charges: 0 });
+            const pm = overallPaymentMap.get(method)!;
+            pm.count++;
+            pm.amount += amount;
          }
 
+         totalOrders += userData.stats.totalOrders;
+         totalHbls += userData.stats.totalHbls;
+         totalWeight += userData.stats.totalWeight;
+         totalBilled += userData.stats.totalBilled;
+         totalCollected += userData.stats.totalCollected;
+         totalCharges += userData.stats.totalCharges;
+         totalDiscounts += userData.stats.totalDiscounts;
+         totalDebtCollections += userData.stats.debtCollections;
+
          users.push({
-            user_id: userId,
-            user_name: data.user.name || "Unknown",
-            user_email: data.user.email,
+            user_id: uId,
+            user_name: userData.user.name || "Unknown",
+            user_email: userData.user.email,
             summary: {
-               total_orders: userOrders.length,
-               total_hbls: totalHbls,
-               total_weight_lbs: Math.round(totalWeight * 100) / 100,
-               total_billed_cents: totalBilled,
-               total_paid_cents: totalPaid,
-               total_charges_cents: totalCharges, // Card processing fees
-               grand_total_collected_cents: totalPaid,
-               total_pending_cents: totalBilled - totalPaid,
-               total_discounts_cents: totalDiscounts,
+               total_orders: userData.stats.totalOrders,
+               total_hbls: userData.stats.totalHbls,
+               total_weight_lbs: Math.round(userData.stats.totalWeight * 100) / 100,
+               total_billed_cents: userData.stats.totalBilled,
+               total_collected_cents: userData.stats.totalCollected,
+               total_charges_cents: userData.stats.totalCharges,
+               total_discounts_cents: userData.stats.totalDiscounts,
+               total_pending_cents:
+                  userData.stats.totalBilled - userData.stats.totalCollected + userData.stats.debtCollections,
+               debt_collections_cents: userData.stats.debtCollections,
             },
             payment_breakdown: paymentBreakdown,
-            orders: orderDetails,
+            orders: userData.orderRows,
          });
       }
 
-      // Sort by total billed (highest first)
-      users.sort((a, b) => b.summary.total_billed_cents - a.summary.total_billed_cents);
+      users.sort((a, b) => b.summary.total_collected_cents - a.summary.total_collected_cents);
 
-      // Calculate overall totals
-      const overallPaymentMap = new Map<PaymentMethod, { count: number; amount: number; charges: number }>();
-
-      const totals = orders.reduce(
-         (acc, order) => {
-            acc.total_orders++;
-            acc.total_hbls += order.parcels.length;
-            acc.total_weight_lbs += order.parcels.reduce((sum, p) => sum + Number(p.weight), 0);
-            acc.total_billed_cents += order.total_in_cents;
-            acc.total_paid_cents += order.paid_in_cents;
-            acc.total_pending_cents += order.total_in_cents - order.paid_in_cents;
-            acc.total_discounts_cents += order.discounts.reduce((sum, d) => sum + d.discount_in_cents, 0);
-
-            for (const payment of order.payments) {
-               if (!overallPaymentMap.has(payment.method)) {
-                  overallPaymentMap.set(payment.method, { count: 0, amount: 0, charges: 0 });
-               }
-               const pm = overallPaymentMap.get(payment.method)!;
-               pm.count++;
-               pm.amount += payment.amount_in_cents;
-               pm.charges += payment.charge_in_cents;
-               acc.total_charges_cents += payment.charge_in_cents;
-            }
-
-            return acc;
-         },
-         {
-            total_orders: 0,
-            total_hbls: 0,
-            total_weight_lbs: 0,
-            total_billed_cents: 0,
-            total_paid_cents: 0,
-            total_charges_cents: 0,
-            grand_total_collected_cents: 0,
-            total_pending_cents: 0,
-            total_discounts_cents: 0,
-         }
-      );
-
-      totals.total_weight_lbs = Math.round(totals.total_weight_lbs * 100) / 100;
-      totals.grand_total_collected_cents = totals.total_paid_cents;
-
-      const overallPaymentBreakdown: PaymentMethodBreakdown[] = [];
-      for (const [method, stats] of overallPaymentMap) {
-         overallPaymentBreakdown.push({
+      const overallPaymentBreakdown: PaymentMethodBreakdown[] = Array.from(overallPaymentMap.entries()).map(
+         ([method, stats]) => ({
             method,
             total_payments: stats.count,
             total_amount_cents: stats.amount,
             total_charges_cents: stats.charges,
-         });
-      }
+         })
+      );
 
-      // Get agency info if filtering
+      // Get agency/user info
       let agencyInfo: { id: number; name: string } | undefined;
       if (agency_id) {
-         const agency = await prisma.agency.findUnique({
-            where: { id: agency_id },
-            select: { id: true, name: true },
-         });
+         const agency = await prisma.agency.findUnique({ where: { id: agency_id }, select: { id: true, name: true } });
          if (agency) agencyInfo = agency;
       }
 
-      // Get user info if filtering by specific user
       let userInfo: { id: string; name: string; email: string } | undefined;
       if (user_id) {
          const user = await prisma.user.findUnique({
             where: { id: user_id },
             select: { id: true, name: true, email: true },
          });
-         if (user) {
-            userInfo = { id: user.id, name: user.name || "Unknown", email: user.email };
-         }
+         if (user) userInfo = { id: user.id, name: user.name || "Unknown", email: user.email };
       }
 
       return {
          date: startOfDay.toISOString().split("T")[0],
-         date_range: {
-            start: startOfDay.toISOString(),
-            end: endOfDay.toISOString(),
-         },
-         total_orders_found: orders.length,
+         date_range: { start: startOfDay.toISOString(), end: endOfDay.toISOString() },
          agency: agencyInfo,
          user: userInfo,
          users,
          totals: {
-            ...totals,
+            total_orders: totalOrders,
+            total_hbls: totalHbls,
+            total_weight_lbs: Math.round(totalWeight * 100) / 100,
+            total_billed_cents: totalBilled,
+            total_collected_cents: totalCollected,
+            total_charges_cents: totalCharges,
+            total_pending_cents: totalBilled - totalCollected + totalDebtCollections,
+            total_discounts_cents: totalDiscounts,
+            debt_collections_cents: totalDebtCollections,
             payment_breakdown: overallPaymentBreakdown,
          },
       };
@@ -1000,10 +1159,11 @@ const financialReports = {
       const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
       const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
 
-      // ========== BILLING: Orders created today ==========
+      // ========== BILLING: Orders created today (exclude soft-deleted) ==========
       const ordersWhere: any = {
          created_at: { gte: startOfDay, lte: endOfDay },
          agency_id,
+         deleted_at: null, // Exclude soft-deleted orders
       };
       if (user_id) {
          ordersWhere.user_id = user_id;
@@ -1076,10 +1236,10 @@ const financialReports = {
       );
       billingTotals.total_weight_lbs = Math.round(billingTotals.total_weight_lbs * 100) / 100;
 
-      // ========== COLLECTIONS: All payments received today ==========
+      // ========== COLLECTIONS: All payments received today (exclude soft-deleted orders) ==========
       const paymentsWhere: any = {
          date: { gte: startOfDay, lte: endOfDay },
-         order: { agency_id },
+         order: { agency_id, deleted_at: null }, // Exclude payments from deleted orders
       };
       if (user_id) {
          paymentsWhere.user_id = user_id;
@@ -1123,7 +1283,9 @@ const financialReports = {
       let collectedFromTodayOrders = 0;
 
       for (const payment of payments) {
-         totalCollected += payment.amount_in_cents;
+         // IMPORTANT: Include charges since total_in_cents includes them
+         const paymentTotal = payment.amount_in_cents + payment.charge_in_cents;
+         totalCollected += paymentTotal; // Total collected includes charges
          totalCharges += payment.charge_in_cents;
 
          const current = collectionsByMethod.get(payment.method) || { amount: 0, charges: 0 };
@@ -1133,9 +1295,9 @@ const financialReports = {
          });
 
          if (payment.order.created_at < startOfDay) {
-            collectedFromOldOrders += payment.amount_in_cents;
+            collectedFromOldOrders += paymentTotal; // Include charges
          } else {
-            collectedFromTodayOrders += payment.amount_in_cents;
+            collectedFromTodayOrders += paymentTotal; // Include charges
          }
       }
 
