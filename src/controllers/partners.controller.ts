@@ -7,6 +7,7 @@ import { AppError } from "../common/app-errors";
 import repository from "../repositories";
 import prisma from "../lib/prisma.client";
 import { services } from "../services";
+
 import HttpStatusCodes from "../common/https-status-codes";
 
 // Use API_URL from environment if available, otherwise construct it
@@ -470,6 +471,17 @@ const partners = {
          };
       });
       res.status(200).json(formatted_services_with_rates);
+   },
+   getCustomsRates: async (req: any, res: Response): Promise<void> => {
+      const agency_id = req.partner.agency_id;
+      if (!agency_id || isNaN(parseInt(agency_id))) {
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Valid agency ID is required");
+      }
+      const customsRates = await repository.customsRates.get(1, 500);
+      if (!customsRates.rows) {
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "No customs rates found");
+      }
+      res.status(200).json(customsRates.rows);
    },
 };
 

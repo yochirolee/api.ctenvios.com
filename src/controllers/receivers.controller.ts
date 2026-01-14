@@ -8,11 +8,11 @@ export const receivers = {
    get: async (req: any, res: Response) => {
       const user = req.user;
       const { page, limit } = req.query;
-      
+
       // ROOT and ADMINISTRATOR can see all receivers
       const allowedRoles = [Roles.ROOT, Roles.ADMINISTRATOR];
       const agency_id = allowedRoles.includes(user.role) ? null : user.agency_id;
-      
+
       const { rows, total } = await repository.receivers.get(
          agency_id,
          parseInt(page as string) || 1,
@@ -33,7 +33,13 @@ export const receivers = {
       if (!receiver) {
          return res.status(404).json({ error: "Receiver not found" });
       }
-      res.status(200).json(receiver);
+      const flat_receiver = {
+         ...receiver,
+         province: receiver.province?.name || "",
+         city: receiver.city?.name || "",
+      };
+
+      res.status(200).json(flat_receiver);
    },
    search: async (req: Request, res: Response) => {
       const { query, page, limit } = req.query;

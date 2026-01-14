@@ -1,6 +1,5 @@
 import { Request, Response } from "express";
 import repository from "../repositories";
-import { customsRatesSchema } from "../types/types";
 import { Prisma } from "@prisma/client";
 
 const customsRates = {

@@ -113,3 +113,12 @@ export function calculateOrderTotal(items: any[]): number {
       return total + itemSubtotal;
    }, 0);
 }
+
+export const distributeCents = (totalCents: number, parts: number): number[] => {
+   if (parts <= 0) return [];
+   const total = Math.round(totalCents);
+   const base = Math.floor(total / parts);
+   const remainder = total - base * parts; // 0..parts-1
+
+   return Array.from({ length: parts }, (_, i) => base + (i < remainder ? 1 : 0));
+};

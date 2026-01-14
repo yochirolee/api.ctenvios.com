@@ -110,7 +110,10 @@ const receivers = {
             city: true,
          },
       });
-      return receiver as Receiver & { province: Province; city: City };
+      if (!receiver) {
+         throw new Error("Receiver not found");
+      }
+      return receiver;
    },
    connect: async (receiverId: number, customerId: number): Promise<Receiver> => {
       // Ensure both IDs are valid

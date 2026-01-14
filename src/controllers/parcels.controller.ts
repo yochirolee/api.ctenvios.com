@@ -235,6 +235,7 @@ export const parcels = {
             created_at: true,
             order: {
                select: {
+                  id: true,
                   receiver: {
                      select: {
                         first_name: true,

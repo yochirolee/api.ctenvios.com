@@ -1,7 +1,7 @@
 import { Customer, Prisma, PaymentMethod, PaymentStatus, Status, Unit, DiscountType } from "@prisma/client";
 import { services } from ".";
 import repository from "../repositories";
-import { calculateOrderTotal, formatCents, toNumber } from "../utils/utils";
+import { calculateOrderTotal, formatCents, toNumber, distributeCents } from "../utils/utils";
 import { PAYMENT_CONFIG } from "../config/payment.config";
 import prisma from "../lib/prisma.client";
 import StatusCodes from "../common/https-status-codes";
@@ -69,10 +69,11 @@ export const ordersService = {
       //calculate delivery fee for each item temporarily
       const finalTotal = calculateOrderTotal(items_hbl);
 
-      const item_delivery_fee = total_delivery_fee_in_cents ? total_delivery_fee_in_cents / items_hbl.length : 0;
-
+      // Distribute cents across items without losing rounding (e.g., 600 cents over 11 items must still sum to 600).
+      const totalDeliveryFeeCents = Math.round(total_delivery_fee_in_cents ?? 0);
+      const perItemDeliveryFees = distributeCents(totalDeliveryFeeCents, items_hbl.length);
       for (let i = 0; i < items_hbl.length; i++) {
-         items_hbl[i].delivery_fee_in_cents = item_delivery_fee;
+         items_hbl[i].delivery_fee_in_cents = perItemDeliveryFees[i] ?? 0;
       }
       // 🚀 OPTIMIZATION: Fast path for frontend (IDs provided, no lookups needed)
       if (customer_id && receiver_id) {
