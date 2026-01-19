@@ -56,7 +56,7 @@ router.use("/partners", partners_routes);
 router.use("/orders", orders_routes);
 router.use("/products", authMiddleware, products_routes);
 router.use("/shipping-rates", authMiddleware, shippingRatesRoutes);
-router.use("/dispatches", authMiddleware, dispatchRoutes);
+router.use("/dispatches", dispatchRoutes);
 router.use("/tracking", trackingRoutes);
 router.use("/electric", authMiddleware, electricRoutes);
 router.use("/config", configRoutes);

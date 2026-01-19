@@ -39,6 +39,10 @@ const addParcelSchema = z.object({
    tracking_number: z.string().min(1, "Tracking number is required"),
 });
 
+const addParcelsByOrderSchema = z.object({
+   order_id: z.number().int().positive("Order ID is required"),
+});
+
 const idParamSchema = z.object({
    id: z.string().regex(/^\d+$/, "ID must be a number").transform(Number),
 });
@@ -69,7 +73,7 @@ router.get("/by-number/:palletNumber", requireRoles(PALLET_VIEW_ROLES), pallets.
 router.get("/:id", requireRoles(PALLET_VIEW_ROLES), validate({ params: idParamSchema }), pallets.getById);
 
 // POST /pallets - Create a new pallet
-router.post("/", requireRoles(PALLET_ADMIN_ROLES), validate({ body: createPalletSchema }), pallets.create);
+router.post("/", requireRoles(PALLET_ADMIN_ROLES), pallets.create);
 
 // PUT /pallets/:id - Update pallet
 router.put(
@@ -90,7 +94,7 @@ router.get(
    pallets.getParcels
 );
 
-// POST /pallets/:id/parcels - Add parcel to pallet
+// POST /pallets/:id/parcels - Add parcel to pallet (canonical)
 router.post(
    "/:id/parcels",
    requireRoles(PALLET_ADMIN_ROLES),
@@ -98,8 +102,38 @@ router.post(
    pallets.addParcel
 );
 
+// POST /pallets/:id/parcels/by-order - Add all parcels from an order to pallet
+router.post(
+   "/:id/parcels/by-order",
+   requireRoles(PALLET_ADMIN_ROLES),
+   validate({ params: idParamSchema, body: addParcelsByOrderSchema }),
+   pallets.addParcelsByOrderId
+);
+
+// POST /pallets/:id/add-parcel - Backward-compatible alias
+router.post(
+   "/:id/add-parcel",
+   requireRoles(PALLET_ADMIN_ROLES),
+   validate({ params: idParamSchema, body: addParcelSchema }),
+   pallets.addParcel
+);
+
 // DELETE /pallets/:id/parcels/:trackingNumber - Remove parcel from pallet
-router.delete("/:id/parcels/:trackingNumber", requireRoles(PALLET_ADMIN_ROLES), pallets.removeParcel);
+router.delete("/:id/parcels/remove-parcel/:trackingNumber", requireRoles(PALLET_ADMIN_ROLES), pallets.removeParcel);
+
+// Backward-compatible alias (some clients call without "/parcels")
+// DELETE /pallets/:id/remove-parcel/:trackingNumber
+router.delete(
+   "/:id/remove-parcel/:trackingNumber",
+   requireRoles(PALLET_ADMIN_ROLES),
+   validate({
+      params: z.object({
+         id: z.string().regex(/^\d+$/, "ID must be a number").transform(Number),
+         trackingNumber: z.string().min(1, "Tracking number is required"),
+      }),
+   }),
+   pallets.removeParcel
+);
 
 // POST /pallets/:id/seal - Seal pallet
 router.post("/:id/seal", requireRoles(PALLET_ADMIN_ROLES), validate({ params: idParamSchema }), pallets.seal);

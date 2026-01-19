@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { services } from "../services";
 import { parseDateFlexible } from "../types/types";
 import { buildNameSearchFilter } from "../types/types";
-import { Roles } from "@prisma/client";
+import { PaymentStatus, Roles } from "@prisma/client";
 import prisma from "../lib/prisma.client";
 import repository from "../repositories";
 import { AppError } from "../common/app-errors";
@@ -50,14 +50,25 @@ export const ordersController = {
    search: async (req: any, res: Response) => {
       try {
          const user = req.user;
-         const { page, limit, search, startDate, endDate } = req.query;
+         const { page, limit, search, startDate, endDate, agency_id, payment_status } = req.query;
 
          const pageNum = parseInt(page) || 1;
          const limitNum = Math.min(parseInt(limit) || 25, 100); // Máximo 100
 
          const searchTerm = search?.trim().toLowerCase() || "";
 
-         // �� OPTIMIZACIÓN: Path diferente para listado simple vs búsqueda
+         // Validate payment_status if provided
+         const validPaymentStatuses = Object.values(PaymentStatus);
+         if (payment_status && !validPaymentStatuses.includes(payment_status as PaymentStatus)) {
+            return res.status(400).json({
+               message: `Invalid payment_status. Valid values: ${validPaymentStatuses.join(", ")}`,
+            });
+         }
+
+         // Check if user is admin (can filter by agency_id)
+         const isAdmin = [Roles.ROOT, Roles.ADMINISTRATOR].includes(user.role);
+
+         // 🔥 OPTIMIZACIÓN: Path diferente para listado simple vs búsqueda
          const hasSearch = searchTerm.length > 0;
          const hasDateFilter = startDate || endDate;
 
@@ -66,7 +77,7 @@ export const ordersController = {
          // =====================================
          if (!hasSearch) {
             // whereClause simplificado - solo fecha y RBAC
-            const whereClause: any = {};
+            const whereClause: any = { deleted_at: null };
 
             // Filtro de fecha
             if (hasDateFilter) {
@@ -84,9 +95,19 @@ export const ordersController = {
                }
             }
 
-            // Filtro RBAC
-            const allowedRoles = [Roles.ROOT, Roles.ADMINISTRATOR];
-            if (!allowedRoles.includes(user.role)) {
+            // Filtro payment_status
+            if (payment_status) {
+               whereClause.payment_status = payment_status;
+            }
+
+            // Filtro RBAC y agency_id
+            if (isAdmin) {
+               // Admin can filter by specific agency_id if provided
+               if (agency_id) {
+                  whereClause.agency_id = parseInt(agency_id as string);
+               }
+            } else {
+               // Non-admin can only see their agency's orders
                whereClause.agency_id = user.agency_id;
             }
 
@@ -148,7 +169,7 @@ export const ordersController = {
          const isNumeric = /^\d+$/.test(cleanedSearch);
          const words = searchTerm.split(/\s+/).filter(Boolean);
 
-         const filters: any[] = [];
+         const filters: any[] = [{ deleted_at: null }];
 
          // Filtro de fecha
          if (hasDateFilter) {
@@ -165,6 +186,11 @@ export const ordersController = {
                dateFilter.created_at.lte = end;
             }
             filters.push(dateFilter);
+         }
+
+         // Filtro payment_status
+         if (payment_status) {
+            filters.push({ payment_status });
          }
 
          // Filtro de búsqueda
@@ -205,9 +231,14 @@ export const ordersController = {
             filters.push({ OR: [{ customer: nameFilters }, { receiver: nameFilters }] });
          }
 
-         // Filtro de Rol (RBAC)
-         const allowedRoles = [Roles.ROOT, Roles.ADMINISTRATOR];
-         if (!allowedRoles.includes(user.role)) {
+         // Filtro RBAC y agency_id
+         if (isAdmin) {
+            // Admin can filter by specific agency_id if provided
+            if (agency_id) {
+               filters.push({ agency_id: parseInt(agency_id as string) });
+            }
+         } else {
+            // Non-admin can only see their agency's orders
             filters.push({ agency_id: user.agency_id });
          }
 

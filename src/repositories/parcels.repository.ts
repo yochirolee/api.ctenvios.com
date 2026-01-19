@@ -66,10 +66,14 @@ const parcels = {
    },
 
    /**
-    * Gets the previous status of a parcel before it was set to IN_DISPATCH
+    * Gets the previous status of a parcel before it was added to dispatch
     * by querying ParcelEvent history in reverse chronological order
+    * Skips both IN_DISPATCH and RECEIVED_IN_DISPATCH statuses
     */
    getPreviousStatus: async (parcelId: number): Promise<Status | null> => {
+      // Statuses to skip when looking for previous status (dispatch-related statuses)
+      const DISPATCH_STATUSES: Status[] = [Status.IN_DISPATCH, Status.RECEIVED_IN_DISPATCH];
+
       // Get all events for this parcel, ordered by created_at descending
       const events = await prisma.parcelEvent.findMany({
          where: { parcel_id: parcelId },
@@ -84,21 +88,14 @@ const parcels = {
          return null;
       }
 
-      // Find the status before the first IN_DISPATCH event
-      // Skip the most recent event if it's IN_DISPATCH
-      let startIndex = 0;
-      if (events.length > 0 && events[0].status === Status.IN_DISPATCH) {
-         startIndex = 1;
-      }
-
-      // Return the first non-IN_DISPATCH status we find
-      for (let i = startIndex; i < events.length; i++) {
-         if (events[i].status !== Status.IN_DISPATCH) {
-            return events[i].status;
+      // Find the first status that is NOT a dispatch-related status
+      for (const event of events) {
+         if (!DISPATCH_STATUSES.includes(event.status)) {
+            return event.status;
          }
       }
 
-      // If all events are IN_DISPATCH or no previous status found, return IN_AGENCY as default
+      // If all events are dispatch-related, return IN_AGENCY as default
       return Status.IN_AGENCY;
    },
 };

@@ -53,7 +53,7 @@ export const parcels = {
          }),
          prisma.parcel.count({ where }),
       ]);
-
+      console.log(rows);
       res.status(200).json({ rows, total, page, limit });
    },
 

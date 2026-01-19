@@ -35,6 +35,7 @@ const PUBLIC_EVENT_MESSAGES: Record<ParcelEventType, string> = {
    [ParcelEventType.ADDED_TO_PALLET]: "Procesando en almacén",
    [ParcelEventType.REMOVED_FROM_PALLET]: "Procesando en almacén",
    [ParcelEventType.ADDED_TO_DISPATCH]: "Procesando envío",
+   [ParcelEventType.REMOVED_FROM_DISPATCH]: "Procesando",
    [ParcelEventType.RECEIVED_IN_DISPATCH]: "Recibido en centro de distribución",
    [ParcelEventType.LOADED_TO_CONTAINER]: "Procesando envío internacional",
    [ParcelEventType.REMOVED_FROM_CONTAINER]: "Procesando",
@@ -70,9 +71,7 @@ export const getPublicMessage = (type: ParcelEventType): string => {
 /**
  * Filter events to only include public ones
  */
-export const filterPublicEvents = <T extends { event_type: ParcelEventType }>(
-   events: T[]
-): T[] => {
+export const filterPublicEvents = <T extends { event_type: ParcelEventType }>(events: T[]): T[] => {
    return events.filter((e) => isPublicEvent(e.event_type));
 };
 
@@ -86,9 +85,7 @@ export const getPublicEventTypes = (): ParcelEventType[] => {
 /**
  * Map container status changes to appropriate ParcelEventType
  */
-export const getEventTypeForContainerStatus = (
-   containerStatus: string
-): ParcelEventType => {
+export const getEventTypeForContainerStatus = (containerStatus: string): ParcelEventType => {
    const statusMap: Record<string, ParcelEventType> = {
       LOADING: ParcelEventType.LOADED_TO_CONTAINER,
       DEPARTED: ParcelEventType.IN_TRANSIT,
@@ -104,9 +101,7 @@ export const getEventTypeForContainerStatus = (
 /**
  * Map flight status changes to appropriate ParcelEventType
  */
-export const getEventTypeForFlightStatus = (
-   flightStatus: string
-): ParcelEventType => {
+export const getEventTypeForFlightStatus = (flightStatus: string): ParcelEventType => {
    const statusMap: Record<string, ParcelEventType> = {
       LOADING: ParcelEventType.LOADED_TO_FLIGHT,
       DEPARTED: ParcelEventType.IN_TRANSIT,

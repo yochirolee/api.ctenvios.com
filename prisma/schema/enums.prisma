@@ -140,11 +140,13 @@ enum CityType {
 }
 
 enum DispatchStatus {
-    DRAFT
-    DISPATCHED
-    RECEIVED
-    DISCREPANCY
-    CANCELLED
+    DRAFT // Empty dispatch, no parcels
+    LOADING // Dispatch has parcels being added
+    DISPATCHED // Ready for dispatch / in transit to receiver
+    RECEIVING // At least one parcel has been received at destination
+    RECEIVED // All parcels received / completed
+    DISCREPANCY // Reception discrepancy detected
+    CANCELLED // Dispatch cancelled
 }
 
 enum DebtStatus {
@@ -224,45 +226,46 @@ enum FlightStatus {
 // Parcel Event Types - Define visibilidad pública/interna
 enum ParcelEventType {
     // === PÚBLICOS (Cliente ve) ===
-    BILLED                  // Paquete recibido en agencia
-    IN_TRANSIT              // En tránsito hacia destino
-    ARRIVED_DESTINATION     // Arribó al país
-    CUSTOMS_PROCESSING      // En proceso de aduana
-    CUSTOMS_RELEASED        // Liberado de aduana
-    OUT_FOR_DELIVERY        // En camino para entrega
-    DELIVERED               // Entregado
-    DELIVERY_FAILED         // Intento de entrega fallido
-    DELIVERY_RESCHEDULED    // Entrega reprogramada
+    BILLED // Paquete recibido en agencia
+    IN_TRANSIT // En tránsito hacia destino
+    ARRIVED_DESTINATION // Arribó al país
+    CUSTOMS_PROCESSING // En proceso de aduana
+    CUSTOMS_RELEASED // Liberado de aduana
+    OUT_FOR_DELIVERY // En camino para entrega
+    DELIVERED // Entregado
+    DELIVERY_FAILED // Intento de entrega fallido
+    DELIVERY_RESCHEDULED // Entrega reprogramada
 
     // === INTERNOS (Solo staff) ===
-    ADDED_TO_PALLET         // Agregado a pallet
-    REMOVED_FROM_PALLET     // Removido de pallet
-    ADDED_TO_DISPATCH       // Agregado a despacho
-    RECEIVED_IN_DISPATCH    // Recibido en agencia destino
-    LOADED_TO_CONTAINER     // Cargado en contenedor
-    REMOVED_FROM_CONTAINER  // Removido de contenedor
-    LOADED_TO_FLIGHT        // Cargado en vuelo
-    REMOVED_FROM_FLIGHT     // Removido de vuelo
-    MANIFEST_SCANNED        // Escaneado en verificación
-    WAREHOUSE_RECEIVED      // Recibido en almacén carrier
-    WAREHOUSE_TRANSFERRED   // Transferido entre almacenes
-    ASSIGNED_TO_ROUTE       // Asignado a ruta de entrega
-    ASSIGNED_TO_MESSENGER   // Asignado a mensajero
+    ADDED_TO_PALLET // Agregado a pallet
+    REMOVED_FROM_PALLET // Removido de pallet
+    ADDED_TO_DISPATCH // Agregado a despacho
+    REMOVED_FROM_DISPATCH // Removido de despacho
+    RECEIVED_IN_DISPATCH // Recibido en agencia destino
+    LOADED_TO_CONTAINER // Cargado en contenedor
+    REMOVED_FROM_CONTAINER // Removido de contenedor
+    LOADED_TO_FLIGHT // Cargado en vuelo
+    REMOVED_FROM_FLIGHT // Removido de vuelo
+    MANIFEST_SCANNED // Escaneado en verificación
+    WAREHOUSE_RECEIVED // Recibido en almacén carrier
+    WAREHOUSE_TRANSFERRED // Transferido entre almacenes
+    ASSIGNED_TO_ROUTE // Asignado a ruta de entrega
+    ASSIGNED_TO_MESSENGER // Asignado a mensajero
 
     // === SISTEMA/INCIDENCIAS ===
-    DISCREPANCY_FOUND       // Discrepancia en manifest
-    DISCREPANCY_RESOLVED    // Discrepancia resuelta
-    ISSUE_REPORTED          // Incidencia reportada
-    NOTE_ADDED              // Nota interna agregada
-    STATUS_CORRECTED        // Corrección de estado
+    DISCREPANCY_FOUND // Discrepancia en manifest
+    DISCREPANCY_RESOLVED // Discrepancia resuelta
+    ISSUE_REPORTED // Incidencia reportada
+    NOTE_ADDED // Nota interna agregada
+    STATUS_CORRECTED // Corrección de estado
 }
 
 // Pallet Status
 enum PalletStatus {
-    OPEN        // Aceptando paquetes
-    SEALED      // Cerrado, listo para despacho
-    DISPATCHED  // En un dispatch
-    RECEIVED    // Recibido en destino
+    OPEN // Aceptando paquetes
+    SEALED // Cerrado, listo para despacho
+    DISPATCHED // En un dispatch
+    RECEIVED // Recibido en destino
 }
 
 // Delivery Route Status
@@ -291,7 +294,7 @@ enum VerificationStatus {
 
 // Discrepancy Types
 enum DiscrepancyType {
-    MISSING  // Esperado pero no llegó
-    EXTRA    // Llegó pero no estaba en manifest
-    DAMAGED  // Llegó dañado
+    MISSING // Esperado pero no llegó
+    EXTRA // Llegó pero no estaba en manifest
+    DAMAGED // Llegó dañado
 }

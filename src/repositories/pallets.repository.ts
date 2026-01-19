@@ -2,7 +2,7 @@ import HttpStatusCodes from "../common/https-status-codes";
 import prisma from "../lib/prisma.client";
 import { Pallet, PalletStatus, Parcel, ParcelEventType, Prisma, Status } from "@prisma/client";
 import { AppError } from "../common/app-errors";
-import { updateOrderStatusFromParcel } from "../utils/order-status-calculator";
+import { updateOrderStatusFromParcel, updateOrderStatusFromParcels } from "../utils/order-status-calculator";
 
 /**
  * Pallets Repository
@@ -39,7 +39,7 @@ const generatePalletNumber = async (agency_id: number): Promise<string> => {
    });
 
    const sequence = String(count + 1).padStart(4, "0");
-   return `PLT-${agency_id}-${year}${month}-${sequence}`;
+   return `P-${agency_id}-${year}${month}-${sequence}`;
 };
 
 const pallets = {
@@ -231,12 +231,7 @@ const pallets = {
             take: limit,
             orderBy: { updated_at: "desc" },
             include: {
-               order: {
-                  select: {
-                     id: true,
-                     receiver: { select: { first_name: true, last_name: true, province: { select: { name: true } } } },
-                  },
-               },
+               agency: { select: { id: true, name: true } },
             },
          }),
          prisma.parcel.count({ where: { pallet_id } }),
@@ -334,6 +329,107 @@ const pallets = {
       await updateOrderStatusFromParcel(parcel.id);
 
       return updatedParcel;
+   },
+
+   /**
+    * Add all parcels from an order to a pallet
+    */
+   addParcelsByOrderId: async (
+      pallet_id: number,
+      order_id: number,
+      user_id: string
+   ): Promise<{ added: number; skipped: number; parcels: Parcel[] }> => {
+      const pallet = await prisma.pallet.findUnique({ where: { id: pallet_id } });
+
+      if (!pallet) {
+         throw new AppError(HttpStatusCodes.NOT_FOUND, `Pallet with id ${pallet_id} not found`);
+      }
+
+      if (pallet.status !== PalletStatus.OPEN) {
+         throw new AppError(
+            HttpStatusCodes.BAD_REQUEST,
+            `Cannot add parcels to pallet with status ${pallet.status}. Pallet must be OPEN.`
+         );
+      }
+
+      // Find all parcels for this order
+      const parcels = await prisma.parcel.findMany({
+         where: { order_id },
+      });
+
+      if (parcels.length === 0) {
+         throw new AppError(HttpStatusCodes.NOT_FOUND, `No parcels found for order ${order_id}`);
+      }
+
+      let added = 0;
+      let skipped = 0;
+      let totalWeight = 0;
+      const addedParcels: Parcel[] = [];
+
+      await prisma.$transaction(async (tx) => {
+         for (const parcel of parcels) {
+            // Skip if already assigned elsewhere (safety net)
+            if (parcel.pallet_id || parcel.dispatch_id || parcel.container_id || parcel.flight_id) {
+               skipped++;
+               continue;
+            }
+
+            // Skip if status doesn't allow adding to pallet
+            if (!isValidStatusForPallet(parcel.status)) {
+               skipped++;
+               continue;
+            }
+
+            // Skip if parcel belongs to a different agency than the pallet
+            if (parcel.agency_id !== pallet.agency_id) {
+               skipped++;
+               continue;
+            }
+
+            const updated = await tx.parcel.update({
+               where: { id: parcel.id },
+               data: {
+                  pallet_id,
+                  status: Status.IN_PALLET,
+               },
+            });
+
+            await tx.parcelEvent.create({
+               data: {
+                  parcel_id: parcel.id,
+                  event_type: ParcelEventType.ADDED_TO_PALLET,
+                  user_id,
+                  status: Status.IN_PALLET,
+                  pallet_id,
+                  notes: `Added to pallet ${pallet.pallet_number} (batch from order #${order_id})`,
+               },
+            });
+
+            totalWeight += Number(parcel.weight);
+            addedParcels.push(updated);
+            added++;
+         }
+
+         if (added > 0) {
+            await tx.pallet.update({
+               where: { id: pallet_id },
+               data: {
+                  total_weight_kg: {
+                     increment: totalWeight,
+                  },
+                  parcels_count: {
+                     increment: added,
+                  },
+               },
+            });
+         }
+      });
+
+      if (added > 0) {
+         await updateOrderStatusFromParcels(order_id);
+      }
+
+      return { added, skipped, parcels: addedParcels };
    },
 
    /**
@@ -503,7 +599,7 @@ const pallets = {
                order: {
                   select: {
                      id: true,
-                     receiver: { select: { first_name: true, last_name: true, province: { select: { name: true } } } },
+                     agency: { select: { id: true, name: true } },
                   },
                },
                service: {

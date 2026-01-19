@@ -1,7 +1,55 @@
 import prisma from "../lib/prisma.client";
-import { DebtStatus } from "@prisma/client";
+import { DebtStatus, Unit } from "@prisma/client";
 import { AppError } from "../common/app-errors";
 import HttpStatusCodes from "../common/https-status-codes";
+
+/**
+ * Cache for pricing agreements to avoid repeated DB queries
+ */
+const pricingCache = new Map<string, number>();
+
+/**
+ * Gets the pricing agreement price between sender and receiver agencies for a specific product/service
+ * Uses cache to avoid repeated queries within the same request
+ */
+export const getPricingBetweenAgencies = async (
+   seller_agency_id: number,
+   buyer_agency_id: number,
+   product_id: number,
+   service_id: number
+): Promise<number | null> => {
+   const cacheKey = `${seller_agency_id}-${buyer_agency_id}-${product_id}-${service_id}`;
+   
+   if (pricingCache.has(cacheKey)) {
+      return pricingCache.get(cacheKey) || null;
+   }
+   
+   const agreement = await prisma.pricingAgreement.findUnique({
+      where: {
+         seller_agency_id_buyer_agency_id_product_id_service_id: {
+            seller_agency_id,
+            buyer_agency_id,
+            product_id,
+            service_id,
+         },
+      },
+      select: { price_in_cents: true },
+   });
+   
+   if (agreement) {
+      pricingCache.set(cacheKey, agreement.price_in_cents);
+      return agreement.price_in_cents;
+   }
+   
+   return null;
+};
+
+/**
+ * Clears the pricing cache (call at end of transaction/request)
+ */
+export const clearPricingCache = (): void => {
+   pricingCache.clear();
+};
 
 /**
  * Obtiene la jerarquía completa de agencias (padre, abuelo, etc.)
@@ -152,12 +200,15 @@ export const determineHierarchyDebts = async (
       });
    }
 
-   // Si hay errores críticos y no hay paquetes válidos, lanzar excepción
-   if (errors.length > 0 && parcelsByAgency.size === 0) {
-      throw new AppError(
-         HttpStatusCodes.BAD_REQUEST,
-         `Cannot calculate debts: ${errors.join("; ")}`
-      );
+   // Si hay errores críticos y no hay paquetes válidos, log warning pero no fallar
+   // Esto permite despachos sin pricing configurado
+   if (errors.length > 0) {
+      console.warn(`[determineHierarchyDebts] Warnings for dispatch ${dispatch_id}:`, errors);
+   }
+   
+   if (parcelsByAgency.size === 0) {
+      console.warn(`[determineHierarchyDebts] No valid parcels with pricing for dispatch ${dispatch_id}`);
+      return []; // Retornar vacío en lugar de fallar
    }
 
    // Calcular deudas

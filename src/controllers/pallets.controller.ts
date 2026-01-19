@@ -89,7 +89,7 @@ export const pallets = {
          throw new AppError("User must belong to an agency", 403);
       }
 
-      const pallet = await palletsRepository.create(user.agency_id, user.id, req.body.notes);
+      const pallet = await palletsRepository.create(user.agency_id, user.id, req.body?.notes);
 
       res.status(201).json(pallet);
    },
@@ -145,6 +145,19 @@ export const pallets = {
       const parcel = await palletsRepository.addParcel(id!, tracking_number, user!.id);
 
       res.status(200).json(parcel);
+   },
+
+   /**
+    * Add all parcels from an order to a pallet
+    */
+   addParcelsByOrderId: async (req: PalletRequest, res: Response): Promise<void> => {
+      const { id } = req.params;
+      const { order_id } = req.body;
+      const user = req.user;
+
+      const result = await palletsRepository.addParcelsByOrderId(Number(id), Number(order_id), user!.id);
+
+      res.status(200).json(result);
    },
 
    /**

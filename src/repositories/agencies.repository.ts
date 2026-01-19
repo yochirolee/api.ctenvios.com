@@ -68,8 +68,19 @@ export const agencies = {
       return children;
    },
    getParent: async (id: number) => {
-      const parent = await prisma.agency.findUnique({
+      // First get the agency to find its parent_agency_id
+      const agency = await prisma.agency.findUnique({
          where: { id },
+         select: { parent_agency_id: true },
+      });
+
+      if (!agency || !agency.parent_agency_id) {
+         return null;
+      }
+
+      // Then fetch the parent agency
+      const parent = await prisma.agency.findUnique({
+         where: { id: agency.parent_agency_id },
       });
       return parent;
    },

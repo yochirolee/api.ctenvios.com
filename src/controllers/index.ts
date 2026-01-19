@@ -19,6 +19,7 @@ import users from "./users.controller";
 import containers from "./containers.controller";
 import flights from "./flights.controller";
 import parcels from "./parcels.controller";
+import dispatch from "./dispatch.controller";
 
 const controllers = {
    agencies,
@@ -42,6 +43,7 @@ const controllers = {
    containers,
    flights,
    parcels,
+   dispatch,
 };
 
 export default controllers;
