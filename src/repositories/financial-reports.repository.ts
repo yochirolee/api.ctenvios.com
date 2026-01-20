@@ -1152,7 +1152,7 @@ const financialReports = {
       }
 
       return {
-         date: formatDateLocal(startOfDay),
+         date: formatDateLocal(date),
          date_range: { start: startOfDay.toISOString(), end: endOfDay.toISOString() },
          agency: agencyInfo,
          user: userInfo,
@@ -1356,7 +1356,7 @@ const financialReports = {
       }
 
       return {
-         date: formatDateLocal(startOfDay),
+         date: formatDateLocal(date),
          agency: agency || { id: agency_id, name: "Unknown" },
          user: userInfo,
 
