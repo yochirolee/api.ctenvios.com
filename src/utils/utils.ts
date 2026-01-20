@@ -153,29 +153,39 @@ export const formatDateTimeLocal = (date: Date): string => {
 };
 
 // Get day range for a specific date in EST timezone, converted to UTC for database queries
+// The input date's year/month/day should be treated as the EST date we want to query
 export const getDayRangeUTC = (date: Date): { start: Date; end: Date } => {
-   const adjusted = getAdjustedDate(date);
-   // Start of day in EST (00:00:00)
-   const estStart = new Date(adjusted.getFullYear(), adjusted.getMonth(), adjusted.getDate(), 0, 0, 0);
-   // End of day in EST (23:59:59)
-   const estEnd = new Date(adjusted.getFullYear(), adjusted.getMonth(), adjusted.getDate(), 23, 59, 59, 999);
-   // Convert back to UTC for database query
-   const utcStart = new Date(estStart.getTime() - TIMEZONE_OFFSET_HOURS * 3600000);
-   const utcEnd = new Date(estEnd.getTime() - TIMEZONE_OFFSET_HOURS * 3600000);
+   // Extract year, month, day from the input date directly (treat as EST date)
+   // Use UTC methods to avoid local timezone interference
+   const year = date.getUTCFullYear();
+   const month = date.getUTCMonth();
+   const day = date.getUTCDate();
+
+   // Create start of day in EST (00:00:00 EST = 05:00:00 UTC)
+   // EST is UTC-5, so midnight EST = 5 AM UTC
+   const utcStart = new Date(Date.UTC(year, month, day, 5, 0, 0, 0));
+   // End of day in EST (23:59:59 EST = 04:59:59 UTC next day)
+   const utcEnd = new Date(Date.UTC(year, month, day + 1, 4, 59, 59, 999));
+
    return { start: utcStart, end: utcEnd };
 };
 
 // Get today's date range in EST timezone, converted to UTC for database queries
 export const getTodayRangeUTC = (): { start: Date; end: Date } => {
-   return getDayRangeUTC(new Date());
+   // Get current time adjusted to EST
+   const estNow = getAdjustedDate(new Date());
+   // Create a date with today's EST date components
+   const todayEST = new Date(Date.UTC(estNow.getFullYear(), estNow.getMonth(), estNow.getDate()));
+   return getDayRangeUTC(todayEST);
 };
 
 // Get month range for a specific year/month in EST timezone, converted to UTC for database queries
 export const getMonthRangeUTC = (year: number, month: number): { start: Date; end: Date } => {
    // month is 1-based (1 = January)
-   const estStart = new Date(year, month - 1, 1, 0, 0, 0, 0);
-   const estEnd = new Date(year, month, 0, 23, 59, 59, 999); // day 0 of next month = last day of current month
-   const utcStart = new Date(estStart.getTime() - TIMEZONE_OFFSET_HOURS * 3600000);
-   const utcEnd = new Date(estEnd.getTime() - TIMEZONE_OFFSET_HOURS * 3600000);
+   // First day of month at 00:00:00 EST = 05:00:00 UTC
+   const utcStart = new Date(Date.UTC(year, month - 1, 1, 5, 0, 0, 0));
+   // Last day of month at 23:59:59 EST = next month day 1 at 04:59:59 UTC
+   const lastDayOfMonth = new Date(Date.UTC(year, month, 0)).getUTCDate(); // day 0 of next month = last day of current
+   const utcEnd = new Date(Date.UTC(year, month - 1, lastDayOfMonth + 1, 4, 59, 59, 999));
    return { start: utcStart, end: utcEnd };
 };
