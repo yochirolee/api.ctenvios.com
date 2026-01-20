@@ -123,20 +123,31 @@ export const distributeCents = (totalCents: number, parts: number): number[] => 
    return Array.from({ length: parts }, (_, i) => base + (i < remainder ? 1 : 0));
 };
 
+// Timezone offset for EST (UTC-5) - adjust for your region
+const TIMEZONE_OFFSET_HOURS = -5;
+
+// Helper function to get date adjusted to target timezone
+const getAdjustedDate = (date: Date): Date => {
+   const utcTime = date.getTime() + date.getTimezoneOffset() * 60000;
+   return new Date(utcTime + TIMEZONE_OFFSET_HOURS * 3600000);
+};
+
 // Helper function to format date locally (YYYY-MM-DD)
 export const formatDateLocal = (date: Date): string => {
-   const year = date.getFullYear();
-   const month = String(date.getMonth() + 1).padStart(2, "0");
-   const day = String(date.getDate()).padStart(2, "0");
+   const adjusted = getAdjustedDate(date);
+   const year = adjusted.getFullYear();
+   const month = String(adjusted.getMonth() + 1).padStart(2, "0");
+   const day = String(adjusted.getDate()).padStart(2, "0");
    return `${year}-${month}-${day}`;
 };
 
 // Helper function to format date with time locally (YYYY-MM-DD HH:mm)
 export const formatDateTimeLocal = (date: Date): string => {
-   const year = date.getFullYear();
-   const month = String(date.getMonth() + 1).padStart(2, "0");
-   const day = String(date.getDate()).padStart(2, "0");
-   const hours = String(date.getHours()).padStart(2, "0");
-   const minutes = String(date.getMinutes()).padStart(2, "0");
+   const adjusted = getAdjustedDate(date);
+   const year = adjusted.getFullYear();
+   const month = String(adjusted.getMonth() + 1).padStart(2, "0");
+   const day = String(adjusted.getDate()).padStart(2, "0");
+   const hours = String(adjusted.getHours()).padStart(2, "0");
+   const minutes = String(adjusted.getMinutes()).padStart(2, "0");
    return `${year}-${month}-${day} ${hours}:${minutes}`;
 };
