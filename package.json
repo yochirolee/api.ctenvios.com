@@ -3,7 +3,7 @@
 	"version": "1.0.0",
 	"main": "index.js",
 	"scripts": {
-		"build": "prisma generate && prisma migrate deploy && tsc",
+		"build": "tsc",
 		"start": "ts-node src/server.ts",
 		"postinstall": "prisma generate",
 		"dev": "nodemon --exec tsx watch src/server.ts",
