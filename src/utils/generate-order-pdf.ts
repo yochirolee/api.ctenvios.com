@@ -5,7 +5,7 @@ import * as path from "path";
 import { Unit } from "@prisma/client";
 import type { OrderPdfDetails } from "../repositories/orders.repository";
 import { formatName } from "./capitalize";
-import { calculate_row_subtotal, formatCents, toNumber } from "./utils";
+import { calculate_row_subtotal, formatCents, formatDateTimeLocal, toNumber } from "./utils";
 
 // Pre-calculate all financial totals
 function calculateOrderTotals(order: OrderPdfDetails) {
@@ -242,15 +242,7 @@ function formatOrderData(order: OrderPdfDetails) {
    );
 
    const date = new Date(order.created_at);
-   const formattedDate = `${date.toLocaleDateString("es-ES", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-   })} ${date.toLocaleTimeString("es-ES", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-   })}`;
+   const formattedDate = formatDateTimeLocal(date);
 
    const location = `${order.receiver.city?.name || ""} ${order.receiver.province?.name || ""}`.trim();
    const fullAddress = location ? `${order.receiver.address}, ${location}` : order.receiver.address;

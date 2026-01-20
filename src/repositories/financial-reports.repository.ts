@@ -1,10 +1,13 @@
 import prisma from "../lib/prisma.client";
 import { PaymentMethod, PaymentStatus } from "@prisma/client";
+import { formatDateLocal } from "../utils/utils";
 
 /**
  * Financial Reports Repository
  * Following: Repository pattern, TypeScript strict typing
  */
+
+
 
 interface DateRange {
    start: Date;
@@ -373,7 +376,7 @@ const financialReports = {
       const dailyMap = new Map<string, DailySalesReport>();
 
       for (const order of orders) {
-         const dateKey = order.created_at.toISOString().split("T")[0];
+         const dateKey = formatDateLocal(order.created_at);
 
          if (!dailyMap.has(dateKey)) {
             dailyMap.set(dateKey, {
@@ -1130,7 +1133,7 @@ const financialReports = {
       }
 
       return {
-         date: startOfDay.toISOString().split("T")[0],
+         date: formatDateLocal(startOfDay),
          date_range: { start: startOfDay.toISOString(), end: endOfDay.toISOString() },
          agency: agencyInfo,
          user: userInfo,
@@ -1335,7 +1338,7 @@ const financialReports = {
       }
 
       return {
-         date: startOfDay.toISOString().split("T")[0],
+         date: formatDateLocal(startOfDay),
          agency: agency || { id: agency_id, name: "Unknown" },
          user: userInfo,
 

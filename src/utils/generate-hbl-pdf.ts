@@ -12,7 +12,7 @@ const LOGO_PATH = path.join(process.cwd(), "assets", "ctelogo.png");
 const COLUMN_GAP = 8;
 const PAGE_MARGIN = 12;
 const LINE_WIDTH = 0.1;
-const CUSTOMS_SECTION_HEIGHT = 76;
+const CUSTOMS_SECTION_HEIGHT = 60;
 
 const poundsToKilograms = (weight: number): string => {
    if (!weight) {
@@ -24,7 +24,10 @@ const poundsToKilograms = (weight: number): string => {
 
 const formatDate = (value: Date | string): string => {
    const safeDate = value instanceof Date ? value : new Date(value);
-   return safeDate.toISOString().split("T")[0];
+   const year = safeDate.getFullYear();
+   const month = String(safeDate.getMonth() + 1).padStart(2, "0");
+   const day = String(safeDate.getDate()).padStart(2, "0");
+   return `${year}-${month}-${day}`;
 };
 
 const uppercase = (value: string | null | undefined): string => (value ? value.toUpperCase() : "");
@@ -162,72 +165,67 @@ const drawHblSection = (
 
    doc.rect(x, y, width, height).stroke();
 
-   const logoWidth = 60;
-   const logoHeight = 40;
-   const logoY = y + 10;
-   drawImageIfExists(doc, LOGO_PATH, x + 10, logoY, { width: logoWidth, height: logoHeight });
+   const logoWidth = 50;
+   const logoHeight = 32;
+   const logoY = y + 6;
+   drawImageIfExists(doc, LOGO_PATH, x + 8, logoY, { width: logoWidth, height: logoHeight });
 
-   let cursorY = y + 14;
+   let cursorY = y + 8;
 
    doc.font(FONTS.BOLD)
-      .fontSize(13)
+      .fontSize(11)
       .text("CARIBE TRAVEL EXPRESS", contentX + logoWidth / 2, cursorY, {
+         width: contentWidth - logoWidth / 2,
+         align: "center",
+      });
+   cursorY += 14;
+
+   doc.font(FONTS.SEMIBOLD)
+      .fontSize(9)
+      .text("COMBINED TRANSPORT BILL OF LADING", contentX + logoWidth / 2, cursorY, {
          width: contentWidth - logoWidth / 2,
          align: "center",
       });
    cursorY += 18;
 
-   doc.font(FONTS.SEMIBOLD)
-      .fontSize(11)
-      .text("COMBINED TRANSPORT BILL OF LADING", contentX + logoWidth / 2, cursorY, {
-         width: contentWidth - logoWidth / 2,
-         align: "center",
-      });
-   cursorY += 24;
-
-   cursorY = drawTableRow(doc, x, cursorY, width, 28, [
+   cursorY = drawTableRow(doc, x, cursorY, width, 22, [
       { label: "MBL NUMBER", value: mblNumber },
       { label: "HBL NUMBER", value: hblNumber, align: "right" },
    ]);
 
-   cursorY = drawTableRow(doc, x, cursorY, width, 32, [
+   cursorY = drawTableRow(doc, x, cursorY, width, 22, [
       { label: "EXPORT REFERENCES", value: exportReference },
-      { label: "FORWARDING AGENT", value: forwardingAgent, fontSize: 8, font: FONTS.MEDIUM },
+      { label: "FORWARDING AGENT", value: forwardingAgent, fontSize: 7, font: FONTS.MEDIUM },
    ]);
 
    cursorY = drawLabeledBox(doc, x, cursorY, width, {
       label: "CONSIGNEES/RECEIVERS SHOULD APPLY FOR RELEASE TO",
       value: notifyParty,
-      height: 28,
+      height: 22,
    });
 
    cursorY = drawLabeledBox(doc, x, cursorY, width, {
       label: "SHIPPER",
       value: shipperDetails,
-      height: 72,
+      height: 58,
    });
 
    cursorY = drawLabeledBox(doc, x, cursorY, width, {
       label: "CONSIGNED TO",
       value: consigneeDetails,
-      height: 96,
+      height: 72,
    });
 
    cursorY = drawLabeledBox(doc, x, cursorY, width, {
       label: "NOTIFY PARTY/INTERMEDIATE CONSIGNEE",
       value: notifyParty,
-      height: 40,
+      height: 26,
    });
 
-   cursorY = drawTableRow(doc, x, cursorY, width, 28, [
+   cursorY = drawTableRow(doc, x, cursorY, width, 22, [
       { label: "NO. CONTENEDOR", value: "" },
-      { label: "PORT OF LOADING", value: uppercase(order.agency.name), fontSize: 8, font: FONTS.MEDIUM },
-      {
-         label: "PORT OF DISCHARGE",
-         value: `${uppercase(order.receiver.province?.name)} / ${uppercase(order.receiver.city?.name)}`,
-         fontSize: 8,
-         font: FONTS.MEDIUM,
-      },
+      { label: "PORT OF LOADING", value: "", fontSize: 7, font: FONTS.MEDIUM },
+      { label: "PORT OF DISCHARGE", value: "", fontSize: 7, font: FONTS.MEDIUM },
    ]);
 
    cursorY = drawCargoTable(doc, x, cursorY, width, {
@@ -278,11 +276,11 @@ const drawTableRow = (
    columns.forEach((column, index) => {
       const columnX = x + columnWidth * index;
       doc.font(FONTS.MEDIUM)
-         .fontSize(7)
-         .text(column.label, columnX + 4, y + 4, { width: columnWidth - 8, align: column.align ?? "left" });
+         .fontSize(6)
+         .text(column.label, columnX + 4, y + 2, { width: columnWidth - 8, align: column.align ?? "left" });
       doc.font(column.font ?? FONTS.BOLD)
-         .fontSize(column.fontSize ?? 10)
-         .text(column.value, columnX + 4, y + 14, { width: columnWidth - 8, align: column.align ?? "left" });
+         .fontSize(column.fontSize ?? 8)
+         .text(column.value, columnX + 4, y + 10, { width: columnWidth - 8, align: column.align ?? "left" });
    });
 
    return y + height;
@@ -292,12 +290,12 @@ const drawLabeledBox = (doc: PDFKit.PDFDocument, x: number, y: number, width: nu
    doc.lineWidth(LINE_WIDTH);
    doc.rect(x, y, width, options.height).stroke();
    doc.font(FONTS.MEDIUM)
-      .fontSize(7)
-      .text(options.label, x + 4, y + 4, { width: width - 8 });
+      .fontSize(6)
+      .text(options.label, x + 4, y + 2, { width: width - 8 });
    if (options.value) {
       doc.font(FONTS.REGULAR)
-         .fontSize(9)
-         .text(options.value, x + 4, y + 16, { width: width - 8 });
+         .fontSize(8)
+         .text(options.value, x + 4, y + 10, { width: width - 8, height: options.height - 12, ellipsis: true });
    }
    return y + options.height;
 };
@@ -316,7 +314,7 @@ const drawCargoTable = (
    }
 ): number => {
    const headerHeight = 22;
-   const bodyHeight = 52;
+   const bodyHeight = 150;
 
    const columnWidths = [width * 0.32, width * 0.12, width * 0.32, width * 0.12, width * 0.12];
 
@@ -357,7 +355,7 @@ const drawCargoTable = (
       const { font, fontSize, align } = bodyStyles[index];
       doc.font(font)
          .fontSize(fontSize)
-         .text(value, currentX + 4, y + headerHeight + 6, { width: columnWidths[index] - 8, align });
+         .text(value, currentX + 4, y + headerHeight + 10, { width: columnWidths[index] - 8, align });
       currentX += columnWidths[index];
    });
 
@@ -371,7 +369,7 @@ const drawInformationRow = (
    width: number,
    columns: TableColumn[]
 ): number => {
-   const height = 52;
+   const height = 45;
    doc.lineWidth(LINE_WIDTH);
    doc.save();
    doc.rect(x, y, width, height);
@@ -390,7 +388,7 @@ const drawInformationRow = (
          .text(column.label, columnX + 4, y + 4, { width: columnWidth - 8, align: "left" });
       doc.font(column.font ?? FONTS.NORMAL)
          .fontSize(column.fontSize ?? 6)
-         .text(column.value, columnX + 4, y + 22, {
+         .text(column.value, columnX + 4, y + 20, {
             width: columnWidth - 8,
             align: column.align ?? "left",
          });
@@ -408,23 +406,19 @@ const drawCustomsSection = (
 ): void => {
    doc.font(FONTS.MEDIUM)
       .fontSize(7)
-      .text("SOLO PARA USO DE LA ADUANA", x + 4, y + 25);
+      .text("SOLO PARA USO DE LA ADUANA", x + 4, y + 50);
 
    doc.font(FONTS.MEDIUM)
       .fontSize(6)
-      .text(`${uppercase(notifyParty)}`, x + 4, y + 35);
+      .text(`${uppercase(notifyParty)}`, x + 4, y + 40);
 
    doc.font(FONTS.REGULAR)
       .fontSize(6)
-      .text("NOMBRE", x + 120, y + 35);
+      .text("NOMBRE", x + 120, y + 40);
    doc.font(FONTS.REGULAR)
       .fontSize(6)
-      .text("BUQUE:", x + width / 2, y + 35);
+      .text("BUQUE:", x + width / 2, y + 40);
    doc.font(FONTS.REGULAR)
       .fontSize(6)
-      .text("MANIFIESTO:", x + width / 2 + 120, y + 35);
-
-   doc.font(FONTS.MEDIUM)
-      .fontSize(6)
-      .text(notifyParty, x + width - 150, y + CUSTOMS_SECTION_HEIGHT - 20, { width: 140, align: "center" });
+      .text("MANIFIESTO:", x + width / 2 + 120, y + 40);
 };
