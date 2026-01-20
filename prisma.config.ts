@@ -6,5 +6,6 @@ export default defineConfig({
    schema: "./prisma/schema/", // Multi-file schema organizado por dominio
    migrations: {
       path: "./prisma/migrations",
+      seed: "npx ts-node --compiler-options {\"module\":\"CommonJS\"} ./prisma/seeds/seed.ts",
    },
 });

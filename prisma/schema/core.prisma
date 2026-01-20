@@ -267,6 +267,7 @@ model Provider {
 
 model Province {
     id              Int             @id @default(autoincrement())
+    code            String          @unique @db.VarChar(2) // DPA code: 21-35, 40
     name            String
     created_at      DateTime        @default(now())
     updated_at      DateTime        @updatedAt
@@ -274,10 +275,13 @@ model Province {
     receivers       Receiver[]
     warehouses      Warehouse[]
     delivery_routes DeliveryRoute[]
+
+    @@index([code])
 }
 
 model City {
     id          Int        @id @default(autoincrement())
+    code        String     @db.VarChar(2) // DPA code within province: 01-15
     name        String
     created_at  DateTime   @default(now())
     updated_at  DateTime   @updatedAt
@@ -285,6 +289,9 @@ model City {
     province    Province   @relation(fields: [province_id], references: [id])
     city_type   CityType   @default(CITY)
     receivers   Receiver[]
+
+    @@unique([province_id, code]) // Unique code per province
+    @@index([code])
 }
 
 model Country {

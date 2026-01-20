@@ -137,23 +137,116 @@ async function main(): Promise<void> {
 
    console.log("🏝️ Creating or updating provinces and cities...");
 
+   // Temporarily drop unique constraints to allow code updates
+   console.log("   Dropping temporary constraints...");
+   await prisma.$executeRawUnsafe(
+      `ALTER TABLE "City" DROP CONSTRAINT IF EXISTS "City_province_id_code_key"`
+   );
+   await prisma.$executeRawUnsafe(
+      `ALTER TABLE "Province" DROP CONSTRAINT IF EXISTS "Province_code_key"`
+   );
+
+   // Step 1: Delete all cities without receivers to avoid code conflicts
+   console.log("   Cleaning up cities without receivers...");
+   await prisma.city.deleteMany({
+      where: { receivers: { none: {} } },
+   });
+
+   // Step 2: Update all provinces
    for (const province of provincesWithCities) {
       await prisma.province.upsert({
          where: { id: province.id },
          update: {
+            code: province.code,
             name: province.name,
-            cities: {
-               createMany: { data: province.cities.map((city) => ({ name: city.name, city_type: city.city_type })) },
-            },
          },
          create: {
+            id: province.id,
+            code: province.code,
             name: province.name,
-            cities: {
-               createMany: { data: province.cities.map((city) => ({ name: city.name, city_type: city.city_type })) },
-            },
          },
       });
    }
+
+   // Step 3: Update existing cities (those with receivers) by name
+   // Also handle cities that exist but are NOT in seed data by giving them unique codes
+   for (const province of provincesWithCities) {
+      const existingCities = await prisma.city.findMany({
+         where: { province_id: province.id },
+      });
+      const existingCityMap = new Map(existingCities.map((c) => [c.name, c]));
+      const seedCityNames = new Set(province.cities.map((c) => c.name));
+      const usedCodes = new Set(province.cities.map((c) => c.code));
+
+      // First, handle cities NOT in seed data - assign unique codes
+      // Start from high numbers (80-99) that aren't typically used in DPA codes
+      let orphanCode = 80;
+      for (const existingCity of existingCities) {
+         if (!seedCityNames.has(existingCity.name)) {
+            // Find an unused code for this orphan city (max 99)
+            while (usedCodes.has(String(orphanCode).padStart(2, "0")) && orphanCode < 100) {
+               orphanCode++;
+            }
+            if (orphanCode >= 100) {
+               console.warn(`   Warning: Too many orphan cities in province ${province.id}, skipping ${existingCity.name}`);
+               continue;
+            }
+            const newCode = String(orphanCode).padStart(2, "0");
+            usedCodes.add(newCode);
+            await prisma.city.update({
+               where: { id: existingCity.id },
+               data: { code: newCode },
+            });
+            orphanCode++;
+         }
+      }
+
+      // Then update cities that ARE in seed data
+      for (const city of province.cities) {
+         const existingCity = existingCityMap.get(city.name);
+         if (existingCity) {
+            await prisma.city.update({
+               where: { id: existingCity.id },
+               data: {
+                  code: city.code,
+                  name: city.name,
+                  city_type: city.city_type,
+               },
+            });
+         }
+      }
+   }
+
+   // Step 4: Create new cities that don't exist
+   for (const province of provincesWithCities) {
+      const existingCities = await prisma.city.findMany({
+         where: { province_id: province.id },
+      });
+      const existingCityNames = new Set(existingCities.map((c) => c.name));
+
+      for (const city of province.cities) {
+         if (!existingCityNames.has(city.name)) {
+            await prisma.city.create({
+               data: {
+                  code: city.code,
+                  name: city.name,
+                  city_type: city.city_type,
+                  province_id: province.id,
+               },
+            });
+         }
+      }
+   }
+
+   // Recreate the unique constraints
+   console.log("   Recreating unique constraints...");
+   await prisma.$executeRawUnsafe(
+      `ALTER TABLE "Province" ADD CONSTRAINT "Province_code_key" UNIQUE (code)`
+   );
+   await prisma.$executeRawUnsafe(
+      `ALTER TABLE "City" ADD CONSTRAINT "City_province_id_code_key" UNIQUE (province_id, code)`
+   );
+
    console.log(`✅ Provinces and cities created`);
 
    // Step 1: Fetch all existing customs rates by name in bulk
