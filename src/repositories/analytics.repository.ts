@@ -1,5 +1,6 @@
 import prisma from "../lib/prisma.client";
 import { format } from "date-fns";
+import { getAdjustedDate, getTodayRangeUTC } from "../utils/utils";
 
 interface ReportData {
    day?: string;
@@ -232,10 +233,8 @@ const analytics = {
    },
 
    getTodaySalesByAgency: async (agencyId?: number): Promise<DailySalesByAgencyResponse> => {
-      // Get today's date range (start and end of today)
-      const today = new Date();
-      const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
-      const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+      // Get today's date range in EST timezone
+      const { start: startOfToday, end: endOfToday } = getTodayRangeUTC();
 
       // Build agency filter
       const agencyFilter = agencyId ? `AND o."agency_id" = ${agencyId}` : "";
@@ -260,8 +259,9 @@ const analytics = {
          total: string;
       }>;
 
-      // Format data for response
-      const todayFormatted = format(today, "yyyy-MM-dd");
+      // Format data for response (using EST date)
+      const estNow = getAdjustedDate(new Date());
+      const todayFormatted = format(estNow, "yyyy-MM-dd");
       const agencies: AgencyDailySales[] = rawData.map((row) => {
          const totalSales = Number(row.total) / 100;
          return {

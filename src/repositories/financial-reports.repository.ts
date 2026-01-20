@@ -1,6 +1,6 @@
 import prisma from "../lib/prisma.client";
 import { PaymentMethod, PaymentStatus } from "@prisma/client";
-import { formatDateLocal } from "../utils/utils";
+import { formatDateLocal, getAdjustedDate, getDayRangeUTC, getMonthRangeUTC, TIMEZONE_OFFSET_HOURS } from "../utils/utils";
 
 /**
  * Financial Reports Repository
@@ -81,37 +81,55 @@ interface AgencyFinancialSummary {
 }
 
 /**
- * Get date range helpers
+ * Get date range helpers (adjusted for EST timezone)
  */
 const getDateRange = (
    period: "today" | "week" | "month" | "year" | "custom",
    customStart?: Date,
    customEnd?: Date
 ): DateRange => {
-   const now = new Date();
+   const estNow = getAdjustedDate(new Date());
    let start: Date;
-   let end: Date = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+   let end: Date;
 
    switch (period) {
-      case "today":
-         start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+      case "today": {
+         const { start: todayStart, end: todayEnd } = getDayRangeUTC(new Date());
+         start = todayStart;
+         end = todayEnd;
          break;
-      case "week":
-         const dayOfWeek = now.getDay();
-         start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek, 0, 0, 0, 0);
+      }
+      case "week": {
+         const dayOfWeek = estNow.getDay();
+         const weekStart = new Date(estNow.getFullYear(), estNow.getMonth(), estNow.getDate() - dayOfWeek, 0, 0, 0, 0);
+         const weekEnd = new Date(estNow.getFullYear(), estNow.getMonth(), estNow.getDate(), 23, 59, 59, 999);
+         start = new Date(weekStart.getTime() - TIMEZONE_OFFSET_HOURS * 3600000);
+         end = new Date(weekEnd.getTime() - TIMEZONE_OFFSET_HOURS * 3600000);
          break;
-      case "month":
-         start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      }
+      case "month": {
+         const monthStart = new Date(estNow.getFullYear(), estNow.getMonth(), 1, 0, 0, 0, 0);
+         const monthEnd = new Date(estNow.getFullYear(), estNow.getMonth(), estNow.getDate(), 23, 59, 59, 999);
+         start = new Date(monthStart.getTime() - TIMEZONE_OFFSET_HOURS * 3600000);
+         end = new Date(monthEnd.getTime() - TIMEZONE_OFFSET_HOURS * 3600000);
          break;
-      case "year":
-         start = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+      }
+      case "year": {
+         const yearStart = new Date(estNow.getFullYear(), 0, 1, 0, 0, 0, 0);
+         const yearEnd = new Date(estNow.getFullYear(), estNow.getMonth(), estNow.getDate(), 23, 59, 59, 999);
+         start = new Date(yearStart.getTime() - TIMEZONE_OFFSET_HOURS * 3600000);
+         end = new Date(yearEnd.getTime() - TIMEZONE_OFFSET_HOURS * 3600000);
          break;
+      }
       case "custom":
-         start = customStart || new Date(now.getFullYear(), now.getMonth(), 1);
-         end = customEnd || end;
+         start = customStart || getDayRangeUTC(new Date()).start;
+         end = customEnd || getDayRangeUTC(new Date()).end;
          break;
-      default:
-         start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+      default: {
+         const { start: defaultStart, end: defaultEnd } = getDayRangeUTC(new Date());
+         start = defaultStart;
+         end = defaultEnd;
+      }
    }
 
    return { start, end };
@@ -351,8 +369,7 @@ const financialReports = {
     * Get daily sales breakdown for a month
     */
    getDailySalesBreakdown: async (year: number, month: number, agency_id?: number): Promise<DailySalesReport[]> => {
-      const start = new Date(year, month - 1, 1, 0, 0, 0, 0);
-      const end = new Date(year, month, 0, 23, 59, 59, 999);
+      const { start, end } = getMonthRangeUTC(year, month);
 
       const where: any = {
          created_at: { gte: start, lte: end },
@@ -511,25 +528,28 @@ const financialReports = {
       previous_month: SalesReportByAgency[];
       growth_percentage: number;
    }> => {
-      const now = new Date();
-      const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      const currentMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-      const previousMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const previousMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+      const estNow = getAdjustedDate(new Date());
+      const currentYear = estNow.getFullYear();
+      const currentMonth = estNow.getMonth() + 1; // 1-based month
+      const previousMonth = currentMonth === 1 ? 12 : currentMonth - 1;
+      const previousYear = currentMonth === 1 ? currentYear - 1 : currentYear;
 
-      const [currentMonth, previousMonth] = await Promise.all([
+      const { start: currentMonthStart, end: currentMonthEnd } = getMonthRangeUTC(currentYear, currentMonth);
+      const { start: previousMonthStart, end: previousMonthEnd } = getMonthRangeUTC(previousYear, previousMonth);
+
+      const [currentMonthData, previousMonthData] = await Promise.all([
          financialReports.getSalesByAgency("custom", agency_id, currentMonthStart, currentMonthEnd),
          financialReports.getSalesByAgency("custom", agency_id, previousMonthStart, previousMonthEnd),
       ]);
 
-      const currentTotal = currentMonth.reduce((sum, a) => sum + a.total_billed_cents, 0);
-      const previousTotal = previousMonth.reduce((sum, a) => sum + a.total_billed_cents, 0);
+      const currentTotal = currentMonthData.reduce((sum, a) => sum + a.total_billed_cents, 0);
+      const previousTotal = previousMonthData.reduce((sum, a) => sum + a.total_billed_cents, 0);
 
       const growthPercentage = previousTotal > 0 ? ((currentTotal - previousTotal) / previousTotal) * 100 : 0;
 
       return {
-         current_month: currentMonth,
-         previous_month: previousMonth,
+         current_month: currentMonthData,
+         previous_month: previousMonthData,
          growth_percentage: Math.round(growthPercentage * 100) / 100,
       };
    },
@@ -779,8 +799,7 @@ const financialReports = {
          payment_breakdown: PaymentMethodBreakdown[];
       };
    }> => {
-      const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
-      const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+      const { start: startOfDay, end: endOfDay } = getDayRangeUTC(date);
 
       // 1. Get orders created today (exclude soft-deleted)
       const orderWhere: any = {
@@ -1159,8 +1178,7 @@ const financialReports = {
     * - Collections (Recaudación): Payments received that day (may be from older orders)
     */
    getDailySalesReport: async (date: Date, agency_id: number, user_id?: string): Promise<DailySalesReportResult> => {
-      const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
-      const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+      const { start: startOfDay, end: endOfDay } = getDayRangeUTC(date);
 
       // ========== BILLING: Orders created today (exclude soft-deleted) ==========
       const ordersWhere: any = {

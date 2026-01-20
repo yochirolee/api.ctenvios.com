@@ -124,10 +124,10 @@ export const distributeCents = (totalCents: number, parts: number): number[] => 
 };
 
 // Timezone offset for EST (UTC-5) - adjust for your region
-const TIMEZONE_OFFSET_HOURS = -5;
+export const TIMEZONE_OFFSET_HOURS = -5;
 
 // Helper function to get date adjusted to target timezone
-const getAdjustedDate = (date: Date): Date => {
+export const getAdjustedDate = (date: Date): Date => {
    const utcTime = date.getTime() + date.getTimezoneOffset() * 60000;
    return new Date(utcTime + TIMEZONE_OFFSET_HOURS * 3600000);
 };
@@ -150,4 +150,32 @@ export const formatDateTimeLocal = (date: Date): string => {
    const hours = String(adjusted.getHours()).padStart(2, "0");
    const minutes = String(adjusted.getMinutes()).padStart(2, "0");
    return `${year}-${month}-${day} ${hours}:${minutes}`;
+};
+
+// Get day range for a specific date in EST timezone, converted to UTC for database queries
+export const getDayRangeUTC = (date: Date): { start: Date; end: Date } => {
+   const adjusted = getAdjustedDate(date);
+   // Start of day in EST (00:00:00)
+   const estStart = new Date(adjusted.getFullYear(), adjusted.getMonth(), adjusted.getDate(), 0, 0, 0);
+   // End of day in EST (23:59:59)
+   const estEnd = new Date(adjusted.getFullYear(), adjusted.getMonth(), adjusted.getDate(), 23, 59, 59, 999);
+   // Convert back to UTC for database query
+   const utcStart = new Date(estStart.getTime() - TIMEZONE_OFFSET_HOURS * 3600000);
+   const utcEnd = new Date(estEnd.getTime() - TIMEZONE_OFFSET_HOURS * 3600000);
+   return { start: utcStart, end: utcEnd };
+};
+
+// Get today's date range in EST timezone, converted to UTC for database queries
+export const getTodayRangeUTC = (): { start: Date; end: Date } => {
+   return getDayRangeUTC(new Date());
+};
+
+// Get month range for a specific year/month in EST timezone, converted to UTC for database queries
+export const getMonthRangeUTC = (year: number, month: number): { start: Date; end: Date } => {
+   // month is 1-based (1 = January)
+   const estStart = new Date(year, month - 1, 1, 0, 0, 0, 0);
+   const estEnd = new Date(year, month, 0, 23, 59, 59, 999); // day 0 of next month = last day of current month
+   const utcStart = new Date(estStart.getTime() - TIMEZONE_OFFSET_HOURS * 3600000);
+   const utcEnd = new Date(estEnd.getTime() - TIMEZONE_OFFSET_HOURS * 3600000);
+   return { start: utcStart, end: utcEnd };
 };
