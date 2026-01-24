@@ -9,6 +9,7 @@ const router = Router();
 const FINANCIAL_ROLES: Roles[] = [
    Roles.ROOT,
    Roles.ADMINISTRATOR,
+   Roles.AGENCY_SALES,
    Roles.AGENCY_ADMIN,
    Roles.AGENCY_SUPERVISOR,
    Roles.FORWARDER_ADMIN,
