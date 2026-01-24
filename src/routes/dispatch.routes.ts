@@ -19,6 +19,10 @@ router.post("/from-parcels", authMiddleware, dispatchController.createFromParcel
 // Groups by sender agency and creates RECEIVED dispatches
 router.post("/receive-parcels", authMiddleware, dispatchController.receiveParcelsWithoutDispatch);
 
+// POST /dispatches/smart-receive - Intelligent parcel reception (RECOMMENDED)
+// Handles all scenarios: new dispatches, pending dispatches, and existing dispatches
+router.post("/smart-receive", authMiddleware, dispatchController.smartReceive);
+
 // GET /dispatches/:id - Get a specific dispatch
 router.get("/:id", authMiddleware, dispatchController.getById);
 

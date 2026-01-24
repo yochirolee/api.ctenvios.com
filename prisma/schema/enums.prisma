@@ -143,6 +143,7 @@ enum DispatchStatus {
     DRAFT // Empty dispatch, no parcels
     LOADING // Dispatch has parcels being added
     DISPATCHED // Ready for dispatch / in transit to receiver
+    PARTIAL_RECEIVED // Some parcels were extracted and received in a new dispatch
     RECEIVING // At least one parcel has been received at destination
     RECEIVED // All parcels received / completed
     DISCREPANCY // Reception discrepancy detected

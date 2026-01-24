@@ -35,7 +35,10 @@ const create_agency_schema = z.object({
       contact: z.string().min(1),
       phone: z.string().min(10),
       email: z.string().email(),
-      website: z.string().url().optional(),
+      website: z.preprocess(
+         (val) => (val === "" || val === null ? undefined : val),
+         z.string().url().optional()
+      ),
       agency_type: z.enum(["AGENCY", "RESELLER", "FORWARDER"]),
       parent_agency_id: z.number().int().positive().optional(),
    }),
@@ -131,7 +134,8 @@ const agencies = {
       // Validate request body
       const result = create_agency_schema.safeParse(req.body);
       if (!result.success) {
-         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid agency data");
+         const errors = result.error.errors.map((e) => `${e.path.join(".")}: ${e.message}`).join(", ");
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, `Invalid agency data: ${errors}`);
       }
 
       const { agency: child_agency, user } = result.data;

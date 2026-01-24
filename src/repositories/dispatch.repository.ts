@@ -1,12 +1,18 @@
 import HttpStatusCodes from "../common/https-status-codes";
 import prisma from "../lib/prisma.client";
-import { Dispatch, DispatchStatus, Parcel, PaymentStatus, Prisma, Status, DebtStatus } from "@prisma/client";
+import { Dispatch, DispatchStatus, Parcel, PaymentStatus, Prisma, Status, DebtStatus, Roles } from "@prisma/client";
 import { AppError } from "../common/app-errors";
 import parcelsRepository from "./parcels.repository";
 import { calculateDispatchCost } from "../utils/dispatch-utils";
 import interAgencyDebtsRepository from "./inter-agency-debts.repository";
-import { determineHierarchyDebts } from "../utils/agency-hierarchy";
+import { determineHierarchyDebts, generateDispatchDebts } from "../utils/agency-hierarchy";
 import { updateOrderStatusFromParcel } from "../utils/order-status-calculator";
+import {
+   validateDispatchModifiable,
+   validateParcelOwnershipInTx,
+   MODIFIABLE_DISPATCH_STATUSES,
+   getAgencyParentHierarchy,
+} from "../utils/dispatch-validation";
 
 // Allowed statuses for parcels to be added to dispatch
 const ALLOWED_DISPATCH_STATUSES: Status[] = [
@@ -391,7 +397,9 @@ const dispatch = {
       });
       return updatedDispatch;
    },
-   delete: async (id: number, user_agency_id: number | null, user_id: string): Promise<Dispatch> => {
+   delete: async (id: number, user_agency_id: number | null, user_id: string, userRole?: Roles): Promise<Dispatch> => {
+      const isRoot = userRole === Roles.ROOT;
+
       // Get dispatch with all parcels
       const dispatch = await prisma.dispatch.findUnique({
          where: { id },
@@ -404,17 +412,17 @@ const dispatch = {
          throw new AppError(HttpStatusCodes.NOT_FOUND, `Dispatch with id ${id} not found`);
       }
 
-      // Validate that user's agency is the sender agency (skip check if user_agency_id is null, meaning ROOT user)
-      if (user_agency_id !== null && dispatch.sender_agency_id !== user_agency_id) {
+      // Validate that user's agency is the sender agency (ROOT can delete any dispatch)
+      if (!isRoot && user_agency_id !== null && dispatch.sender_agency_id !== user_agency_id) {
          throw new AppError(
             HttpStatusCodes.FORBIDDEN,
             `Only the sender agency can delete this dispatch. Your agency: ${user_agency_id}, Sender agency: ${dispatch.sender_agency_id}`
          );
       }
 
-      // Check if dispatch can be deleted (only DRAFT or CANCELLED can be deleted)
+      // Check if dispatch can be deleted (only DRAFT or CANCELLED can be deleted, ROOT can delete any)
       const deletableStatuses: DispatchStatus[] = [DispatchStatus.DRAFT, DispatchStatus.CANCELLED];
-      if (!deletableStatuses.includes(dispatch.status)) {
+      if (!isRoot && !deletableStatuses.includes(dispatch.status)) {
          throw new AppError(
             HttpStatusCodes.BAD_REQUEST,
             `Dispatch with status ${dispatch.status} cannot be deleted. Only dispatches with status DRAFT or CANCELLED can be deleted.`
@@ -466,12 +474,36 @@ const dispatch = {
     * Handles: parcel status update, tracking events, dispatch weight, dispatch status
     * Financial logic (pricing) is handled only in completeDispatch
     *
+    * Validations:
+    * - Dispatch must be in DRAFT or LOADING status (not DISPATCHED/RECEIVED) - ROOT can bypass
+    * - Parcel must belong to sender agency or its child agencies
+    * - Parcel must have valid status for dispatch
+    * - Parcel must not already be in another dispatch
+    *
     * NOTE: All validations happen INSIDE the transaction to prevent race conditions
     */
-   addParcelToDispatch: async (tracking_number: string, dispatchId: number, user_id: string): Promise<Dispatch> => {
+   addParcelToDispatch: async (
+      tracking_number: string,
+      dispatchId: number,
+      user_id: string,
+      userRole?: string
+   ): Promise<Dispatch> => {
       // All logic inside transaction to prevent race conditions
       const { updatedDispatch, parcelId } = await prisma.$transaction(async (tx) => {
-         // 1. Fetch parcel with fresh data inside transaction
+         // 1. Fetch dispatch with fresh data FIRST to validate status and get sender_agency_id
+         const currentDispatch = await tx.dispatch.findUnique({
+            where: { id: dispatchId },
+            select: { status: true, sender_agency_id: true },
+         });
+
+         if (!currentDispatch) {
+            throw new AppError(HttpStatusCodes.NOT_FOUND, `Dispatch with id ${dispatchId} not found`);
+         }
+
+         // 2. VALIDATE: Dispatch must be modifiable (DRAFT or LOADING only) - ROOT can bypass
+         validateDispatchModifiable(currentDispatch.status, userRole);
+
+         // 3. Fetch parcel with fresh data inside transaction
          const parcel = await tx.parcel.findUnique({
             where: { tracking_number },
          });
@@ -480,7 +512,17 @@ const dispatch = {
             throw new AppError(HttpStatusCodes.NOT_FOUND, `Parcel with tracking number ${tracking_number} not found`);
          }
 
-         // 2. Validate parcel status (with fresh data)
+         // 4. VALIDATE: Parcel must belong to sender agency or its child agencies
+         const isOwned = await validateParcelOwnershipInTx(tx, parcel.agency_id, currentDispatch.sender_agency_id);
+         if (!isOwned) {
+            throw new AppError(
+               HttpStatusCodes.FORBIDDEN,
+               `Parcel ${tracking_number} does not belong to agency ${currentDispatch.sender_agency_id} or its child agencies. ` +
+                  `Parcel agency: ${parcel.agency_id}. An agency can only dispatch parcels from itself or its child agencies.`
+            );
+         }
+
+         // 5. Validate parcel status (with fresh data)
          if (!isValidStatusForDispatch(parcel.status)) {
             throw new AppError(
                HttpStatusCodes.BAD_REQUEST,
@@ -490,7 +532,7 @@ const dispatch = {
             );
          }
 
-         // 3. Check if parcel is already in a dispatch (with fresh data - prevents race condition)
+         // 6. Check if parcel is already in a dispatch (with fresh data - prevents race condition)
          if (parcel.dispatch_id) {
             throw new AppError(
                HttpStatusCodes.CONFLICT,
@@ -498,17 +540,7 @@ const dispatch = {
             );
          }
 
-         // 4. Fetch dispatch with fresh data
-         const currentDispatch = await tx.dispatch.findUnique({
-            where: { id: dispatchId },
-            select: { status: true },
-         });
-
-         if (!currentDispatch) {
-            throw new AppError(HttpStatusCodes.NOT_FOUND, `Dispatch with id ${dispatchId} not found`);
-         }
-
-         // 5. Update parcel status and connect to dispatch
+         // 7. Update parcel status and connect to dispatch
          await tx.parcel.update({
             where: { id: parcel.id },
             data: {
@@ -517,7 +549,7 @@ const dispatch = {
             },
          });
 
-         // 6. Create event to register the parcel being added to dispatch
+         // 8. Create event to register the parcel being added to dispatch
          await tx.parcelEvent.create({
             data: {
                parcel_id: parcel.id,
@@ -529,11 +561,11 @@ const dispatch = {
             },
          });
 
-         // 7. Calculate new dispatch status (DRAFT -> LOADING when parcels added)
+         // 9. Calculate new dispatch status (DRAFT -> LOADING when parcels added)
          const newStatus =
             currentDispatch.status === DispatchStatus.DRAFT ? DispatchStatus.LOADING : currentDispatch.status;
 
-         // 8. Update dispatch with weight, count, and status
+         // 10. Update dispatch with weight, count, and status
          const updatedDispatch = await tx.dispatch.update({
             where: { id: dispatchId },
             data: {
@@ -556,9 +588,12 @@ const dispatch = {
     * Handles: parcel status restoration, tracking events, dispatch weight, dispatch status
     * Financial logic (pricing) is handled only in completeDispatch
     *
+    * Validations:
+    * - Dispatch must be in DRAFT or LOADING status (not DISPATCHED/RECEIVED) - ROOT can bypass
+    *
     * NOTE: All validations happen INSIDE the transaction to prevent race conditions
     */
-   removeParcelFromDispatch: async (hbl: string, user_id: string): Promise<Parcel> => {
+   removeParcelFromDispatch: async (hbl: string, user_id: string, userRole?: string): Promise<Parcel> => {
       // All logic inside transaction to prevent race conditions
       const { updatedParcel, parcelId } = await prisma.$transaction(async (tx) => {
          // 1. Fetch parcel with dispatch info inside transaction (fresh data)
@@ -585,7 +620,10 @@ const dispatch = {
          const dispatchId = parcel.dispatch_id;
          const currentDispatchStatus = parcel.dispatch.status;
 
-         // 2. Get previous status from ParcelEvent history (inside transaction)
+         // 2. VALIDATE: Dispatch must be modifiable (DRAFT or LOADING only) - ROOT can bypass
+         validateDispatchModifiable(currentDispatchStatus, userRole);
+
+         // 3. Get previous status from ParcelEvent history (inside transaction)
          const events = await tx.parcelEvent.findMany({
             where: { parcel_id: parcel.id },
             orderBy: { created_at: "desc" },
@@ -601,7 +639,7 @@ const dispatch = {
             }
          }
 
-         // 3. Update parcel: remove from dispatch and restore previous status
+         // 4. Update parcel: remove from dispatch and restore previous status
          const updated = await tx.parcel.update({
             where: { tracking_number: hbl },
             data: {
@@ -618,12 +656,12 @@ const dispatch = {
             },
          });
 
-         // 4. Count remaining parcels after removal
+         // 5. Count remaining parcels after removal
          const remainingParcelsCount = await tx.parcel.count({
             where: { dispatch_id: dispatchId },
          });
 
-         // 5. Determine new dispatch status based on remaining parcels
+         // 6. Determine new dispatch status based on remaining parcels
          let newDispatchStatus: DispatchStatus;
          if (remainingParcelsCount === 0) {
             newDispatchStatus = DispatchStatus.DRAFT;
@@ -637,7 +675,7 @@ const dispatch = {
             newDispatchStatus = await calculateDispatchStatus(tx, dispatchId, currentDispatchStatus);
          }
 
-         // 6. Update dispatch with recalculated weight and status
+         // 7. Update dispatch with recalculated weight and status
          await tx.dispatch.update({
             where: { id: dispatchId },
             data: {
@@ -990,6 +1028,11 @@ const dispatch = {
     * Create a dispatch from a list of tracking numbers (scan and create)
     * Creates a LOADING dispatch and adds all valid parcels in one transaction
     *
+    * Validations:
+    * - Parcel must belong to sender agency or its child agencies
+    * - Parcel must have valid status for dispatch
+    * - Parcel must not already be in another dispatch
+    *
     * NOTE: Uses optimistic locking to prevent race conditions -
     * updateMany with conditions ensures only eligible parcels are added
     */
@@ -1017,12 +1060,44 @@ const dispatch = {
          // Create a map for quick lookup
          const parcelMap = new Map(parcels.map((p) => [p.tracking_number, p]));
 
-         // 2. Classify parcels with fresh data
+         // 2. Get allowed agency IDs (sender + all children) for ownership validation
+         const allowedAgencyIds = new Set<number>([sender_agency_id]);
+         const childAgencies = await getAllChildAgenciesInTx(tx);
+         childAgencies.forEach((id) => allowedAgencyIds.add(id));
+
+         // Helper to get child agencies within transaction
+         async function getAllChildAgenciesInTx(txClient: typeof tx): Promise<number[]> {
+            const getAllChildren = async (agencyId: number): Promise<number[]> => {
+               const directChildren = await txClient.agency.findMany({
+                  where: { parent_agency_id: agencyId },
+                  select: { id: true },
+               });
+               const childIds = directChildren.map((c) => c.id);
+               const allChildIds = [...childIds];
+               for (const childId of childIds) {
+                  const grandChildren = await getAllChildren(childId);
+                  allChildIds.push(...grandChildren);
+               }
+               return allChildIds;
+            };
+            return getAllChildren(sender_agency_id);
+         }
+
+         // 3. Classify parcels with fresh data
          const toAdd: Parcel[] = [];
          for (const tn of tracking_numbers) {
             const parcel = parcelMap.get(tn);
             if (!parcel) {
                details.push({ tracking_number: tn, status: "skipped", reason: "Parcel not found" });
+               continue;
+            }
+            // Validate ownership
+            if (!parcel.agency_id || !allowedAgencyIds.has(parcel.agency_id)) {
+               details.push({
+                  tracking_number: tn,
+                  status: "skipped",
+                  reason: `Parcel does not belong to agency ${sender_agency_id} or its child agencies. Parcel agency: ${parcel.agency_id}`,
+               });
                continue;
             }
             if (parcel.dispatch_id) {
@@ -1521,6 +1596,857 @@ const dispatch = {
       });
 
       return result;
+   },
+
+   /**
+    * Smart Receive - Intelligent parcel reception
+    *
+    * NEW LOGIC:
+    * 1. If ALL parcels from a dispatch are received → Mark dispatch as RECEIVED (NO new dispatch)
+    * 2. If PARTIAL parcels from a dispatch are received → Extract to new dispatch, original becomes PARTIAL_RECEIVED
+    * 3. Surplus parcels (without dispatch) from same agency as a dispatch → Add to that dispatch
+    * 4. Parcels without dispatch and no related dispatch → Create new RECEIVED dispatch
+    *
+    * Following: Repository pattern, Transaction safety
+    */
+   smartReceive: async (
+      tracking_numbers: string[],
+      receiver_agency_id: number,
+      user_id: string
+   ): Promise<{
+      summary: {
+         total_scanned: number;
+         total_received: number;
+         total_skipped: number;
+         surplus_added: number;
+      };
+      reception_dispatches: Array<{
+         dispatch_id: number;
+         sender_agency_id: number;
+         parcels_count: number;
+         status: "RECEIVED";
+         is_new: boolean;
+         origin_dispatch?: {
+            dispatch_id: number;
+            original_parcels_count: number;
+            remaining_parcels_count: number;
+            new_status: string;
+         };
+         surplus_parcels?: number;
+      }>;
+      accounting_dispatches: Array<{
+         dispatch_id: number;
+         sender_agency_id: number;
+         receiver_agency_id: number;
+         parcels_count: number;
+         status: "RECEIVED";
+         origin_dispatch_id?: number;
+      }>;
+      details: Array<{
+         tracking_number: string;
+         status: "received" | "skipped";
+         action: "received_in_dispatch" | "extracted_from_dispatch" | "surplus_added" | "already_processed" | "error";
+         dispatch_id?: number;
+         origin_dispatch_id?: number;
+         reason?: string;
+      }>;
+      debts_created: Array<{
+         debtor_agency_id: number;
+         creditor_agency_id: number;
+         amount_in_cents: number;
+         weight_in_lbs: number;
+         parcels_count: number;
+         dispatch_id: number;
+      }>;
+   }> => {
+      const result = await prisma.$transaction(async (tx) => {
+         const details: Array<{
+            tracking_number: string;
+            status: "received" | "skipped";
+            action: "received_in_dispatch" | "extracted_from_dispatch" | "surplus_added" | "already_processed" | "error";
+            dispatch_id?: number;
+            origin_dispatch_id?: number;
+            reason?: string;
+         }> = [];
+
+         // ========== 1. FETCH ALL PARCELS WITH DISPATCH INFO ==========
+         const parcels = await tx.parcel.findMany({
+            where: {
+               tracking_number: { in: tracking_numbers },
+            },
+            include: {
+               agency: true,
+               current_agency: true,
+               dispatch: {
+                  select: {
+                     id: true,
+                     status: true,
+                     sender_agency_id: true,
+                     receiver_agency_id: true,
+                  },
+               },
+               order_items: {
+                  select: {
+                     weight: true,
+                     rate: {
+                        select: {
+                           product_id: true,
+                           service_id: true,
+                           product: { select: { unit: true } },
+                        },
+                     },
+                  },
+               },
+            },
+         });
+
+         const parcelMap = new Map(parcels.map((p) => [p.tracking_number, p]));
+
+         // ========== 2. CLASSIFY PARCELS ==========
+
+         // Group 1: Parcels without dispatch - group by billing sender (potential surplus)
+         const withoutDispatch = new Map<number, typeof parcels>();
+         // Accounting groups: C -> B when A receives C parcels without dispatch
+         const accountingGroups = new Map<
+            string,
+            {
+               sender_agency_id: number;
+               receiver_agency_id: number;
+               parcels: typeof parcels;
+            }
+         >();
+         // Cache to resolve billing sender for holder agencies
+         const billingSenderCache = new Map<number, number>();
+         const resolveBillingSender = async (holderAgencyId: number): Promise<number> => {
+            if (billingSenderCache.has(holderAgencyId)) {
+               return billingSenderCache.get(holderAgencyId)!;
+            }
+
+            const hierarchy = await getAgencyParentHierarchy(holderAgencyId);
+            const receiverIndex = hierarchy.indexOf(receiver_agency_id);
+
+            // If receiver is not in hierarchy or receiver is direct parent, bill the holder itself
+            let billingSenderId = holderAgencyId;
+            if (receiverIndex > 0) {
+               // receiverIndex > 0 means there is a parent between holder and receiver
+               billingSenderId = hierarchy[receiverIndex - 1];
+            }
+
+            billingSenderCache.set(holderAgencyId, billingSenderId);
+            return billingSenderId;
+         };
+         const addToAccountingGroups = (
+            senderAgencyId: number,
+            receiverAgencyId: number,
+            parcelsToAdd: typeof parcels
+         ): void => {
+            if (senderAgencyId === receiverAgencyId || parcelsToAdd.length === 0) {
+               return;
+            }
+            const accountingKey = `${senderAgencyId}-${receiverAgencyId}`;
+            if (!accountingGroups.has(accountingKey)) {
+               accountingGroups.set(accountingKey, {
+                  sender_agency_id: senderAgencyId,
+                  receiver_agency_id: receiverAgencyId,
+                  parcels: [],
+               });
+            }
+            accountingGroups.get(accountingKey)!.parcels.push(...parcelsToAdd);
+         };
+
+         // Group 2: Parcels IN a dispatch - group by dispatch_id
+         const inDispatch = new Map<
+            number,
+            {
+               dispatch: NonNullable<(typeof parcels)[0]["dispatch"]>;
+               parcels: typeof parcels;
+            }
+         >();
+
+         for (const tn of tracking_numbers) {
+            const parcel = parcelMap.get(tn);
+
+            if (!parcel) {
+               details.push({
+                  tracking_number: tn,
+                  status: "skipped",
+                  action: "error",
+                  reason: "Parcel not found",
+               });
+               continue;
+            }
+
+            // Determine holder: current_agency_id if set, otherwise agency_id (creator)
+            const holder_agency_id = parcel.current_agency_id ?? parcel.agency_id;
+
+            if (!holder_agency_id) {
+               details.push({
+                  tracking_number: tn,
+                  status: "skipped",
+                  action: "error",
+                  reason: "Parcel has no current_agency_id or agency_id",
+               });
+               continue;
+            }
+
+            // Cannot receive from yourself (check holder, not creator)
+            if (holder_agency_id === receiver_agency_id) {
+               details.push({
+                  tracking_number: tn,
+                  status: "skipped",
+                  action: "error",
+                  reason: "Cannot receive parcel - already in your agency",
+               });
+               continue;
+            }
+
+            // NO DISPATCH: Group by billing sender (will check for surplus later)
+            if (!parcel.dispatch_id || !parcel.dispatch) {
+               const billingSenderId = await resolveBillingSender(holder_agency_id);
+               if (!withoutDispatch.has(billingSenderId)) {
+                  withoutDispatch.set(billingSenderId, []);
+               }
+               withoutDispatch.get(billingSenderId)!.push(parcel);
+
+               // If holder is a child/grandchild, create accounting group (holder -> billing sender)
+               if (billingSenderId !== holder_agency_id) {
+                  addToAccountingGroups(holder_agency_id, billingSenderId, [parcel]);
+               }
+               continue;
+            }
+
+            const dispatchData = parcel.dispatch;
+
+            // ALREADY FULLY PROCESSED: Skip
+            if (
+               dispatchData.status === DispatchStatus.RECEIVED ||
+               dispatchData.status === DispatchStatus.DISCREPANCY
+            ) {
+               details.push({
+                  tracking_number: tn,
+                  status: "skipped",
+                  action: "already_processed",
+                  dispatch_id: dispatchData.id,
+                  reason: `Parcel's dispatch ${dispatchData.id} is already in status ${dispatchData.status}`,
+               });
+               continue;
+            }
+
+            // IN DISPATCH (DRAFT, LOADING, DISPATCHED, RECEIVING, PARTIAL_RECEIVED)
+            if (
+               dispatchData.status === DispatchStatus.DRAFT ||
+               dispatchData.status === DispatchStatus.LOADING ||
+               dispatchData.status === DispatchStatus.DISPATCHED ||
+               dispatchData.status === DispatchStatus.RECEIVING ||
+               dispatchData.status === DispatchStatus.PARTIAL_RECEIVED
+            ) {
+               // Validate receiver matches (for DISPATCHED/RECEIVING/PARTIAL_RECEIVED)
+               if (
+                  (dispatchData.status === DispatchStatus.DISPATCHED ||
+                     dispatchData.status === DispatchStatus.RECEIVING ||
+                     dispatchData.status === DispatchStatus.PARTIAL_RECEIVED) &&
+                  dispatchData.receiver_agency_id &&
+                  dispatchData.receiver_agency_id !== receiver_agency_id
+               ) {
+                  details.push({
+                     tracking_number: tn,
+                     status: "skipped",
+                     action: "error",
+                     dispatch_id: dispatchData.id,
+                     reason: `Dispatch ${dispatchData.id} is assigned to agency ${dispatchData.receiver_agency_id}, not ${receiver_agency_id}`,
+                  });
+                  continue;
+               }
+
+               if (!inDispatch.has(dispatchData.id)) {
+                  inDispatch.set(dispatchData.id, { dispatch: dispatchData, parcels: [] });
+               }
+               inDispatch.get(dispatchData.id)!.parcels.push(parcel);
+               continue;
+            }
+
+            // Unknown status
+            details.push({
+               tracking_number: tn,
+               status: "skipped",
+               action: "error",
+               dispatch_id: dispatchData.id,
+               reason: `Unknown dispatch status: ${dispatchData.status}`,
+            });
+         }
+
+         // ========== 3. IDENTIFY SURPLUS PARCELS ==========
+         // Surplus = parcels without dispatch but from an agency that has a dispatch being received
+         const dispatchAgencies = new Set<number>();
+         for (const [, { dispatch }] of inDispatch) {
+            dispatchAgencies.add(dispatch.sender_agency_id);
+         }
+
+         // Map of agency_id -> dispatch_id for surplus assignment
+         const agencyToDispatch = new Map<number, number>();
+         for (const [dispatchId, { dispatch }] of inDispatch) {
+            if (!agencyToDispatch.has(dispatch.sender_agency_id)) {
+               agencyToDispatch.set(dispatch.sender_agency_id, dispatchId);
+            }
+         }
+
+         // Separate surplus from truly without-dispatch parcels
+         const surplusParcels = new Map<number, typeof parcels>(); // dispatch_id -> parcels
+         const trulyWithoutDispatch = new Map<number, typeof parcels>(); // agency_id -> parcels
+
+         for (const [agencyId, agencyParcels] of withoutDispatch) {
+            if (dispatchAgencies.has(agencyId)) {
+               // These are surplus - will be added to existing dispatch
+               const targetDispatchId = agencyToDispatch.get(agencyId)!;
+               if (!surplusParcels.has(targetDispatchId)) {
+                  surplusParcels.set(targetDispatchId, []);
+               }
+               surplusParcels.get(targetDispatchId)!.push(...agencyParcels);
+            } else {
+               // Truly without dispatch - will create new dispatch
+               trulyWithoutDispatch.set(agencyId, agencyParcels);
+            }
+         }
+
+         // ========== 4. PROCESS DISPATCHES ==========
+         const receptionDispatches: Array<{
+            dispatch_id: number;
+            sender_agency_id: number;
+            parcels_count: number;
+            status: "RECEIVED";
+            is_new: boolean;
+            origin_dispatch?: {
+               dispatch_id: number;
+               original_parcels_count: number;
+               remaining_parcels_count: number;
+               new_status: string;
+            };
+            surplus_parcels?: number;
+         }> = [];
+        const receptionDispatchParcels = new Map<number, typeof parcels>();
+        const receptionDispatchBillingSender = new Map<number, number>();
+        const accountingDispatches: Array<{
+           dispatch_id: number;
+           sender_agency_id: number;
+           receiver_agency_id: number;
+           parcels_count: number;
+           status: "RECEIVED";
+           origin_dispatch_id?: number;
+        }> = [];
+        const accountingDispatchParcels = new Map<number, typeof parcels>();
+
+         const parcelIdsProcessed: number[] = [];
+         let surplusCount = 0;
+
+         // ----- 4A. Process parcels IN dispatch -----
+         for (const [dispatchId, { dispatch: dispatchData, parcels: receivedParcels }] of inDispatch) {
+            const billingSenderId = await resolveBillingSender(dispatchData.sender_agency_id);
+            // Get all parcels currently in this dispatch
+            const totalParcelsInDispatch = await tx.parcel.count({
+               where: { dispatch_id: dispatchId },
+            });
+
+            // Get surplus parcels for this dispatch (if any)
+            const dispatchSurplus = surplusParcels.get(dispatchId) || [];
+
+            // CASE A: Receiving ALL parcels from dispatch (possibly + surplus)
+            if (receivedParcels.length === totalParcelsInDispatch) {
+               // Calculate total weight including surplus
+               let totalWeight = 0;
+               for (const p of receivedParcels) {
+                  totalWeight += Number(p.weight);
+               }
+               for (const p of dispatchSurplus) {
+                  totalWeight += Number(p.weight);
+               }
+
+               // Add surplus parcels to this dispatch
+               if (dispatchSurplus.length > 0) {
+                  await tx.parcel.updateMany({
+                     where: { id: { in: dispatchSurplus.map((p) => p.id) } },
+                     data: {
+                        dispatch_id: dispatchId,
+                        status: Status.RECEIVED_IN_DISPATCH,
+                        current_agency_id: receiver_agency_id, // Update holder
+                     },
+                  });
+
+                  await tx.parcelEvent.createMany({
+                     data: dispatchSurplus.map((p) => ({
+                        parcel_id: p.id,
+                        event_type: "RECEIVED_IN_DISPATCH" as const,
+                        notes: `Smart receive: Surplus added to dispatch ${dispatchId}`,
+                        user_id,
+                        status: Status.RECEIVED_IN_DISPATCH,
+                        dispatch_id: dispatchId,
+                     })),
+                  });
+
+                  for (const p of dispatchSurplus) {
+                     details.push({
+                        tracking_number: p.tracking_number,
+                        status: "received",
+                        action: "surplus_added",
+                        dispatch_id: dispatchId,
+                     });
+                     parcelIdsProcessed.push(p.id);
+                     surplusCount++;
+                  }
+               }
+
+               // Mark existing parcels as received
+               await tx.parcel.updateMany({
+                  where: { id: { in: receivedParcels.map((p) => p.id) } },
+                  data: {
+                     status: Status.RECEIVED_IN_DISPATCH,
+                     current_agency_id: receiver_agency_id, // Update holder
+                  },
+               });
+
+               await tx.parcelEvent.createMany({
+                  data: receivedParcels.map((p) => ({
+                     parcel_id: p.id,
+                     event_type: "RECEIVED_IN_DISPATCH" as const,
+                     notes: `Smart receive: Received in dispatch ${dispatchId}`,
+                     user_id,
+                     status: Status.RECEIVED_IN_DISPATCH,
+                     dispatch_id: dispatchId,
+                  })),
+               });
+
+               // Update dispatch as RECEIVED
+               const finalParcelCount = receivedParcels.length + dispatchSurplus.length;
+               await tx.dispatch.update({
+                  where: { id: dispatchId },
+                  data: {
+                     status: DispatchStatus.RECEIVED,
+                     receiver_agency_id: dispatchData.receiver_agency_id || receiver_agency_id,
+                     received_by_id: user_id,
+                     received_parcels_count: finalParcelCount,
+                     declared_parcels_count: finalParcelCount,
+                     declared_weight: Math.round(totalWeight * 100) / 100,
+                     weight: Math.round(totalWeight * 100) / 100,
+                  },
+               });
+
+               for (const p of receivedParcels) {
+                  details.push({
+                     tracking_number: p.tracking_number,
+                     status: "received",
+                     action: "received_in_dispatch",
+                     dispatch_id: dispatchId,
+                  });
+                  parcelIdsProcessed.push(p.id);
+               }
+
+               receptionDispatches.push({
+                  dispatch_id: dispatchId,
+                  sender_agency_id: dispatchData.sender_agency_id,
+                  parcels_count: finalParcelCount,
+                  status: "RECEIVED",
+                  is_new: false,
+                  surplus_parcels: dispatchSurplus.length > 0 ? dispatchSurplus.length : undefined,
+               });
+               const dispatchParcels = [...receivedParcels, ...dispatchSurplus];
+               receptionDispatchParcels.set(dispatchId, dispatchParcels);
+               receptionDispatchBillingSender.set(dispatchId, billingSenderId);
+               if (billingSenderId !== dispatchData.sender_agency_id) {
+                  addToAccountingGroups(dispatchData.sender_agency_id, billingSenderId, dispatchParcels);
+               }
+            }
+            // CASE B: Receiving PARTIAL parcels from dispatch → Extract to new dispatch
+            else {
+               // Calculate weight of parcels being extracted
+               let extractedWeight = 0;
+               for (const p of receivedParcels) {
+                  extractedWeight += Number(p.weight);
+               }
+
+               // Include surplus in the new reception dispatch
+               for (const p of dispatchSurplus) {
+                  extractedWeight += Number(p.weight);
+               }
+
+               // Create NEW reception dispatch linked to origin
+               const receptionDispatch = await tx.dispatch.create({
+                  data: {
+                     sender_agency_id: dispatchData.sender_agency_id,
+                     receiver_agency_id,
+                     created_by_id: user_id,
+                     received_by_id: user_id,
+                     status: DispatchStatus.RECEIVED,
+                     declared_parcels_count: receivedParcels.length + dispatchSurplus.length,
+                     received_parcels_count: receivedParcels.length + dispatchSurplus.length,
+                     declared_weight: Math.round(extractedWeight * 100) / 100,
+                     weight: Math.round(extractedWeight * 100) / 100,
+                     origin_dispatch_id: dispatchId,
+                  },
+               });
+
+               // Move parcels from origin to new reception dispatch
+               await tx.parcel.updateMany({
+                  where: { id: { in: receivedParcels.map((p) => p.id) } },
+                  data: {
+                     dispatch_id: receptionDispatch.id,
+                     status: Status.RECEIVED_IN_DISPATCH,
+                     current_agency_id: receiver_agency_id, // Update holder
+                  },
+               });
+
+               await tx.parcelEvent.createMany({
+                  data: receivedParcels.map((p) => ({
+                     parcel_id: p.id,
+                     event_type: "RECEIVED_IN_DISPATCH" as const,
+                     notes: `Smart receive: Extracted from dispatch ${dispatchId} to reception dispatch ${receptionDispatch.id}`,
+                     user_id,
+                     status: Status.RECEIVED_IN_DISPATCH,
+                     dispatch_id: receptionDispatch.id,
+                  })),
+               });
+
+               // Add surplus parcels to the new reception dispatch
+               if (dispatchSurplus.length > 0) {
+                  await tx.parcel.updateMany({
+                     where: { id: { in: dispatchSurplus.map((p) => p.id) } },
+                     data: {
+                        dispatch_id: receptionDispatch.id,
+                        status: Status.RECEIVED_IN_DISPATCH,
+                        current_agency_id: receiver_agency_id, // Update holder
+                     },
+                  });
+
+                  await tx.parcelEvent.createMany({
+                     data: dispatchSurplus.map((p) => ({
+                        parcel_id: p.id,
+                        event_type: "RECEIVED_IN_DISPATCH" as const,
+                        notes: `Smart receive: Surplus added to reception dispatch ${receptionDispatch.id}`,
+                        user_id,
+                        status: Status.RECEIVED_IN_DISPATCH,
+                        dispatch_id: receptionDispatch.id,
+                     })),
+                  });
+
+                  for (const p of dispatchSurplus) {
+                     details.push({
+                        tracking_number: p.tracking_number,
+                        status: "received",
+                        action: "surplus_added",
+                        dispatch_id: receptionDispatch.id,
+                     });
+                     parcelIdsProcessed.push(p.id);
+                     surplusCount++;
+                  }
+               }
+
+               // Count remaining parcels in origin dispatch
+               const remainingParcelCount = await tx.parcel.count({
+                  where: { dispatch_id: dispatchId },
+               });
+
+               // Recalculate origin dispatch weight
+               const remainingParcels = await tx.parcel.findMany({
+                  where: { dispatch_id: dispatchId },
+                  select: { weight: true },
+               });
+               let remainingWeight = 0;
+               for (const p of remainingParcels) {
+                  remainingWeight += Number(p.weight);
+               }
+
+               // Update origin dispatch as PARTIAL_RECEIVED
+               await tx.dispatch.update({
+                  where: { id: dispatchId },
+                  data: {
+                     status: DispatchStatus.PARTIAL_RECEIVED,
+                     declared_parcels_count: remainingParcelCount,
+                     declared_weight: Math.round(remainingWeight * 100) / 100,
+                     receiver_agency_id: dispatchData.receiver_agency_id || receiver_agency_id,
+                  },
+               });
+
+               for (const p of receivedParcels) {
+                  details.push({
+                     tracking_number: p.tracking_number,
+                     status: "received",
+                     action: "extracted_from_dispatch",
+                     dispatch_id: receptionDispatch.id,
+                     origin_dispatch_id: dispatchId,
+                  });
+                  parcelIdsProcessed.push(p.id);
+               }
+
+               receptionDispatches.push({
+                  dispatch_id: receptionDispatch.id,
+                  sender_agency_id: dispatchData.sender_agency_id,
+                  parcels_count: receivedParcels.length + dispatchSurplus.length,
+                  status: "RECEIVED",
+                  is_new: true,
+                  origin_dispatch: {
+                     dispatch_id: dispatchId,
+                     original_parcels_count: totalParcelsInDispatch,
+                     remaining_parcels_count: remainingParcelCount,
+                     new_status: DispatchStatus.PARTIAL_RECEIVED,
+                  },
+                  surplus_parcels: dispatchSurplus.length > 0 ? dispatchSurplus.length : undefined,
+               });
+               const dispatchParcels = [...receivedParcels, ...dispatchSurplus];
+               receptionDispatchParcels.set(receptionDispatch.id, dispatchParcels);
+               receptionDispatchBillingSender.set(receptionDispatch.id, billingSenderId);
+               if (billingSenderId !== dispatchData.sender_agency_id) {
+                  addToAccountingGroups(dispatchData.sender_agency_id, billingSenderId, dispatchParcels);
+               }
+            }
+
+            // Remove processed surplus from map
+            surplusParcels.delete(dispatchId);
+         }
+
+         // ----- 4B. Parcels WITHOUT dispatch (no related dispatch being received): Create new dispatch -----
+         for (const [sender_agency_id, agencyParcels] of trulyWithoutDispatch) {
+            let totalWeight = 0;
+            for (const p of agencyParcels) {
+               totalWeight += Number(p.weight);
+            }
+
+            const newDispatch = await tx.dispatch.create({
+               data: {
+                  sender_agency_id,
+                  receiver_agency_id,
+                  created_by_id: user_id,
+                  received_by_id: user_id,
+                  status: DispatchStatus.RECEIVED,
+                  declared_parcels_count: agencyParcels.length,
+                  received_parcels_count: agencyParcels.length,
+                  declared_weight: Math.round(totalWeight * 100) / 100,
+                  weight: Math.round(totalWeight * 100) / 100,
+               },
+            });
+
+            await tx.parcel.updateMany({
+               where: { id: { in: agencyParcels.map((p) => p.id) } },
+               data: {
+                  dispatch_id: newDispatch.id,
+                  status: Status.RECEIVED_IN_DISPATCH,
+                  current_agency_id: receiver_agency_id, // Update holder
+               },
+            });
+
+            await tx.parcelEvent.createMany({
+               data: agencyParcels.map((p) => ({
+                  parcel_id: p.id,
+                  event_type: "RECEIVED_IN_DISPATCH" as const,
+                  notes: `Smart receive: Created reception dispatch ${newDispatch.id}`,
+                  user_id,
+                  status: Status.RECEIVED_IN_DISPATCH,
+                  dispatch_id: newDispatch.id,
+               })),
+            });
+
+            for (const p of agencyParcels) {
+               details.push({
+                  tracking_number: p.tracking_number,
+                  status: "received",
+                  action: "received_in_dispatch",
+                  dispatch_id: newDispatch.id,
+               });
+               parcelIdsProcessed.push(p.id);
+            }
+
+            receptionDispatches.push({
+               dispatch_id: newDispatch.id,
+               sender_agency_id,
+               parcels_count: agencyParcels.length,
+               status: "RECEIVED",
+               is_new: true,
+            });
+            receptionDispatchParcels.set(newDispatch.id, [...agencyParcels]);
+            receptionDispatchBillingSender.set(newDispatch.id, sender_agency_id);
+         }
+
+         // ========== 5. CREATE ACCOUNTING DISPATCHES (C -> B) ==========
+         for (const [, group] of accountingGroups) {
+            const totalWeight = group.parcels.reduce((sum, p) => sum + Number(p.weight), 0);
+            const matchingReceptionDispatch = receptionDispatches.find(
+               (d) => d.sender_agency_id === group.receiver_agency_id
+            );
+
+            const accountingDispatch = await tx.dispatch.create({
+               data: {
+                  sender_agency_id: group.sender_agency_id,
+                  receiver_agency_id: group.receiver_agency_id,
+                  created_by_id: user_id,
+                  received_by_id: user_id,
+                  status: DispatchStatus.RECEIVED,
+                  declared_parcels_count: group.parcels.length,
+                  received_parcels_count: group.parcels.length,
+                  declared_weight: Math.round(totalWeight * 100) / 100,
+                  weight: Math.round(totalWeight * 100) / 100,
+                  origin_dispatch_id: matchingReceptionDispatch?.dispatch_id,
+                  payment_notes: "ACCOUNTING DISPATCH - Auto generated",
+               },
+            });
+
+            accountingDispatches.push({
+               dispatch_id: accountingDispatch.id,
+               sender_agency_id: group.sender_agency_id,
+               receiver_agency_id: group.receiver_agency_id,
+               parcels_count: group.parcels.length,
+               status: "RECEIVED",
+               origin_dispatch_id: matchingReceptionDispatch?.dispatch_id,
+            });
+            accountingDispatchParcels.set(accountingDispatch.id, [...group.parcels]);
+         }
+
+         // ========== 6. GENERATE DEBTS ==========
+         // Get all processed parcels with their info for debt calculation
+         const createdDebts: Array<{
+            debtor_agency_id: number;
+            creditor_agency_id: number;
+            amount_in_cents: number;
+            weight_in_lbs: number;
+            parcels_count: number;
+            dispatch_id: number;
+         }> = [];
+
+         // Debts for reception dispatches (B -> A)
+         for (const [dispatchId, dispatchParcels] of receptionDispatchParcels) {
+            const dispatchInfo = receptionDispatches.find((d) => d.dispatch_id === dispatchId);
+            if (!dispatchInfo) {
+               continue;
+            }
+            const billingSenderId =
+               receptionDispatchBillingSender.get(dispatchId) || dispatchInfo.sender_agency_id;
+
+            const debtInfos = await generateDispatchDebts(
+               receiver_agency_id,
+               dispatchParcels.map((p) => ({
+                  id: p.id,
+                  current_agency_id: billingSenderId, // Bill sender (B)
+                  agency_id: p.agency_id,
+                  weight: p.weight,
+                  order_items: p.order_items.map((oi) => ({
+                     weight: oi.weight,
+                     rate: oi.rate
+                        ? {
+                             product_id: oi.rate.product_id,
+                             service_id: oi.rate.service_id,
+                             product: { unit: oi.rate.product.unit },
+                          }
+                        : null,
+                  })),
+               })),
+               dispatchId
+            );
+
+            for (const debtInfo of debtInfos) {
+               await tx.interAgencyDebt.create({
+                  data: {
+                     debtor_agency_id: debtInfo.debtor_agency_id,
+                     creditor_agency_id: debtInfo.creditor_agency_id,
+                     dispatch_id: dispatchId,
+                     amount_in_cents: debtInfo.amount_in_cents,
+                     original_sender_agency_id: debtInfo.debtor_agency_id,
+                     relationship: debtInfo.relationship,
+                     status: DebtStatus.PENDING,
+                     notes: `Smart receive: ${debtInfo.parcels_count} parcels, ${debtInfo.weight_in_lbs.toFixed(2)} lbs`,
+                  },
+               });
+
+               createdDebts.push({
+                  debtor_agency_id: debtInfo.debtor_agency_id,
+                  creditor_agency_id: debtInfo.creditor_agency_id,
+                  amount_in_cents: debtInfo.amount_in_cents,
+                  weight_in_lbs: debtInfo.weight_in_lbs,
+                  parcels_count: debtInfo.parcels_count,
+                  dispatch_id: dispatchId,
+               });
+            }
+         }
+
+         // Debts for accounting dispatches (C -> B)
+         for (const [dispatchId, dispatchParcels] of accountingDispatchParcels) {
+            const dispatchInfo = accountingDispatches.find((d) => d.dispatch_id === dispatchId);
+            if (!dispatchInfo) {
+               continue;
+            }
+
+            const debtInfos = await generateDispatchDebts(
+               dispatchInfo.receiver_agency_id,
+               dispatchParcels.map((p) => ({
+                  id: p.id,
+                  current_agency_id: dispatchInfo.sender_agency_id, // Holder (C)
+                  agency_id: p.agency_id,
+                  weight: p.weight,
+                  order_items: p.order_items.map((oi) => ({
+                     weight: oi.weight,
+                     rate: oi.rate
+                        ? {
+                             product_id: oi.rate.product_id,
+                             service_id: oi.rate.service_id,
+                             product: { unit: oi.rate.product.unit },
+                          }
+                        : null,
+                  })),
+               })),
+               dispatchId
+            );
+
+            for (const debtInfo of debtInfos) {
+               await tx.interAgencyDebt.create({
+                  data: {
+                     debtor_agency_id: debtInfo.debtor_agency_id,
+                     creditor_agency_id: debtInfo.creditor_agency_id,
+                     dispatch_id: dispatchId,
+                     amount_in_cents: debtInfo.amount_in_cents,
+                     original_sender_agency_id: debtInfo.debtor_agency_id,
+                     relationship: debtInfo.relationship,
+                     status: DebtStatus.PENDING,
+                     notes: `Accounting dispatch: ${debtInfo.parcels_count} parcels, ${debtInfo.weight_in_lbs.toFixed(2)} lbs`,
+                  },
+               });
+
+               createdDebts.push({
+                  debtor_agency_id: debtInfo.debtor_agency_id,
+                  creditor_agency_id: debtInfo.creditor_agency_id,
+                  amount_in_cents: debtInfo.amount_in_cents,
+                  weight_in_lbs: debtInfo.weight_in_lbs,
+                  parcels_count: debtInfo.parcels_count,
+                  dispatch_id: dispatchId,
+               });
+            }
+         }
+
+         // ========== 7. BUILD RESULT ==========
+         const totalReceived = details.filter((d) => d.status === "received").length;
+         const totalSkipped = details.filter((d) => d.status === "skipped").length;
+
+         return {
+            summary: {
+               total_scanned: tracking_numbers.length,
+               total_received: totalReceived,
+               total_skipped: totalSkipped,
+               surplus_added: surplusCount,
+            },
+            reception_dispatches: receptionDispatches,
+            accounting_dispatches: accountingDispatches,
+            details,
+            parcelIds: parcelIdsProcessed,
+            debts_created: createdDebts,
+         };
+      });
+
+      // Update order statuses outside transaction
+      for (const parcelId of result.parcelIds) {
+         await updateOrderStatusFromParcel(parcelId);
+      }
+
+      return {
+         summary: result.summary,
+         reception_dispatches: result.reception_dispatches,
+         accounting_dispatches: result.accounting_dispatches,
+         details: result.details,
+         debts_created: result.debts_created,
+      };
    },
 };
 

@@ -332,3 +332,158 @@ export const determineHierarchyDebts = async (
    return debts;
 };
 
+/**
+ * Simple debt info for dispatch reception
+ */
+export interface DispatchDebtInfo {
+   debtor_agency_id: number;
+   creditor_agency_id: number;
+   amount_in_cents: number;
+   weight_in_lbs: number;
+   parcels_count: number;
+   relationship: string;
+}
+
+/**
+ * Generates debts for dispatch reception based on current holder → receiver
+ * 
+ * Simple logic:
+ * - Groups parcels by current_agency_id (who currently holds the parcel)
+ * - For each group, calculates debt: holder owes receiver
+ * - Uses pricing agreement between receiver (seller) and holder (buyer)
+ * 
+ * Example: A receives from B (which includes parcels originally from C)
+ * - Parcels with current_agency = B → B owes A (pricing A→B)
+ * - If there are parcels with current_agency = C → C owes A (pricing A→C) 
+ *   Note: This shouldn't happen if parcels properly went through B first
+ * 
+ * @param receiver_agency_id - Agency receiving the parcels
+ * @param parcels - Parcels being received with current_agency_id and order_items
+ * @param dispatch_id - Dispatch ID for reference
+ */
+export const generateDispatchDebts = async (
+   receiver_agency_id: number,
+   parcels: Array<{
+      id: number;
+      current_agency_id: number | null;
+      agency_id: number | null; // Original creator agency (fallback)
+      weight: any;
+      order_items: Array<{
+         weight: any;
+         rate: {
+            product_id: number;
+            product: { unit: string };
+            service_id: number;
+         } | null;
+      }>;
+   }>,
+   dispatch_id: number
+): Promise<DispatchDebtInfo[]> => {
+   const debts: DispatchDebtInfo[] = [];
+   
+   // Group parcels by holder agency (current_agency_id, fallback to agency_id)
+   const parcelsByHolder = new Map<number, {
+      weight: number;
+      parcels_count: number;
+      product_id: number | null;
+      service_id: number | null;
+   }>();
+   
+   for (const parcel of parcels) {
+      // Determine holder: use current_agency_id if set, otherwise fallback to agency_id
+      const holder_agency_id = parcel.current_agency_id ?? parcel.agency_id;
+      
+      if (!holder_agency_id) {
+         console.warn(`[generateDispatchDebts] Parcel ${parcel.id} has no current_agency_id or agency_id`);
+         continue;
+      }
+      
+      // Skip if holder is the same as receiver (shouldn't happen)
+      if (holder_agency_id === receiver_agency_id) {
+         continue;
+      }
+      
+      const parcelWeight = Number(parcel.weight);
+      
+      // Get product_id and service_id from first order_item with rate
+      let product_id: number | null = null;
+      let service_id: number | null = null;
+      for (const item of parcel.order_items) {
+         if (item.rate) {
+            product_id = item.rate.product_id;
+            service_id = item.rate.service_id;
+            break;
+         }
+      }
+      
+      const current = parcelsByHolder.get(holder_agency_id) || {
+         weight: 0,
+         parcels_count: 0,
+         product_id: null,
+         service_id: null,
+      };
+      
+      parcelsByHolder.set(holder_agency_id, {
+         weight: current.weight + parcelWeight,
+         parcels_count: current.parcels_count + 1,
+         product_id: product_id || current.product_id,
+         service_id: service_id || current.service_id,
+      });
+   }
+   
+   // Calculate debt for each holder
+   for (const [holder_agency_id, data] of parcelsByHolder.entries()) {
+      let pricePerLb = 0;
+      
+      // Try to get pricing agreement between receiver (seller) and holder (buyer)
+      if (data.product_id && data.service_id) {
+         const pricing = await getPricingBetweenAgencies(
+            receiver_agency_id,  // Seller (receives = sells transport service)
+            holder_agency_id,    // Buyer (holder = buys transport service)
+            data.product_id,
+            data.service_id
+         );
+         
+         if (pricing) {
+            pricePerLb = pricing;
+         }
+      }
+      
+      // If no specific pricing found, try to get any pricing between these agencies
+      if (pricePerLb === 0) {
+         const anyPricing = await prisma.pricingAgreement.findFirst({
+            where: {
+               seller_agency_id: receiver_agency_id,
+               buyer_agency_id: holder_agency_id,
+               is_active: true,
+            },
+            select: { price_in_cents: true },
+         });
+         
+         if (anyPricing) {
+            pricePerLb = anyPricing.price_in_cents;
+         }
+      }
+      
+      // Calculate amount (weight × price per lb)
+      const amount_in_cents = Math.round(data.weight * pricePerLb);
+      
+      if (amount_in_cents > 0) {
+         debts.push({
+            debtor_agency_id: holder_agency_id,
+            creditor_agency_id: receiver_agency_id,
+            amount_in_cents,
+            weight_in_lbs: data.weight,
+            parcels_count: data.parcels_count,
+            relationship: "dispatch_reception",
+         });
+      } else {
+         console.warn(
+            `[generateDispatchDebts] No pricing found between receiver ${receiver_agency_id} and holder ${holder_agency_id}. ` +
+            `Weight: ${data.weight}lbs, Parcels: ${data.parcels_count}`
+         );
+      }
+   }
+   
+   return debts;
+};

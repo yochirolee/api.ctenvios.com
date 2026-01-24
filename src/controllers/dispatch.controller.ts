@@ -190,6 +190,34 @@ export const dispatchController = {
    },
 
    /**
+    * Smart Receive - Intelligent parcel reception
+    * Automatically handles all scenarios:
+    * - Parcels without dispatch → Creates new RECEIVED dispatch
+    * - Parcels in DRAFT/LOADING dispatch → Finalizes and receives
+    * - Parcels in DISPATCHED dispatch → Receives in existing dispatch
+    * - Parcels already received → Skips with info
+    *
+    * This is the recommended endpoint for receiving parcels as it handles
+    * all edge cases automatically.
+    */
+   smartReceive: async (req: DispatchRequest, res: Response): Promise<void> => {
+      const user = req.user!;
+      const { tracking_numbers } = req.body;
+
+      if (!user.agency_id) {
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must be associated with an agency");
+      }
+
+      if (!Array.isArray(tracking_numbers) || tracking_numbers.length === 0) {
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "tracking_numbers array is required");
+      }
+
+      const result = await repository.dispatch.smartReceive(tracking_numbers, user.agency_id, user.id);
+
+      res.status(200).json(result);
+   },
+
+   /**
     * Create an empty dispatch (DRAFT status)
     */
    create: async (req: DispatchRequest, res: Response): Promise<void> => {
@@ -210,7 +238,11 @@ export const dispatchController = {
 
    /**
     * Add a parcel to dispatch by tracking number
-    * All validation happens inside the transaction (race-condition safe)
+    * 
+    * Validations (handled in repository):
+    * - Dispatch must be in DRAFT or LOADING status (ROOT can bypass)
+    * - Parcel must belong to sender agency or its child agencies
+    * - Parcel must have valid status and not be in another dispatch
     */
    addParcel: async (req: DispatchRequest, res: Response): Promise<void> => {
       const dispatchId = parseInt(req.params.id!);
@@ -221,27 +253,18 @@ export const dispatchController = {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "hbl is required");
       }
 
-      // Check if dispatch is DISPATCHED - only ROOT/ADMINISTRATOR can modify
-      const dispatch = await repository.dispatch.getById(dispatchId);
-      if (!dispatch) {
-         throw new AppError(HttpStatusCodes.NOT_FOUND, "Dispatch not found");
-      }
-
-      const adminRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
-      if (dispatch.status === DispatchStatus.DISPATCHED && !adminRoles.includes(user.role)) {
-         throw new AppError(
-            HttpStatusCodes.FORBIDDEN,
-            "Cannot add parcels to a dispatched shipment. Only administrators can modify dispatched shipments."
-         );
-      }
-
-      const parcelInDispatch = await repository.dispatch.addParcelToDispatch(hbl, dispatchId, user.id);
+      // Pass user role for ROOT bypass capability
+      const parcelInDispatch = await repository.dispatch.addParcelToDispatch(hbl, dispatchId, user.id, user.role);
 
       res.status(200).json(parcelInDispatch);
    },
 
    /**
     * Remove a parcel from dispatch
+    * 
+    * Validations (handled in repository):
+    * - Dispatch must be in DRAFT or LOADING status (ROOT can bypass)
+    * - Once DISPATCHED, parcels cannot be removed (except by ROOT)
     */
    removeParcel: async (req: DispatchRequest, res: Response): Promise<void> => {
       const { hbl } = req.params;
@@ -251,26 +274,8 @@ export const dispatchController = {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "HBL is required");
       }
 
-      // Get parcel to check its dispatch status
-      const parcelData = await repository.parcels.findParcelByHbl(hbl);
-      if (!parcelData) {
-         throw new AppError(HttpStatusCodes.NOT_FOUND, "Parcel not found");
-      }
-
-      if (parcelData.dispatch_id) {
-         const dispatch = await repository.dispatch.getById(parcelData.dispatch_id);
-         if (dispatch) {
-            const adminRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
-            if (dispatch.status === DispatchStatus.DISPATCHED && !adminRoles.includes(user.role)) {
-               throw new AppError(
-                  HttpStatusCodes.FORBIDDEN,
-                  "Cannot remove parcels from a dispatched shipment. Only administrators can modify dispatched shipments."
-               );
-            }
-         }
-      }
-
-      const parcel = await repository.dispatch.removeParcelFromDispatch(hbl, user.id);
+      // Pass user role for ROOT bypass capability
+      const parcel = await repository.dispatch.removeParcelFromDispatch(hbl, user.id, user.role);
 
       res.status(200).json(parcel);
    },
@@ -398,7 +403,7 @@ export const dispatchController = {
    /**
     * Delete dispatch
     * Only sender agency can delete, and only if status is DRAFT or CANCELLED
-    * ROOT users can delete any dispatch regardless of agency
+    * ROOT users can delete any dispatch regardless of agency or status
     * All parcels will be removed from dispatch and their previous status restored
     */
    delete: async (req: DispatchRequest, res: Response): Promise<void> => {
@@ -411,7 +416,12 @@ export const dispatchController = {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must be associated with an agency");
       }
 
-      const deletedDispatch = await repository.dispatch.delete(dispatchId, isRoot ? null : user.agency_id!, user.id);
+      const deletedDispatch = await repository.dispatch.delete(
+         dispatchId,
+         isRoot ? null : user.agency_id!,
+         user.id,
+         user.role
+      );
 
       res.status(200).json({ message: "Dispatch deleted successfully", dispatch: deletedDispatch });
    },

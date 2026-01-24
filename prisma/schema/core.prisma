@@ -105,7 +105,8 @@ model Agency {
     orders                Order[]
     created_dispatches    Dispatch[]        @relation("created_dispatches")
     received_dispatches   Dispatch[]        @relation("received_dispatches")
-    parcels               Parcel[]
+    created_parcels       Parcel[]          @relation("created_parcels")
+    holding_parcels       Parcel[]          @relation("holding_parcels")
     pallets               Pallet[]
     debtor_debts          InterAgencyDebt[] @relation("DebtorAgency")
     creditor_debts        InterAgencyDebt[] @relation("CreditorAgency")
