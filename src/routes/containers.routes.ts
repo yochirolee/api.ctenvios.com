@@ -76,6 +76,10 @@ const addParcelsByOrderSchema = z.object({
    order_id: z.number().int().positive("Order ID is required"),
 });
 
+const addParcelsByDispatchSchema = z.object({
+   dispatch_id: z.number().int().positive("Dispatch ID is required"),
+});
+
 const idParamSchema = z.object({
    id: z.string().regex(/^\d+$/, "ID must be a number").transform(Number),
 });
@@ -142,6 +146,14 @@ router.post(
    validate({ params: idParamSchema, body: addParcelsByOrderSchema }),
    containers.addParcelsByOrderId
 );
+
+// POST /containers/:id/parcels/by-dispatch - Add all parcels from a dispatch to container
+router.post(
+   "/:id/parcels/by-dispatch",
+   requireRoles(CONTAINER_ADMIN_ROLES),
+   validate({ params: idParamSchema, body: addParcelsByDispatchSchema }),
+   containers.addParcelsByDispatchId
+);       
 
 // DELETE /containers/:id/parcels/:trackingNumber - Remove parcel from container
 router.delete("/:id/parcels/:trackingNumber", requireRoles(CONTAINER_ADMIN_ROLES), containers.removeParcel);

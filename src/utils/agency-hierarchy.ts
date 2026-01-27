@@ -1,7 +1,5 @@
 import prisma from "../lib/prisma.client";
-import { DebtStatus, Unit } from "@prisma/client";
-import { AppError } from "../common/app-errors";
-import HttpStatusCodes from "../common/https-status-codes";
+import { DebtStatus } from "@prisma/client";
 
 /**
  * Cache for pricing agreements to avoid repeated DB queries
@@ -345,20 +343,205 @@ export interface DispatchDebtInfo {
 }
 
 /**
+ * Hierarchical debt info - includes all intermediate debts
+ */
+export interface HierarchicalDebtInfo {
+   debtor_agency_id: number;
+   creditor_agency_id: number;
+   amount_in_cents: number;
+   weight_in_lbs: number;
+   parcels_count: number;
+   relationship: string;
+   original_holder_agency_id: number;
+}
+
+/**
+ * Generates hierarchical debts for reception without dispatch
+ * 
+ * Includes ALL costs: transport + customs + insurance + delivery + charges
+ * 
+ * When A (FORWARDER) receives from C (who is child of B):
+ * - C owes B the TOTAL cost (parent relationship)
+ * - B owes A the TOTAL cost (as intermediary responsible)
+ * 
+ * When A receives from B (direct child):
+ * - B owes A the TOTAL cost (direct)
+ * 
+ * @param receiver_agency_id - Agency receiving the parcels (e.g., A)
+ * @param parcels - Parcels being received with current_agency_id and order_items (including all fees)
+ * @param dispatch_id - Dispatch ID for reference (logging)
+ */
+export const generateHierarchicalDebts = async (
+   receiver_agency_id: number,
+   parcels: Array<{
+      id: number;
+      current_agency_id: number | null;
+      agency_id: number | null;
+      weight: any;
+      order_items: Array<{
+         weight: any;
+         price_in_cents?: number | null;
+         customs_fee_in_cents?: number | null;
+         insurance_fee_in_cents?: number | null;
+         delivery_fee_in_cents?: number | null;
+         charge_fee_in_cents?: number | null;
+         rate: {
+            product_id: number;
+            product: { unit: string };
+            service_id: number;
+         } | null;
+      }>;
+   }>,
+   dispatch_id: number
+): Promise<HierarchicalDebtInfo[]> => {
+   const allDebts: HierarchicalDebtInfo[] = [];
+   const errors: string[] = [];
+
+   // Group parcels by holder agency (current_agency_id, fallback to agency_id)
+   const parcelsByHolder = new Map<
+      number,
+      {
+         weight: number;
+         parcels_count: number;
+         total_cost_in_cents: number; // Total including all fees
+         parcel_ids: number[];
+      }
+   >();
+
+   for (const parcel of parcels) {
+      const holder_agency_id = parcel.current_agency_id ?? parcel.agency_id;
+
+      if (!holder_agency_id) {
+         errors.push(`Parcel ${parcel.id} has no current_agency_id or agency_id`);
+         continue;
+      }
+
+      // Skip if holder is the same as receiver
+      if (holder_agency_id === receiver_agency_id) {
+         continue;
+      }
+
+      const parcelWeight = Number(parcel.weight);
+
+      // Calculate TOTAL cost from order_items (price + customs + insurance + delivery + charges)
+      let parcelTotalCost = 0;
+      for (const item of parcel.order_items) {
+         parcelTotalCost += item.price_in_cents || 0;
+         parcelTotalCost += item.customs_fee_in_cents || 0;
+         parcelTotalCost += item.insurance_fee_in_cents || 0;
+         parcelTotalCost += item.delivery_fee_in_cents || 0;
+         parcelTotalCost += item.charge_fee_in_cents || 0;
+      }
+
+      const current = parcelsByHolder.get(holder_agency_id) || {
+         weight: 0,
+         parcels_count: 0,
+         total_cost_in_cents: 0,
+         parcel_ids: [],
+      };
+
+      parcelsByHolder.set(holder_agency_id, {
+         weight: current.weight + parcelWeight,
+         parcels_count: current.parcels_count + 1,
+         total_cost_in_cents: current.total_cost_in_cents + parcelTotalCost,
+         parcel_ids: [...current.parcel_ids, parcel.id],
+      });
+   }
+
+   if (parcelsByHolder.size === 0) {
+      if (errors.length > 0) {
+         console.warn(`[generateHierarchicalDebts] Warnings for dispatch ${dispatch_id}:`, errors);
+      }
+      return [];
+   }
+
+   // Process each holder group
+   for (const [holder_agency_id, data] of parcelsByHolder.entries()) {
+      // Get hierarchy from holder up to root
+      // e.g., if holder = C and hierarchy is C → B → A
+      // getAgencyHierarchy(C) returns [B, A]
+      const hierarchy = await getAgencyHierarchy(holder_agency_id);
+
+      // Find receiver's position in the hierarchy
+      const receiverIndex = hierarchy.indexOf(receiver_agency_id);
+
+      if (receiverIndex === -1) {
+         // Receiver is not in holder's hierarchy
+         // This could be a FORWARDER that's not a direct ancestor
+         // Create single direct debt: holder → receiver with TOTAL cost
+         if (data.total_cost_in_cents > 0) {
+            allDebts.push({
+               debtor_agency_id: holder_agency_id,
+               creditor_agency_id: receiver_agency_id,
+               amount_in_cents: data.total_cost_in_cents,
+               weight_in_lbs: data.weight,
+               parcels_count: data.parcels_count,
+               relationship: "direct_to_forwarder",
+               original_holder_agency_id: holder_agency_id,
+            });
+         }
+         continue;
+      }
+
+      // For hierarchical debts, each level owes the SAME total cost
+      // This represents the full value being transferred up the chain
+      // C → B (total), B → A (total)
+      // Each agency in the chain is responsible for the full amount
+      let currentDebtor = holder_agency_id;
+
+      for (let i = 0; i <= receiverIndex; i++) {
+         const creditor = hierarchy[i];
+
+         const relationship =
+            i === 0
+               ? "parent"
+               : i === receiverIndex
+                 ? "final_receiver"
+                 : `intermediate_level_${i + 1}`;
+
+         if (data.total_cost_in_cents > 0) {
+            allDebts.push({
+               debtor_agency_id: currentDebtor,
+               creditor_agency_id: creditor,
+               amount_in_cents: data.total_cost_in_cents,
+               weight_in_lbs: data.weight,
+               parcels_count: data.parcels_count,
+               relationship,
+               original_holder_agency_id: holder_agency_id,
+            });
+         } else {
+            console.warn(
+               `[generateHierarchicalDebts] No cost found: creditor=${creditor}, debtor=${currentDebtor}, weight=${data.weight}`
+            );
+         }
+
+         // The next debtor is the current creditor
+         currentDebtor = creditor;
+      }
+   }
+
+   if (errors.length > 0) {
+      console.warn(`[generateHierarchicalDebts] Warnings for dispatch ${dispatch_id}:`, errors);
+   }
+
+   return allDebts;
+};
+
+/**
  * Generates debts for dispatch reception based on current holder → receiver
  * 
- * Simple logic:
- * - Groups parcels by current_agency_id (who currently holds the parcel)
- * - For each group, calculates debt: holder owes receiver
- * - Uses pricing agreement between receiver (seller) and holder (buyer)
+ * Includes ALL costs that the receiver (FORWARDER) covers:
+ * - Transport cost (price × weight)
+ * - Customs fees (aduanal)
+ * - Insurance fees (seguro)
+ * - Delivery fees
+ * - Other charges
  * 
  * Example: A receives from B (which includes parcels originally from C)
- * - Parcels with current_agency = B → B owes A (pricing A→B)
- * - If there are parcels with current_agency = C → C owes A (pricing A→C) 
- *   Note: This shouldn't happen if parcels properly went through B first
+ * - Parcels with current_agency = B → B owes A the TOTAL cost of those parcels
  * 
  * @param receiver_agency_id - Agency receiving the parcels
- * @param parcels - Parcels being received with current_agency_id and order_items
+ * @param parcels - Parcels being received with current_agency_id and order_items (including all fees)
  * @param dispatch_id - Dispatch ID for reference
  */
 export const generateDispatchDebts = async (
@@ -370,6 +553,11 @@ export const generateDispatchDebts = async (
       weight: any;
       order_items: Array<{
          weight: any;
+         price_in_cents?: number | null;
+         customs_fee_in_cents?: number | null;
+         insurance_fee_in_cents?: number | null;
+         delivery_fee_in_cents?: number | null;
+         charge_fee_in_cents?: number | null;
          rate: {
             product_id: number;
             product: { unit: string };
@@ -385,6 +573,7 @@ export const generateDispatchDebts = async (
    const parcelsByHolder = new Map<number, {
       weight: number;
       parcels_count: number;
+      total_cost_in_cents: number; // Total including all fees
       product_id: number | null;
       service_id: number | null;
    }>();
@@ -405,20 +594,33 @@ export const generateDispatchDebts = async (
       
       const parcelWeight = Number(parcel.weight);
       
-      // Get product_id and service_id from first order_item with rate
+      // Calculate TOTAL cost from order_items (price + customs + insurance + delivery + charges)
+      let parcelTotalCost = 0;
       let product_id: number | null = null;
       let service_id: number | null = null;
+      
       for (const item of parcel.order_items) {
-         if (item.rate) {
+         // Add transport price
+         parcelTotalCost += item.price_in_cents || 0;
+         // Add customs fee (aduanal)
+         parcelTotalCost += item.customs_fee_in_cents || 0;
+         // Add insurance fee (seguro)
+         parcelTotalCost += item.insurance_fee_in_cents || 0;
+         // Add delivery fee
+         parcelTotalCost += item.delivery_fee_in_cents || 0;
+         // Add other charges
+         parcelTotalCost += item.charge_fee_in_cents || 0;
+         
+         if (item.rate && !product_id) {
             product_id = item.rate.product_id;
             service_id = item.rate.service_id;
-            break;
          }
       }
       
       const current = parcelsByHolder.get(holder_agency_id) || {
          weight: 0,
          parcels_count: 0,
+         total_cost_in_cents: 0,
          product_id: null,
          service_id: null,
       };
@@ -426,47 +628,16 @@ export const generateDispatchDebts = async (
       parcelsByHolder.set(holder_agency_id, {
          weight: current.weight + parcelWeight,
          parcels_count: current.parcels_count + 1,
+         total_cost_in_cents: current.total_cost_in_cents + parcelTotalCost,
          product_id: product_id || current.product_id,
          service_id: service_id || current.service_id,
       });
    }
    
-   // Calculate debt for each holder
+   // Create debt for each holder using TOTAL cost (not just weight × price)
    for (const [holder_agency_id, data] of parcelsByHolder.entries()) {
-      let pricePerLb = 0;
-      
-      // Try to get pricing agreement between receiver (seller) and holder (buyer)
-      if (data.product_id && data.service_id) {
-         const pricing = await getPricingBetweenAgencies(
-            receiver_agency_id,  // Seller (receives = sells transport service)
-            holder_agency_id,    // Buyer (holder = buys transport service)
-            data.product_id,
-            data.service_id
-         );
-         
-         if (pricing) {
-            pricePerLb = pricing;
-         }
-      }
-      
-      // If no specific pricing found, try to get any pricing between these agencies
-      if (pricePerLb === 0) {
-         const anyPricing = await prisma.pricingAgreement.findFirst({
-            where: {
-               seller_agency_id: receiver_agency_id,
-               buyer_agency_id: holder_agency_id,
-               is_active: true,
-            },
-            select: { price_in_cents: true },
-         });
-         
-         if (anyPricing) {
-            pricePerLb = anyPricing.price_in_cents;
-         }
-      }
-      
-      // Calculate amount (weight × price per lb)
-      const amount_in_cents = Math.round(data.weight * pricePerLb);
+      // Use the actual total cost from order_items
+      const amount_in_cents = data.total_cost_in_cents;
       
       if (amount_in_cents > 0) {
          debts.push({
@@ -479,7 +650,7 @@ export const generateDispatchDebts = async (
          });
       } else {
          console.warn(
-            `[generateDispatchDebts] No pricing found between receiver ${receiver_agency_id} and holder ${holder_agency_id}. ` +
+            `[generateDispatchDebts] No cost found for parcels from holder ${holder_agency_id}. ` +
             `Weight: ${data.weight}lbs, Parcels: ${data.parcels_count}`
          );
       }

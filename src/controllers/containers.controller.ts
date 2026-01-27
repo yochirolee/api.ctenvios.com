@@ -190,6 +190,19 @@ export const containers = {
    },
 
    /**
+    * Add all parcels from a dispatch to container
+    */
+   addParcelsByDispatchId: async (req: ContainerRequest, res: Response): Promise<void> => {
+      const { id } = req.params;
+      const { dispatch_id } = req.body;
+      const user = req.user;
+
+      const result = await containersRepository.addParcelsByDispatchId(Number(id), dispatch_id, user!.id);
+
+      res.status(200).json(result);
+   },
+
+   /**
     * Remove parcel from container
     */
    removeParcel: async (req: ContainerRequest, res: Response): Promise<void> => {

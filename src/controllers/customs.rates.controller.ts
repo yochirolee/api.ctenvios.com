@@ -21,7 +21,7 @@ const customsRates = {
       const { rows, total } = await repository.customsRates.search(
          query as string,
          parseInt(page as string) || 1,
-         parseInt(limit as string) || 25
+         parseInt(limit as string) || 500
       );
       res.status(200).json({ rows, total });
    },

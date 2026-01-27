@@ -1,17 +1,20 @@
 import HttpStatusCodes from "../common/https-status-codes";
 import prisma from "../lib/prisma.client";
-import { Dispatch, DispatchStatus, Parcel, PaymentStatus, Prisma, Status, DebtStatus, Roles } from "@prisma/client";
+import { Dispatch, DispatchStatus, Parcel, PaymentStatus, Prisma, Status, DebtStatus, Roles, AgencyType } from "@prisma/client";
 import { AppError } from "../common/app-errors";
 import parcelsRepository from "./parcels.repository";
 import { calculateDispatchCost } from "../utils/dispatch-utils";
 import interAgencyDebtsRepository from "./inter-agency-debts.repository";
-import { determineHierarchyDebts, generateDispatchDebts } from "../utils/agency-hierarchy";
+import { determineHierarchyDebts, generateDispatchDebts, generateHierarchicalDebts } from "../utils/agency-hierarchy";
 import { updateOrderStatusFromParcel } from "../utils/order-status-calculator";
 import {
    validateDispatchModifiable,
    validateParcelOwnershipInTx,
    MODIFIABLE_DISPATCH_STATUSES,
    getAgencyParentHierarchy,
+   validateCanReceiveFromInTx,
+   isForwarderAgencyInTx,
+   getAllChildAgenciesInTx,
 } from "../utils/dispatch-validation";
 
 // Allowed statuses for parcels to be added to dispatch
@@ -1279,6 +1282,13 @@ const dispatch = {
             dispatch_id?: number;
          }> = [];
 
+         // Determine if receiver is FORWARDER (for status determination)
+         const receiverIsForwarder = await isForwarderAgencyInTx(tx, receiver_agency_id);
+         const receiverChildAgencies = await getAllChildAgenciesInTx(tx, receiver_agency_id);
+         
+         // Determine the appropriate status for received parcels
+         const receivedParcelStatus = receiverIsForwarder ? Status.IN_WAREHOUSE : Status.RECEIVED_IN_DISPATCH;
+
          // 1. Fetch all parcels
          const parcels = await tx.parcel.findMany({
             where: {
@@ -1319,7 +1329,11 @@ const dispatch = {
                });
                continue;
             }
-            if (!parcel.agency_id) {
+            
+            // Determine holder: current_agency_id if set, otherwise agency_id
+            const holder_agency_id = parcel.current_agency_id ?? parcel.agency_id;
+            
+            if (!holder_agency_id) {
                details.push({
                   tracking_number: tn,
                   status: "skipped",
@@ -1328,7 +1342,7 @@ const dispatch = {
                continue;
             }
             // Cannot receive from yourself
-            if (parcel.agency_id === receiver_agency_id) {
+            if (holder_agency_id === receiver_agency_id) {
                details.push({
                   tracking_number: tn,
                   status: "skipped",
@@ -1336,12 +1350,27 @@ const dispatch = {
                });
                continue;
             }
-
-            // Group by sender agency
-            if (!parcelsByAgency.has(parcel.agency_id)) {
-               parcelsByAgency.set(parcel.agency_id, []);
+            
+            // Validate receiver can receive from this holder
+            // FORWARDER can receive from anyone, regular agencies only from their children
+            if (!receiverIsForwarder && !receiverChildAgencies.includes(holder_agency_id)) {
+               const holderAgency = await tx.agency.findUnique({
+                  where: { id: holder_agency_id },
+                  select: { name: true },
+               });
+               details.push({
+                  tracking_number: tn,
+                  status: "skipped",
+                  reason: `Cannot receive from agency "${holderAgency?.name || holder_agency_id}" - not a child agency`,
+               });
+               continue;
             }
-            parcelsByAgency.get(parcel.agency_id)!.push(parcel);
+
+            // Group by sender agency (holder)
+            if (!parcelsByAgency.has(holder_agency_id)) {
+               parcelsByAgency.set(holder_agency_id, []);
+            }
+            parcelsByAgency.get(holder_agency_id)!.push(parcel);
          }
 
          if (parcelsByAgency.size === 0) {
@@ -1381,7 +1410,8 @@ const dispatch = {
                },
                data: {
                   dispatch_id: dispatch.id,
-                  status: Status.RECEIVED_IN_DISPATCH,
+                  status: receivedParcelStatus,
+                  current_agency_id: receiver_agency_id, // Update holder
                },
             });
 
@@ -1389,11 +1419,11 @@ const dispatch = {
             await tx.parcelEvent.createMany({
                data: agencyParcels.map((p) => ({
                   parcel_id: p.id,
-                  event_type: "RECEIVED_IN_DISPATCH" as any,
-                  notes: `Received without prior dispatch. Dispatch ${dispatch.id} created.`,
+                  event_type: "RECEIVED_IN_DISPATCH" as const,
+                  notes: `Received without prior dispatch. Dispatch ${dispatch.id} created.${receiverIsForwarder ? " (arrived at warehouse)" : ""}`,
                   user_id,
                   location_id: p.current_location_id || null,
-                  status: Status.RECEIVED_IN_DISPATCH,
+                  status: receivedParcelStatus,
                   dispatch_id: dispatch.id,
                })),
             });
@@ -1688,6 +1718,11 @@ const dispatch = {
                order_items: {
                   select: {
                      weight: true,
+                     price_in_cents: true,
+                     customs_fee_in_cents: true,
+                     insurance_fee_in_cents: true,
+                     delivery_fee_in_cents: true,
+                     charge_fee_in_cents: true,
                      rate: {
                         select: {
                            product_id: true,
@@ -1703,6 +1738,16 @@ const dispatch = {
          const parcelMap = new Map(parcels.map((p) => [p.tracking_number, p]));
 
          // ========== 2. CLASSIFY PARCELS ==========
+
+         // Determine if receiver is FORWARDER (for status determination)
+         const receiverIsForwarder = await isForwarderAgencyInTx(tx, receiver_agency_id);
+         // Get all child agencies of receiver (for reception validation)
+         const receiverChildAgencies = await getAllChildAgenciesInTx(tx, receiver_agency_id);
+
+         // Determine the appropriate status for received parcels
+         // FORWARDER receives → IN_WAREHOUSE
+         // Regular agency receives → RECEIVED_IN_DISPATCH
+         const receivedParcelStatus = receiverIsForwarder ? Status.IN_WAREHOUSE : Status.RECEIVED_IN_DISPATCH;
 
          // Group 1: Parcels without dispatch - group by billing sender (potential surplus)
          const withoutDispatch = new Map<number, typeof parcels>();
@@ -1753,6 +1798,16 @@ const dispatch = {
             }
             accountingGroups.get(accountingKey)!.parcels.push(...parcelsToAdd);
          };
+         
+         // Helper to validate if receiver can receive from holder
+         const canReceiveFrom = (holder_agency_id: number): boolean => {
+            // FORWARDER can receive from anyone
+            if (receiverIsForwarder) {
+               return true;
+            }
+            // Regular agencies can only receive from their child agencies
+            return receiverChildAgencies.includes(holder_agency_id);
+         };
 
          // Group 2: Parcels IN a dispatch - group by dispatch_id
          const inDispatch = new Map<
@@ -1800,6 +1855,22 @@ const dispatch = {
                continue;
             }
 
+            // Validate receiver can receive from this holder
+            // FORWARDER can receive from anyone, regular agencies only from their children
+            if (!canReceiveFrom(holder_agency_id)) {
+               const holderAgency = await tx.agency.findUnique({
+                  where: { id: holder_agency_id },
+                  select: { name: true },
+               });
+               details.push({
+                  tracking_number: tn,
+                  status: "skipped",
+                  action: "error",
+                  reason: `Cannot receive from agency "${holderAgency?.name || holder_agency_id}" - not a child agency`,
+               });
+               continue;
+            }
+
             // NO DISPATCH: Group by billing sender (will check for surplus later)
             if (!parcel.dispatch_id || !parcel.dispatch) {
                const billingSenderId = await resolveBillingSender(holder_agency_id);
@@ -1817,17 +1888,38 @@ const dispatch = {
 
             const dispatchData = parcel.dispatch;
 
-            // ALREADY FULLY PROCESSED: Skip
+            // DISPATCH ALREADY COMPLETED (RECEIVED/DISCREPANCY):
+            // The parcel already completed its journey in that dispatch.
+            // It can now be received in a NEW dispatch by the next agency in the chain.
+            // Example: C→B (D1 RECEIVED), now B→A should create a new dispatch D2
             if (
                dispatchData.status === DispatchStatus.RECEIVED ||
                dispatchData.status === DispatchStatus.DISCREPANCY
             ) {
+               // Verify the current holder (current_agency_id) matches the previous receiver
+               // This ensures the parcel actually arrived at its destination before moving on
+               if (parcel.current_agency_id === dispatchData.receiver_agency_id) {
+                  // Parcel completed previous journey, treat as "without active dispatch"
+                  const billingSenderId = await resolveBillingSender(holder_agency_id);
+                  if (!withoutDispatch.has(billingSenderId)) {
+                     withoutDispatch.set(billingSenderId, []);
+                  }
+                  withoutDispatch.get(billingSenderId)!.push(parcel);
+
+                  // If holder is different from billing sender, create accounting group
+                  if (billingSenderId !== holder_agency_id) {
+                     addToAccountingGroups(holder_agency_id, billingSenderId, [parcel]);
+                  }
+                  continue;
+               }
+               
+               // If current_agency doesn't match dispatch receiver, something is wrong
                details.push({
                   tracking_number: tn,
                   status: "skipped",
                   action: "already_processed",
                   dispatch_id: dispatchData.id,
-                  reason: `Parcel's dispatch ${dispatchData.id} is already in status ${dispatchData.status}`,
+                  reason: `Parcel's dispatch ${dispatchData.id} is ${dispatchData.status} but parcel location mismatch`,
                });
                continue;
             }
@@ -1966,7 +2058,7 @@ const dispatch = {
                      where: { id: { in: dispatchSurplus.map((p) => p.id) } },
                      data: {
                         dispatch_id: dispatchId,
-                        status: Status.RECEIVED_IN_DISPATCH,
+                        status: receivedParcelStatus,
                         current_agency_id: receiver_agency_id, // Update holder
                      },
                   });
@@ -1975,9 +2067,9 @@ const dispatch = {
                      data: dispatchSurplus.map((p) => ({
                         parcel_id: p.id,
                         event_type: "RECEIVED_IN_DISPATCH" as const,
-                        notes: `Smart receive: Surplus added to dispatch ${dispatchId}`,
+                        notes: `Smart receive: Surplus added to dispatch ${dispatchId}${receiverIsForwarder ? " (arrived at warehouse)" : ""}`,
                         user_id,
-                        status: Status.RECEIVED_IN_DISPATCH,
+                        status: receivedParcelStatus,
                         dispatch_id: dispatchId,
                      })),
                   });
@@ -1998,7 +2090,7 @@ const dispatch = {
                await tx.parcel.updateMany({
                   where: { id: { in: receivedParcels.map((p) => p.id) } },
                   data: {
-                     status: Status.RECEIVED_IN_DISPATCH,
+                     status: receivedParcelStatus,
                      current_agency_id: receiver_agency_id, // Update holder
                   },
                });
@@ -2007,9 +2099,9 @@ const dispatch = {
                   data: receivedParcels.map((p) => ({
                      parcel_id: p.id,
                      event_type: "RECEIVED_IN_DISPATCH" as const,
-                     notes: `Smart receive: Received in dispatch ${dispatchId}`,
+                     notes: `Smart receive: Received in dispatch ${dispatchId}${receiverIsForwarder ? " (arrived at warehouse)" : ""}`,
                      user_id,
-                     status: Status.RECEIVED_IN_DISPATCH,
+                     status: receivedParcelStatus,
                      dispatch_id: dispatchId,
                   })),
                });
@@ -2088,7 +2180,7 @@ const dispatch = {
                   where: { id: { in: receivedParcels.map((p) => p.id) } },
                   data: {
                      dispatch_id: receptionDispatch.id,
-                     status: Status.RECEIVED_IN_DISPATCH,
+                     status: receivedParcelStatus,
                      current_agency_id: receiver_agency_id, // Update holder
                   },
                });
@@ -2097,9 +2189,9 @@ const dispatch = {
                   data: receivedParcels.map((p) => ({
                      parcel_id: p.id,
                      event_type: "RECEIVED_IN_DISPATCH" as const,
-                     notes: `Smart receive: Extracted from dispatch ${dispatchId} to reception dispatch ${receptionDispatch.id}`,
+                     notes: `Smart receive: Extracted from dispatch ${dispatchId} to reception dispatch ${receptionDispatch.id}${receiverIsForwarder ? " (arrived at warehouse)" : ""}`,
                      user_id,
-                     status: Status.RECEIVED_IN_DISPATCH,
+                     status: receivedParcelStatus,
                      dispatch_id: receptionDispatch.id,
                   })),
                });
@@ -2110,7 +2202,7 @@ const dispatch = {
                      where: { id: { in: dispatchSurplus.map((p) => p.id) } },
                      data: {
                         dispatch_id: receptionDispatch.id,
-                        status: Status.RECEIVED_IN_DISPATCH,
+                        status: receivedParcelStatus,
                         current_agency_id: receiver_agency_id, // Update holder
                      },
                   });
@@ -2119,9 +2211,9 @@ const dispatch = {
                      data: dispatchSurplus.map((p) => ({
                         parcel_id: p.id,
                         event_type: "RECEIVED_IN_DISPATCH" as const,
-                        notes: `Smart receive: Surplus added to reception dispatch ${receptionDispatch.id}`,
+                        notes: `Smart receive: Surplus added to reception dispatch ${receptionDispatch.id}${receiverIsForwarder ? " (arrived at warehouse)" : ""}`,
                         user_id,
-                        status: Status.RECEIVED_IN_DISPATCH,
+                        status: receivedParcelStatus,
                         dispatch_id: receptionDispatch.id,
                      })),
                   });
@@ -2226,7 +2318,7 @@ const dispatch = {
                where: { id: { in: agencyParcels.map((p) => p.id) } },
                data: {
                   dispatch_id: newDispatch.id,
-                  status: Status.RECEIVED_IN_DISPATCH,
+                  status: receivedParcelStatus,
                   current_agency_id: receiver_agency_id, // Update holder
                },
             });
@@ -2235,9 +2327,9 @@ const dispatch = {
                data: agencyParcels.map((p) => ({
                   parcel_id: p.id,
                   event_type: "RECEIVED_IN_DISPATCH" as const,
-                  notes: `Smart receive: Created reception dispatch ${newDispatch.id}`,
+                  notes: `Smart receive: Created reception dispatch ${newDispatch.id}${receiverIsForwarder ? " (arrived at warehouse)" : ""}`,
                   user_id,
-                  status: Status.RECEIVED_IN_DISPATCH,
+                  status: receivedParcelStatus,
                   dispatch_id: newDispatch.id,
                })),
             });
@@ -2326,6 +2418,11 @@ const dispatch = {
                   weight: p.weight,
                   order_items: p.order_items.map((oi) => ({
                      weight: oi.weight,
+                     price_in_cents: oi.price_in_cents,
+                     customs_fee_in_cents: oi.customs_fee_in_cents,
+                     insurance_fee_in_cents: oi.insurance_fee_in_cents,
+                     delivery_fee_in_cents: oi.delivery_fee_in_cents,
+                     charge_fee_in_cents: oi.charge_fee_in_cents,
                      rate: oi.rate
                         ? {
                              product_id: oi.rate.product_id,
@@ -2379,6 +2476,11 @@ const dispatch = {
                   weight: p.weight,
                   order_items: p.order_items.map((oi) => ({
                      weight: oi.weight,
+                     price_in_cents: oi.price_in_cents,
+                     customs_fee_in_cents: oi.customs_fee_in_cents,
+                     insurance_fee_in_cents: oi.insurance_fee_in_cents,
+                     delivery_fee_in_cents: oi.delivery_fee_in_cents,
+                     charge_fee_in_cents: oi.charge_fee_in_cents,
                      rate: oi.rate
                         ? {
                              product_id: oi.rate.product_id,

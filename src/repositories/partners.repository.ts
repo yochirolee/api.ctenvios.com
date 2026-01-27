@@ -244,10 +244,11 @@ export const partners = {
       // Generate secure API key
       const { displayKey, hashedKey, prefix } = generateApiKey(environment);
 
-      // Store in database
+      // Store in database (including plain key for retrieval)
       const apiKey = await prisma.apiKey.create({
          data: {
             key_hash: hashedKey,
+            key_plain: displayKey,
             prefix,
             name,
             expires_at: expiresAt,
@@ -261,7 +262,6 @@ export const partners = {
          },
       });
 
-      // Return the display key (only shown once!)
       return {
          id: apiKey.id,
          displayKey,
@@ -275,6 +275,7 @@ export const partners = {
          select: {
             id: true,
             prefix: true,
+            key_plain: true,
             name: true,
             is_active: true,
             expires_at: true,

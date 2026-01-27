@@ -33,7 +33,7 @@ const containers = {
       page: number,
       limit: number,
       forwarder_id?: number,
-      status?: ContainerStatus
+      status?: ContainerStatus,
    ): Promise<{ containers: Container[]; total: number }> => {
       const where: Prisma.ContainerWhereInput = {};
 
@@ -215,14 +215,14 @@ const containers = {
       if (container._count.parcels > 0) {
          throw new AppError(
             HttpStatusCodes.BAD_REQUEST,
-            "Cannot delete container with parcels. Remove all parcels first."
+            "Cannot delete container with parcels. Remove all parcels first.",
          );
       }
 
       if (container.status !== ContainerStatus.PENDING) {
          throw new AppError(
             HttpStatusCodes.BAD_REQUEST,
-            `Cannot delete container with status ${container.status}. Only PENDING containers can be deleted.`
+            `Cannot delete container with status ${container.status}. Only PENDING containers can be deleted.`,
          );
       }
 
@@ -236,10 +236,13 @@ const containers = {
    getParcels: async (
       container_id: number,
       page: number = 1,
-      limit: number = 20
+      limit: number = 20,
    ): Promise<{ parcels: Parcel[]; total: number }> => {
       const [parcels, total] = await Promise.all([
          prisma.parcel.findMany({
+            include: {
+               agency: { select: { id: true, name: true } },
+            },
             where: { container_id },
             skip: (page - 1) * limit,
             take: limit,
@@ -272,14 +275,14 @@ const containers = {
             HttpStatusCodes.BAD_REQUEST,
             `Parcel ${tracking_number} uses ${parcel.service?.name || "AIR"} service (${
                parcel.service?.service_type
-            }). ` + `Only MARITIME parcels can be added to containers. Use flights for AIR parcels.`
+            }). ` + `Only MARITIME parcels can be added to containers. Use flights for AIR parcels.`,
          );
       }
 
       if (parcel.container_id) {
          throw new AppError(
             HttpStatusCodes.CONFLICT,
-            `Parcel ${tracking_number} is already in container ${parcel.container_id}`
+            `Parcel ${tracking_number} is already in container ${parcel.container_id}`,
          );
       }
 
@@ -288,14 +291,14 @@ const containers = {
             HttpStatusCodes.BAD_REQUEST,
             `Parcel with status ${
                parcel.status
-            } cannot be added to container. Allowed statuses: ${ALLOWED_CONTAINER_STATUSES.join(", ")}`
+            } cannot be added to container. Allowed statuses: ${ALLOWED_CONTAINER_STATUSES.join(", ")}`,
          );
       }
 
       if (parcel.flight_id) {
          throw new AppError(
             HttpStatusCodes.CONFLICT,
-            `Parcel ${tracking_number} is already in flight ${parcel.flight_id}`
+            `Parcel ${tracking_number} is already in flight ${parcel.flight_id}`,
          );
       }
 
@@ -308,7 +311,7 @@ const containers = {
       if (container.status !== ContainerStatus.PENDING && container.status !== ContainerStatus.LOADING) {
          throw new AppError(
             HttpStatusCodes.BAD_REQUEST,
-            `Cannot add parcels to container with status ${container.status}. Container must be PENDING or LOADING.`
+            `Cannot add parcels to container with status ${container.status}. Container must be PENDING or LOADING.`,
          );
       }
 
@@ -360,7 +363,7 @@ const containers = {
    addParcelsByOrderId: async (
       container_id: number,
       order_id: number,
-      user_id: string
+      user_id: string,
    ): Promise<{ added: number; skipped: number; parcels: Parcel[] }> => {
       const container = await prisma.container.findUnique({ where: { id: container_id } });
 
@@ -371,7 +374,7 @@ const containers = {
       if (container.status !== ContainerStatus.PENDING && container.status !== ContainerStatus.LOADING) {
          throw new AppError(
             HttpStatusCodes.BAD_REQUEST,
-            `Cannot add parcels to container with status ${container.status}. Container must be PENDING or LOADING.`
+            `Cannot add parcels to container with status ${container.status}. Container must be PENDING or LOADING.`,
          );
       }
 
@@ -461,6 +464,126 @@ const containers = {
    },
 
    /**
+    * Add all parcels from a dispatch to container
+    */
+   addParcelsByDispatchId: async (
+      container_id: number,
+      dispatch_id: number,
+      user_id: string,
+   ): Promise<{ added: number; skipped: number; parcels: Parcel[] }> => {
+      const container = await prisma.container.findUnique({ where: { id: container_id } });
+
+      if (!container) {
+         throw new AppError(HttpStatusCodes.NOT_FOUND, `Container with id ${container_id} not found`);
+      }
+
+      if (container.status !== ContainerStatus.PENDING && container.status !== ContainerStatus.LOADING) {
+         throw new AppError(
+            HttpStatusCodes.BAD_REQUEST,
+            `Cannot add parcels to container with status ${container.status}. Container must be PENDING or LOADING.`,
+         );
+      }
+
+      // Find the dispatch with its parcels
+      const dispatch = await prisma.dispatch.findUnique({
+         where: { id: dispatch_id },
+         include: {
+            parcels: {
+               include: {
+                  service: { select: { service_type: true, name: true } },
+               },
+            },
+         },
+      });
+
+      if (!dispatch) {
+         throw new AppError(HttpStatusCodes.NOT_FOUND, `Dispatch with id ${dispatch_id} not found`);
+      }
+
+      if (dispatch.parcels.length === 0) {
+         throw new AppError(HttpStatusCodes.NOT_FOUND, `No parcels found in dispatch ${dispatch_id}`);
+      }
+
+      let added = 0;
+      let skipped = 0;
+      let totalWeight = 0;
+      const addedParcels: Parcel[] = [];
+      const affectedOrderIds = new Set<number>();
+
+      await prisma.$transaction(async (tx) => {
+         for (const parcel of dispatch.parcels) {
+            // Skip if already in a container or flight
+            if (parcel.container_id || parcel.flight_id) {
+               skipped++;
+               continue;
+            }
+
+            // Skip if service type is not MARITIME (only maritime parcels go in containers)
+            if (parcel.service?.service_type !== "MARITIME") {
+               skipped++;
+               continue;
+            }
+
+            // Skip if status doesn't allow adding to container
+            if (!isValidStatusForContainer(parcel.status)) {
+               skipped++;
+               continue;
+            }
+
+            // Update parcel
+            const updated = await tx.parcel.update({
+               where: { id: parcel.id },
+               data: {
+                  container_id,
+                  status: Status.IN_CONTAINER,
+               },
+            });
+
+            // Create parcel event
+            await tx.parcelEvent.create({
+               data: {
+                  parcel_id: parcel.id,
+                  event_type: ParcelEventType.LOADED_TO_CONTAINER,
+                  user_id,
+                  status: Status.IN_CONTAINER,
+                  container_id,
+                  notes: `Added to container ${container.container_number} (batch from dispatch #${dispatch_id})`,
+               },
+            });
+
+            totalWeight += Number(parcel.weight);
+            addedParcels.push(updated);
+            added++;
+
+            // Track affected orders for status update
+            if (parcel.order_id) {
+               affectedOrderIds.add(parcel.order_id);
+            }
+         }
+
+         // Update container weight and status
+         if (added > 0) {
+            await tx.container.update({
+               where: { id: container_id },
+               data: {
+                  current_weight_kg: {
+                     increment: totalWeight,
+                  },
+                  status: ContainerStatus.LOADING,
+               },
+            });
+         }
+      });
+
+      // Update order statuses for all affected orders
+      for (const orderId of affectedOrderIds) {
+         await updateOrderStatusFromParcels(orderId);
+      }
+
+      return { added, skipped, parcels: addedParcels };
+   },
+
+   /**
     * Remove parcel from container
     */
    removeParcel: async (container_id: number, tracking_number: string, user_id: string): Promise<Parcel> => {
@@ -475,7 +598,7 @@ const containers = {
       if (parcel.container_id !== container_id) {
          throw new AppError(
             HttpStatusCodes.BAD_REQUEST,
-            `Parcel ${tracking_number} is not in container ${container_id}`
+            `Parcel ${tracking_number} is not in container ${container_id}`,
          );
       }
 
@@ -489,7 +612,7 @@ const containers = {
       if (container.status !== ContainerStatus.PENDING && container.status !== ContainerStatus.LOADING) {
          throw new AppError(
             HttpStatusCodes.BAD_REQUEST,
-            `Cannot remove parcels from container with status ${container.status}. Container must be PENDING or LOADING.`
+            `Cannot remove parcels from container with status ${container.status}. Container must be PENDING or LOADING.`,
          );
       }
 
@@ -542,7 +665,7 @@ const containers = {
       status: ContainerStatus,
       user_id: string,
       location?: string,
-      description?: string
+      description?: string,
    ): Promise<Container> => {
       const container = await prisma.container.findUnique({ where: { id } });
 
@@ -647,7 +770,7 @@ const containers = {
    getReadyParcels: async (
       forwarder_id: number,
       page: number = 1,
-      limit: number = 20
+      limit: number = 20,
    ): Promise<{ parcels: Parcel[]; total: number }> => {
       const where: Prisma.ParcelWhereInput = {
          container_id: null,

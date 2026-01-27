@@ -266,8 +266,10 @@ const partners = {
       const apiKeys = await repository.partners.getApiKeys(parseInt(id));
 
       res.status(200).json({
-         api_keys: apiKeys,
-         note: "API key values are hashed and cannot be retrieved. Only metadata is shown.",
+         api_keys: apiKeys.map(({ key_plain, ...rest }) => ({
+            ...rest,
+            key: key_plain, // Return full key if available
+         })),
       });
    },
 

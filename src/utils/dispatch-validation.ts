@@ -242,3 +242,128 @@ export const validateUserCanModifyDispatch = (
       );
    }
 };
+
+/**
+ * Validates that a receiver agency can receive parcels from a sender agency
+ * Rules:
+ * - FORWARDER can receive from any agency
+ * - Regular agencies can only receive from their child agencies (descendants)
+ * 
+ * @param receiver_agency_id - The agency receiving the parcels
+ * @param sender_agency_id - The agency sending the parcels (current holder)
+ * @throws AppError if receiver cannot receive from sender
+ */
+export const validateCanReceiveFrom = async (
+   receiver_agency_id: number,
+   sender_agency_id: number
+): Promise<void> => {
+   // Cannot receive from yourself
+   if (receiver_agency_id === sender_agency_id) {
+      throw new AppError(
+         HttpStatusCodes.BAD_REQUEST,
+         "Cannot receive parcels from your own agency"
+      );
+   }
+
+   const receiverAgency = await prisma.agency.findUnique({
+      where: { id: receiver_agency_id },
+      select: { agency_type: true, name: true },
+   });
+
+   if (!receiverAgency) {
+      throw new AppError(HttpStatusCodes.NOT_FOUND, `Receiver agency ${receiver_agency_id} not found`);
+   }
+
+   // FORWARDER can receive from any agency
+   if (receiverAgency.agency_type === AgencyType.FORWARDER) {
+      return;
+   }
+
+   // For non-FORWARDER receivers: can only receive from their descendants
+   const childAgencies = await getAllChildAgenciesRecursively(receiver_agency_id);
+
+   if (!childAgencies.includes(sender_agency_id)) {
+      const senderAgency = await prisma.agency.findUnique({
+         where: { id: sender_agency_id },
+         select: { name: true },
+      });
+      
+      throw new AppError(
+         HttpStatusCodes.FORBIDDEN,
+         `Agency "${receiverAgency.name}" can only receive from its child agencies. ` +
+         `Agency "${senderAgency?.name || sender_agency_id}" is not a descendant.`
+      );
+   }
+};
+
+/**
+ * Validates reception inside a transaction
+ */
+export const validateCanReceiveFromInTx = async (
+   tx: Prisma.TransactionClient,
+   receiver_agency_id: number,
+   sender_agency_id: number
+): Promise<void> => {
+   // Cannot receive from yourself
+   if (receiver_agency_id === sender_agency_id) {
+      throw new AppError(
+         HttpStatusCodes.BAD_REQUEST,
+         "Cannot receive parcels from your own agency"
+      );
+   }
+
+   const receiverAgency = await tx.agency.findUnique({
+      where: { id: receiver_agency_id },
+      select: { agency_type: true, name: true },
+   });
+
+   if (!receiverAgency) {
+      throw new AppError(HttpStatusCodes.NOT_FOUND, `Receiver agency ${receiver_agency_id} not found`);
+   }
+
+   // FORWARDER can receive from any agency
+   if (receiverAgency.agency_type === AgencyType.FORWARDER) {
+      return;
+   }
+
+   // For non-FORWARDER receivers: can only receive from their descendants
+   const childAgencies = await getAllChildAgenciesInTx(tx, receiver_agency_id);
+
+   if (!childAgencies.includes(sender_agency_id)) {
+      const senderAgency = await tx.agency.findUnique({
+         where: { id: sender_agency_id },
+         select: { name: true },
+      });
+      
+      throw new AppError(
+         HttpStatusCodes.FORBIDDEN,
+         `Agency "${receiverAgency.name}" can only receive from its child agencies. ` +
+         `Agency "${senderAgency?.name || sender_agency_id}" is not a descendant.`
+      );
+   }
+};
+
+/**
+ * Checks if an agency is a FORWARDER (for status determination)
+ */
+export const isForwarderAgency = async (agencyId: number): Promise<boolean> => {
+   const agency = await prisma.agency.findUnique({
+      where: { id: agencyId },
+      select: { agency_type: true },
+   });
+   return agency?.agency_type === AgencyType.FORWARDER;
+};
+
+/**
+ * Checks if an agency is a FORWARDER inside a transaction
+ */
+export const isForwarderAgencyInTx = async (
+   tx: Prisma.TransactionClient,
+   agencyId: number
+): Promise<boolean> => {
+   const agency = await tx.agency.findUnique({
+      where: { id: agencyId },
+      select: { agency_type: true },
+   });
+   return agency?.agency_type === AgencyType.FORWARDER;
+};

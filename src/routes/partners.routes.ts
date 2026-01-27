@@ -203,7 +203,7 @@ router.post(
    partnerAuthMiddleware,
    partnerLogMiddleware,
    validate({ body: partnerOrderSchema }),
-   controllers.partners.createOrder
+   controllers.partners.createOrder,
 );
 
 /**
@@ -213,6 +213,7 @@ router.post(
  */
 router.get("/services", partnerAuthMiddleware, partnerLogMiddleware, controllers.partners.getServices);
 
+router.get("/customs-rates", partnerAuthMiddleware, partnerLogMiddleware, controllers.customsRates.search);
 /**
  * GET /partners/api/orders/:id
  * Get order details via Partner API

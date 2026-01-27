@@ -25,6 +25,7 @@ model Partner {
 model ApiKey {
     id         String       @id @default(uuid())
     key_hash   String       @unique
+    key_plain  String?      // Store full key for retrieval (optional for backward compat)
     prefix     String
     name       String?
     partner_id Int

@@ -174,20 +174,12 @@ function getStatusLabel(status: string): string {
    return statusLabels[status] || status;
 }
 
-function getPaymentStatusLabel(status: string): string {
-   const statusLabels: Record<string, string> = {
-      PENDING: "Pendiente",
-      PARTIAL: "Parcial",
-      PAID: "Pagado",
-      OVERDUE: "Vencido",
-   };
-   return statusLabels[status] || status;
-}
+
 
 export async function generateDispatchPDF(dispatch: DispatchPdfDetails): Promise<PDFKit.PDFDocument> {
    const doc = new PDFKit({
       size: "LETTER",
-      margins: { top: 40, bottom: 40, left: 40, right: 40 },
+      margin: 0,
       bufferPages: true,
    });
 
@@ -197,107 +189,74 @@ export async function generateDispatchPDF(dispatch: DispatchPdfDetails): Promise
    doc.registerFont(FONTS.SEMIBOLD, FONT_PATHS.SEMIBOLD);
    doc.registerFont(FONTS.BOLD, FONT_PATHS.BOLD);
 
-   const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-   let y = doc.page.margins.top;
+   const PAGE_WIDTH = 612;
+   const pageWidth = PAGE_WIDTH - 40; // Content width with margins
+   const leftMargin = 20;
+   let y = 20;
 
-   // === HEADER ===
+   // === HEADER - Similar to Order PDF ===
    const logo = await getLogoBuffer();
+   
+   // Logo
    if (logo) {
-      doc.image(logo, doc.page.margins.left, y, { height: 40 });
+      doc.image(logo, leftMargin, y + 6, { width: 48, height: 36 });
    }
 
-   // Title
+   // Sender Agency name and info (next to logo)
+   doc.font(FONTS.BOLD).fontSize(18).fillColor("#0d4fa3");
+   doc.text(dispatch.sender_agency.name, leftMargin + 60, y + 6);
+   
+   doc.font(FONTS.REGULAR).fontSize(8).fillColor(COLORS.MUTED_FOREGROUND);
+   doc.text(
+      `${dispatch.sender_agency.address || ""} • ${dispatch.sender_agency.phone || ""}`,
+      leftMargin + 60,
+      y + 28
+   );
+
+   // Right side - Dispatch number and info
+   const rightX = PAGE_WIDTH - 260;
+   
    doc.font(FONTS.BOLD).fontSize(18).fillColor(COLORS.FOREGROUND);
-   doc.text("MANIFIESTO DE DESPACHO", doc.page.margins.left + 150, y + 5);
+   doc.text(`Dispatch ${dispatch.id}`, rightX, y + 6, { align: "right", width: 240 });
+   
+   doc.font(FONTS.REGULAR).fontSize(8).fillColor(COLORS.MUTED_FOREGROUND);
+   doc.text(`Fecha: ${formatDate(dispatch.created_at)}`, rightX, y + 28, { align: "right", width: 240 });
+   
+   // Weight and Items stats
+   const totalWeight = toNumber(dispatch.weight).toFixed(2);
+   doc.font(FONTS.SEMIBOLD).fontSize(9).fillColor(COLORS.FOREGROUND);
+   doc.text(`Weight: ${totalWeight} lbs  •  Items: ${dispatch.parcels.length}`, rightX, y + 40, { align: "right", width: 240 });
 
-   doc.font(FONTS.MEDIUM).fontSize(12).fillColor(COLORS.PRIMARY);
-   doc.text(`#${dispatch.id}`, doc.page.margins.left + 150, y + 28);
+   y += 60;
 
-   // Barcode for dispatch ID
+   // === SERVICE BAR with barcode ===
+   const barHeight = 36;
+   doc.rect(0, y, PAGE_WIDTH, barHeight).fill(COLORS.MUTED);
+   doc.rect(0, y, PAGE_WIDTH, barHeight).stroke(COLORS.BORDER);
+
+   // Status badge (left side of bar)
+   const statusColor = dispatch.status === "RECEIVED" ? COLORS.SUCCESS : dispatch.status === "DISPATCHED" ? COLORS.PRIMARY : COLORS.WARNING;
+   doc.roundedRect(leftMargin, y + 8, 20, 20, 4).fill(statusColor);
+   doc.font(FONTS.BOLD).fontSize(12).fillColor(COLORS.PRIMARY_FOREGROUND);
+   doc.text(getStatusLabel(dispatch.status).charAt(0), leftMargin, y + 12, { width: 20, align: "center" });
+   
+   // Destination agency name
+   doc.font(FONTS.MEDIUM).fontSize(11).fillColor(COLORS.FOREGROUND);
+   doc.text(`→ ${dispatch.receiver_agency?.name || "No asignado"}`, leftMargin + 30, y + 12);
+
+   // Barcode on the right
    try {
       const barcode = await generateBarcode(`${dispatch.id}`);
-      doc.image(barcode, pageWidth - 60, y, { width: 100, height: 30 });
+      doc.image(barcode, PAGE_WIDTH - 140, y + 6, { width: 120, height: 24 });
    } catch (e) {
       // Barcode generation failed, continue without it
    }
 
-   y += 55;
-
-   // Status badges
-   doc.font(FONTS.SEMIBOLD).fontSize(9);
-   const statusColor = dispatch.status === "RECEIVED" ? COLORS.SUCCESS : dispatch.status === "DISPATCHED" ? COLORS.PRIMARY : COLORS.WARNING;
-   doc.roundedRect(doc.page.margins.left, y, 80, 18, 4).fill(statusColor);
-   doc.fillColor(COLORS.PRIMARY_FOREGROUND).text(getStatusLabel(dispatch.status), doc.page.margins.left + 5, y + 4, { width: 70, align: "center" });
-
-   const paymentColor = dispatch.payment_status === "PAID" ? COLORS.SUCCESS : COLORS.WARNING;
-   doc.roundedRect(doc.page.margins.left + 90, y, 80, 18, 4).fill(paymentColor);
-   doc.fillColor(COLORS.PRIMARY_FOREGROUND).text(getPaymentStatusLabel(dispatch.payment_status), doc.page.margins.left + 95, y + 4, { width: 70, align: "center" });
-
-   y += 30;
-
-   // === AGENCIES INFO ===
-   doc.fillColor(COLORS.FOREGROUND);
-   const colWidth = (pageWidth - 20) / 2;
-
-   // Sender Agency
-   doc.roundedRect(doc.page.margins.left, y, colWidth, 80, 4).fillAndStroke(COLORS.MUTED, COLORS.BORDER);
-   doc.fillColor(COLORS.FOREGROUND).font(FONTS.SEMIBOLD).fontSize(10);
-   doc.text("ORIGEN", doc.page.margins.left + 10, y + 8);
-   doc.font(FONTS.BOLD).fontSize(11);
-   doc.text(dispatch.sender_agency.name, doc.page.margins.left + 10, y + 22);
-   doc.font(FONTS.REGULAR).fontSize(9).fillColor(COLORS.MUTED_FOREGROUND);
-   doc.text(dispatch.sender_agency.address || "", doc.page.margins.left + 10, y + 38);
-   doc.text(dispatch.sender_agency.phone || "", doc.page.margins.left + 10, y + 50);
-
-   // Receiver Agency
-   const receiverX = doc.page.margins.left + colWidth + 20;
-   doc.roundedRect(receiverX, y, colWidth, 80, 4).fillAndStroke(COLORS.MUTED, COLORS.BORDER);
-   doc.fillColor(COLORS.FOREGROUND).font(FONTS.SEMIBOLD).fontSize(10);
-   doc.text("DESTINO", receiverX + 10, y + 8);
-   doc.font(FONTS.BOLD).fontSize(11);
-   doc.text(dispatch.receiver_agency?.name || "No asignado", receiverX + 10, y + 22);
-   if (dispatch.receiver_agency) {
-      doc.font(FONTS.REGULAR).fontSize(9).fillColor(COLORS.MUTED_FOREGROUND);
-      doc.text(dispatch.receiver_agency.address || "", receiverX + 10, y + 38);
-      doc.text(dispatch.receiver_agency.phone || "", receiverX + 10, y + 50);
-   }
-
-   y += 95;
-
-   // === SUMMARY BOX ===
-   doc.roundedRect(doc.page.margins.left, y, pageWidth, 55, 4).fillAndStroke(COLORS.MUTED, COLORS.BORDER);
-
-   const summaryColWidth = pageWidth / 5;
-   const summaryItems = [
-      { label: "Bultos Declarados", value: dispatch.declared_parcels_count.toString() },
-      { label: "Bultos Recibidos", value: dispatch.received_parcels_count.toString() },
-      { label: "Peso Declarado", value: `${toNumber(dispatch.declared_weight).toFixed(2)} lbs` },
-      { label: "Peso Real", value: `${toNumber(dispatch.weight).toFixed(2)} lbs` },
-      { label: "Costo Total", value: formatCents(dispatch.cost_in_cents) },
-   ];
-
-   summaryItems.forEach((item, i) => {
-      const x = doc.page.margins.left + i * summaryColWidth + 10;
-      doc.font(FONTS.REGULAR).fontSize(8).fillColor(COLORS.MUTED_FOREGROUND);
-      doc.text(item.label, x, y + 10);
-      doc.font(FONTS.BOLD).fontSize(14).fillColor(COLORS.FOREGROUND);
-      doc.text(item.value, x, y + 25);
-   });
-
-   y += 70;
-
-   // === DATES INFO ===
-   doc.font(FONTS.REGULAR).fontSize(9).fillColor(COLORS.MUTED_FOREGROUND);
-   doc.text(`Creado: ${formatDate(dispatch.created_at)} por ${capitalize(dispatch.created_by.first_name)} ${capitalize(dispatch.created_by.last_name)}`, doc.page.margins.left, y);
-   if (dispatch.received_by) {
-      doc.text(`Recibido: ${formatDate(dispatch.updated_at)} por ${capitalize(dispatch.received_by.first_name)} ${capitalize(dispatch.received_by.last_name)}`, doc.page.margins.left + 300, y);
-   }
-
-   y += 20;
+   y += barHeight + 15;
 
    // === PARCELS TABLE ===
    doc.font(FONTS.BOLD).fontSize(12).fillColor(COLORS.FOREGROUND);
-   doc.text("DETALLE DE BULTOS", doc.page.margins.left, y);
+   doc.text("DETALLE DE BULTOS", leftMargin, y);
    y += 20;
 
    // Pre-calculate parcel financials using pricing agreement between sender↔receiver agencies
@@ -400,34 +359,72 @@ export async function generateDispatchPDF(dispatch: DispatchPdfDetails): Promise
    // Clear pricing cache after calculation
    clearPricingCache();
 
-   // Table header - columns: Orden, Hbl, Descripción, Peso, Precio, Seguro, Aduanal, Subtotal
-   const tableColWidths = [40, 85, 140, 50, 50, 50, 50, 55];
-   const tableHeaders = ["Orden", "Hbl", "Descripción", "Peso", "Precio", "Seguro", "Aduanal", "Subtotal"];
+   // Table layout - matching order PDF style (white/black, no colored header)
+   // Calculate column positions from right edge
+   const rightMargin = PAGE_WIDTH - 20;
+   const columnGap = 5;
+   const subtotalWidth = 55;
+   const pesoWidth = 40;
+   const precioWidth = 35;
+   const arancelWidth = 35;
+   const cargoWidth = 35;
+   const seguroWidth = 35;
 
-   doc.roundedRect(doc.page.margins.left, y, pageWidth, 20, 2).fill(COLORS.PRIMARY);
-   doc.font(FONTS.SEMIBOLD).fontSize(8).fillColor(COLORS.PRIMARY_FOREGROUND);
+   // Position from right to left
+   const subtotalX = rightMargin - subtotalWidth;
+   const pesoX = subtotalX - columnGap - pesoWidth;
+   const precioX = pesoX - columnGap - precioWidth;
+   const arancelX = precioX - columnGap - arancelWidth;
+   const cargoX = arancelX - columnGap - cargoWidth;
+   const seguroX = cargoX - columnGap - seguroWidth;
+   const descriptionX = 105;
+   const descriptionWidth = seguroX - descriptionX - columnGap;
 
-   let headerX = doc.page.margins.left + 5;
-   tableHeaders.forEach((header, i) => {
-      doc.text(header, headerX, y + 6, { width: tableColWidths[i] - 10 });
-      headerX += tableColWidths[i];
-   });
+   // Helper function to draw table headers
+   const drawTableHeaders = (headerY: number): number => {
+      const headers = [
+         { text: "Hbl", x: leftMargin, width: 90, align: "left" },
+         { text: "Descripción", x: descriptionX, width: descriptionWidth, align: "left" },
+         { text: "Seguro", x: seguroX, width: seguroWidth, align: "right" },
+         { text: "Cargo", x: cargoX, width: cargoWidth, align: "right" },
+         { text: "Arancel", x: arancelX, width: arancelWidth, align: "right" },
+         { text: "Precio", x: precioX, width: precioWidth, align: "right" },
+         { text: "Peso", x: pesoX, width: pesoWidth, align: "right" },
+         { text: "Subtotal", x: subtotalX, width: subtotalWidth, align: "right" },
+      ];
 
-   y += 22;
+      doc.font(FONTS.SEMIBOLD).fontSize(7).fillColor(COLORS.MUTED_FOREGROUND);
+      headers.forEach((header) => {
+         doc.text(header.text, header.x, headerY, {
+            width: header.width,
+            align: header.align as any,
+            characterSpacing: 0.3,
+         });
+      });
+
+      // Draw border at bottom of header
+      doc.strokeColor(COLORS.BORDER)
+         .lineWidth(1)
+         .moveTo(leftMargin, headerY + 12)
+         .lineTo(rightMargin, headerY + 12)
+         .stroke();
+
+      return headerY + 15;
+   };
+
+   // Draw initial headers
+   y = drawTableHeaders(y + 10);
 
    // Table rows
-   const rowHeight = 28;
+   const rowHeight = 22;
+   const bottomMargin = 60;
    for (const [index, parcel] of dispatch.parcels.entries()) {
       // Check if we need a new page
-      if (y + rowHeight > doc.page.height - doc.page.margins.bottom - 50) {
+      if (y + rowHeight > doc.page.height - bottomMargin - 50) {
          doc.addPage();
-         y = doc.page.margins.top;
+         y = 20;
+         y = drawTableHeaders(y);
       }
-
-      const bgColor = index % 2 === 0 ? COLORS.BACKGROUND : COLORS.MUTED;
-      doc.rect(doc.page.margins.left, y, pageWidth, rowHeight).fill(bgColor);
-
-      let cellX = doc.page.margins.left + 5;
 
       // Get pre-calculated financials for this parcel
       const financials = parcelFinancials.get(parcel.id) || {
@@ -439,55 +436,54 @@ export async function generateDispatchPDF(dispatch: DispatchPdfDetails): Promise
          unit: "PER_LB",
       };
 
-      // Order ID
-      doc.font(FONTS.MEDIUM).fontSize(7).fillColor(COLORS.PRIMARY);
-      doc.text(parcel.order_id ? `#${parcel.order_id}` : "N/A", cellX, y + 8, { width: tableColWidths[0] - 5 });
-      cellX += tableColWidths[0];
+      const textY = y + 2;
 
       // HBL
-      doc.font(FONTS.MEDIUM).fontSize(6).fillColor(COLORS.FOREGROUND);
-      doc.text(parcel.tracking_number, cellX, y + 8, { width: tableColWidths[1] - 5 });
-      cellX += tableColWidths[1];
+      doc.font(FONTS.REGULAR).fontSize(8).fillColor(COLORS.FOREGROUND);
+      doc.text(parcel.tracking_number, leftMargin, textY, { width: 100 });
 
       // Description (from order_items)
       const description = parcel.order_items.length > 0
          ? parcel.order_items.map(item => item.description || "").filter(Boolean).join(", ") || "N/A"
          : "N/A";
-      doc.font(FONTS.REGULAR).fontSize(6).fillColor(COLORS.FOREGROUND);
-      doc.text(description.substring(0, 50) + (description.length > 50 ? "..." : ""), cellX, y + 8, { width: tableColWidths[2] - 5 });
-      cellX += tableColWidths[2];
+      doc.font(FONTS.REGULAR).fontSize(8).fillColor(COLORS.FOREGROUND);
+      doc.text(description.substring(0, 35) + (description.length > 35 ? "..." : ""), descriptionX, textY, { width: descriptionWidth });
 
-      // Weight
-      doc.font(FONTS.REGULAR).fontSize(7).fillColor(COLORS.FOREGROUND);
-      doc.text(`${toNumber(parcel.weight).toFixed(2)}`, cellX, y + 8, { width: tableColWidths[3] - 5, align: "right" });
-      cellX += tableColWidths[3];
-
-      // Precio (unit rate from pricing agreement - $/lb or fixed)
-      doc.font(FONTS.REGULAR).fontSize(7).fillColor(COLORS.FOREGROUND);
-      doc.text(formatCents(financials.unitRateInCents), cellX, y + 8, { width: tableColWidths[4] - 5, align: "right" });
-      cellX += tableColWidths[4];
-
-      // Insurance (Seguro)
-      const insuranceColor = financials.insuranceInCents > 0 ? COLORS.FOREGROUND : COLORS.MUTED_FOREGROUND;
+      // Seguro (Insurance)
+      const insuranceColor = financials.insuranceInCents === 0 ? COLORS.MUTED_FOREGROUND : COLORS.FOREGROUND;
       doc.font(FONTS.REGULAR).fontSize(7).fillColor(insuranceColor);
-      doc.text(formatCents(financials.insuranceInCents), cellX, y + 8, { width: tableColWidths[5] - 5, align: "right" });
-      cellX += tableColWidths[5];
+      doc.text(formatCents(financials.insuranceInCents), seguroX, textY, { width: seguroWidth, align: "right" });
 
-      // Customs (Aduanal)
-      const customsColor = financials.customsInCents > 0 ? COLORS.FOREGROUND : COLORS.MUTED_FOREGROUND;
-      doc.font(FONTS.REGULAR).fontSize(7).fillColor(customsColor);
-      doc.text(formatCents(financials.customsInCents), cellX, y + 8, { width: tableColWidths[6] - 5, align: "right" });
-      cellX += tableColWidths[6];
+      // Cargo (Charge)
+      const cargoColor = financials.chargeInCents === 0 ? COLORS.MUTED_FOREGROUND : COLORS.FOREGROUND;
+      doc.fillColor(cargoColor);
+      doc.text(formatCents(financials.chargeInCents), cargoX, textY, { width: cargoWidth, align: "right" });
 
-      // Subtotal (calculated with calculate_row_subtotal - same as order PDF)
-      doc.font(FONTS.SEMIBOLD).fontSize(7).fillColor(COLORS.PRIMARY);
-      doc.text(formatCents(financials.subtotalInCents), cellX, y + 8, { width: tableColWidths[7] - 5, align: "right" });
+      // Arancel (Customs)
+      const customsColor = financials.customsInCents === 0 ? COLORS.MUTED_FOREGROUND : COLORS.FOREGROUND;
+      doc.fillColor(customsColor);
+      doc.text(formatCents(financials.customsInCents), arancelX, textY, { width: arancelWidth, align: "right" });
+
+      // Precio
+      doc.fillColor(COLORS.FOREGROUND);
+      doc.text(formatCents(financials.unitRateInCents), precioX, textY, { width: precioWidth, align: "right" });
+
+      // Peso (Weight)
+      doc.text(`${toNumber(parcel.weight).toFixed(2)}`, pesoX, textY, { width: pesoWidth, align: "right" });
+
+      // Subtotal
+      doc.font(FONTS.SEMIBOLD).fontSize(7).fillColor(COLORS.FOREGROUND);
+      doc.text(formatCents(financials.subtotalInCents), subtotalX, textY, { width: subtotalWidth, align: "right" });
+
+      // Row border
+      doc.strokeColor(COLORS.BORDER)
+         .lineWidth(0.5)
+         .moveTo(leftMargin, y + rowHeight)
+         .lineTo(rightMargin, y + rowHeight)
+         .stroke();
 
       y += rowHeight;
    }
-
-   // Bottom border line
-   doc.moveTo(doc.page.margins.left, y).lineTo(doc.page.margins.left + pageWidth, y).stroke(COLORS.BORDER);
 
    y += 10;
 
@@ -511,7 +507,7 @@ export async function generateDispatchPDF(dispatch: DispatchPdfDetails): Promise
 
    // Totals box - aligned to the right
    const totalsBoxWidth = 180;
-   const totalsBoxX = doc.page.margins.left + pageWidth - totalsBoxWidth;
+   const totalsBoxX = leftMargin + pageWidth - totalsBoxWidth;
    const totalsBoxHeight = 60;
 
    doc.roundedRect(totalsBoxX, y, totalsBoxWidth, totalsBoxHeight, 4).fillAndStroke(COLORS.MUTED, COLORS.BORDER);
@@ -541,38 +537,15 @@ export async function generateDispatchPDF(dispatch: DispatchPdfDetails): Promise
 
    y += totalsBoxHeight + 15;
 
-   // === DEBTS SECTION (if any) ===
-   if (dispatch.inter_agency_debts.length > 0) {
-      if (y + 80 > doc.page.height - doc.page.margins.bottom) {
-         doc.addPage();
-         y = doc.page.margins.top;
-      }
-
-      doc.font(FONTS.BOLD).fontSize(10).fillColor(COLORS.FOREGROUND);
-      doc.text("DEUDAS INTER-AGENCIA", doc.page.margins.left, y);
-      y += 15;
-
-      dispatch.inter_agency_debts.forEach((debt) => {
-         doc.font(FONTS.REGULAR).fontSize(9).fillColor(COLORS.FOREGROUND);
-         doc.text(`${debt.debtor_agency.name} → ${debt.creditor_agency.name}: ${formatCents(debt.amount_in_cents)}`, doc.page.margins.left + 10, y);
-         y += 14;
-      });
-   }
-
    // === SIGNATURE SECTION ===
-   y = doc.page.height - doc.page.margins.bottom - 60;
+   y = doc.page.height - 80;
    
-   doc.moveTo(doc.page.margins.left, y + 30).lineTo(doc.page.margins.left + 150, y + 30).stroke(COLORS.BORDER);
+   doc.moveTo(leftMargin, y + 30).lineTo(leftMargin + 150, y + 30).stroke(COLORS.BORDER);
    doc.font(FONTS.REGULAR).fontSize(8).fillColor(COLORS.MUTED_FOREGROUND);
-   doc.text("Firma Origen", doc.page.margins.left, y + 35);
+   doc.text("Firma Origen", leftMargin, y + 35);
 
-   doc.moveTo(pageWidth - 110, y + 30).lineTo(pageWidth + 40, y + 30).stroke(COLORS.BORDER);
-   doc.text("Firma Destino", pageWidth - 110, y + 35);
-
-   // Footer
-   doc.font(FONTS.REGULAR).fontSize(7).fillColor(COLORS.MUTED_FOREGROUND);
-   doc.text(`Generado: ${new Date().toLocaleString("es-ES")}`, doc.page.margins.left, doc.page.height - 25);
-   doc.text("CTEnvios - Sistema de Gestión de Paquetes", pageWidth - 100, doc.page.height - 25);
+   doc.moveTo(PAGE_WIDTH - 170, y + 30).lineTo(PAGE_WIDTH - 20, y + 30).stroke(COLORS.BORDER);
+   doc.text("Firma Destino", PAGE_WIDTH - 170, y + 35);
 
    return doc;
 }
