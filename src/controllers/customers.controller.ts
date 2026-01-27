@@ -64,7 +64,7 @@ export const customers = {
    }) as RequestHandler,
 
    getById: (async (req: Request, res: Response) => {
-      const { id } = req.params;
+      const id = req.params.id as string;
       if (!id) {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "Customer ID is required");
       }
@@ -73,7 +73,7 @@ export const customers = {
    }) as RequestHandler,
 
    getReceivers: (async (req: Request, res: Response) => {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const { page, limit } = req.query;
       if (!id) {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "Customer ID is required");
@@ -94,7 +94,7 @@ export const customers = {
    }) as RequestHandler,
 
    edit: (async (req: Request, res: Response) => {
-      const { id } = req.params;
+      const id = req.params.id as string;
       if (!id || isNaN(parseInt(id))) {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "Customer ID is required");
       }
