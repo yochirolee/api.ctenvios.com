@@ -42,25 +42,42 @@ export const customers = {
    }) as RequestHandler,
 
    create: (async (req: Request, res: Response) => {
-      try {
-         const { mobile, first_name, last_name, middle_name, second_last_name, address, identity_document, email } =
-            req.body;
-         const new_customer = {
-            identity_document: identity_document?.trim() || null,
-            email: email?.trim() || null,
-            first_name: capitalize(first_name.trim()),
-            last_name: capitalize(last_name.trim()),
-            middle_name: middle_name ? capitalize(middle_name.trim()) : null,
-            second_last_name: second_last_name ? capitalize(second_last_name.trim()) : null,
-            mobile: mobile.replace(/\s+/g, ""),
-            address: address?.trim() || null,
-         };
-
-         const customer = await repository.customers.create(new_customer as Prisma.CustomerCreateInput);
-         res.status(201).json(customer);
-      } catch (error: any) {
-         throw new AppError(HttpStatusCodes.INTERNAL_SERVER_ERROR, "Error creating customer");
+      const { mobile, first_name, last_name, middle_name, second_last_name, address, identity_document, email } =
+         req.body;
+      
+      if (!first_name || !last_name || !mobile) {
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "first_name, last_name, and mobile are required");
       }
+      
+      const normalizedMobile = mobile.replace(/\s+/g, "");
+      const normalizedFirstName = capitalize(first_name.trim());
+      const normalizedLastName = capitalize(last_name.trim());
+
+      // Check if customer already exists
+      const existingCustomer = await repository.customers.getByMobileAndName(
+         normalizedMobile,
+         normalizedFirstName,
+         normalizedLastName
+      );
+
+      if (existingCustomer) {
+         // Return existing customer
+         return res.status(200).json(existingCustomer);
+      }
+
+      const new_customer = {
+         identity_document: identity_document?.trim() || null,
+         email: email?.trim() || null,
+         first_name: normalizedFirstName,
+         last_name: normalizedLastName,
+         middle_name: middle_name ? capitalize(middle_name.trim()) : null,
+         second_last_name: second_last_name ? capitalize(second_last_name.trim()) : null,
+         mobile: normalizedMobile,
+         address: address?.trim() || null,
+      };
+
+      const customer = await repository.customers.create(new_customer as Prisma.CustomerCreateInput);
+      res.status(201).json(customer);
    }) as RequestHandler,
 
    getById: (async (req: Request, res: Response) => {
