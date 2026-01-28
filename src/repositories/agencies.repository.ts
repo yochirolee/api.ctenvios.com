@@ -21,6 +21,7 @@ export const agencies = {
             email: true,
             agency_type: true,
             forwarder_id: true,
+            logo: true,
          },
          where: { id },
       });
