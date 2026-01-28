@@ -29,7 +29,7 @@ export const agencySchema = z.object({
    email: z.string().email("Invalid email"),
    contact: z.string().min(1, "Contact is required"),
    forwarder_id: z.number().min(1, "Forwarder ID is required"),
-   parent_agency_id: z.number().optional(),
+   parent_agency_id: z.number().nullable().optional(),
    created_at: z.date().optional(),
    updated_at: z.date().optional(),
    services: z.array(z.number()).optional(),

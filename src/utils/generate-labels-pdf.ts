@@ -20,6 +20,9 @@ export const generateCTEnviosLabels = (order: OrderWithRelations): Promise<PDFKi
    // Register custom fonts
    registerPdfFonts(doc);
 
+   // Check if order is deleted
+   const isDeleted = !!order.deleted_at;
+
    // Generate two labels per item (main label + province/city label)
    return new Promise(async (resolve, reject) => {
       try {
@@ -30,9 +33,19 @@ export const generateCTEnviosLabels = (order: OrderWithRelations): Promise<PDFKi
             // Generate main label
             await generateCleanCTEnviosLabel(doc, order, order.order_items[i], i, labelWidth, labelHeight);
 
+            // Add cancelled watermark if order is deleted
+            if (isDeleted) {
+               addLabelCancelledWatermark(doc, labelWidth, labelHeight);
+            }
+
             // Generate province/city label
             doc.addPage();
             await generateProvinceLabel(doc, order, order.order_items[i], i, labelWidth, labelHeight);
+
+            // Add cancelled watermark to province label if order is deleted
+            if (isDeleted) {
+               addLabelCancelledWatermark(doc, labelWidth, labelHeight);
+            }
          }
          resolve(doc);
       } catch (error) {
@@ -61,6 +74,8 @@ export const generateBulkCTEnviosLabels = (orders: OrderWithRelations[]): Promis
          let isFirstLabel = true;
 
          for (const order of orders) {
+            const isDeleted = !!order.deleted_at;
+
             for (let i = 0; i < order.order_items.length; i++) {
                if (!isFirstLabel) {
                   doc.addPage(); // New page for each main label
@@ -70,9 +85,19 @@ export const generateBulkCTEnviosLabels = (orders: OrderWithRelations[]): Promis
                // Generate main label using existing function
                await generateCleanCTEnviosLabel(doc, order, order.order_items[i], i, labelWidth, labelHeight);
 
+               // Add cancelled watermark if order is deleted
+               if (isDeleted) {
+                  addLabelCancelledWatermark(doc, labelWidth, labelHeight);
+               }
+
                // Generate province/city label
                doc.addPage();
                await generateProvinceLabel(doc, order, order.order_items[i], i, labelWidth, labelHeight);
+
+               // Add cancelled watermark to province label if order is deleted
+               if (isDeleted) {
+                  addLabelCancelledWatermark(doc, labelWidth, labelHeight);
+               }
             }
          }
          resolve(doc);
@@ -456,6 +481,34 @@ async function generateCleanCTEnviosLabel(
          width: 80,
          align: "center",
       });
+}
+
+function addLabelCancelledWatermark(
+   doc: PDFKit.PDFDocument,
+   labelWidth: number,
+   labelHeight: number
+) {
+   // Save current state
+   doc.save();
+
+   // Set watermark properties
+   doc.fillColor("#dc2626"); // Red color
+   doc.opacity(0.35);
+   doc.font(FONTS.BOLD);
+   doc.fontSize(48);
+
+   // Rotate and position watermark diagonally across the label
+   const centerX = labelWidth / 2;
+   const centerY = labelHeight / 2;
+
+   doc.rotate(-45, { origin: [centerX, centerY] });
+   doc.text("ANULADA", centerX - 100, centerY - 20, {
+      width: 200,
+      align: "center",
+   });
+
+   // Restore state
+   doc.restore();
 }
 
 async function generateProvinceLabel(

@@ -7,6 +7,7 @@ import repository from "../repositories";
 import prisma from "../lib/prisma.client";
 import { auth } from "../lib/auth";
 import HttpStatusCodes from "../common/https-status-codes";
+import uploadService from "../services/upload.service";
 
 // Extend Express Request type for authenticated requests
 interface AuthenticatedRequest extends Request {
@@ -220,7 +221,8 @@ const agencies = {
       >;
 
       if (!result.success) {
-         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid agency data");
+         const errors = result.error.errors.map((e) => `${e.path.join(".")}: ${e.message}`).join(", ");
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, `Invalid agency data: ${errors}`);
       }
 
       const agency = await repository.agencies.update(agencyId, result.data);
@@ -337,6 +339,77 @@ const agencies = {
       }
       const { parcels: parcels_data, total } = await repository.parcels.getInAgency(agencyId, pageNumber, limitNumber);
       res.status(200).json({ rows: parcels_data, total: total });
+   },
+
+   /**
+    * Upload agency logo
+    * POST /:id/logo
+    * Content-Type: multipart/form-data
+    * Body: logo (file)
+    */
+   uploadLogo: async (req: Request, res: Response): Promise<void> => {
+      const { id } = req.params;
+      const agencyId = Number(id);
+
+      if (isNaN(agencyId) || agencyId <= 0) {
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid agency ID");
+      }
+
+      // Verify agency exists
+      const agency = await repository.agencies.getById(agencyId);
+      if (!agency) {
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Agency not found");
+      }
+
+      // Check if file was uploaded
+      if (!req.file) {
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "No logo file uploaded");
+      }
+
+      // Upload to Cloudinary
+      const uploadResult = await uploadService.uploadAgencyLogo(agencyId, req.file.buffer);
+
+      // Update agency with new logo URL
+      const updatedAgency = await repository.agencies.update(agencyId, {
+         logo: uploadResult.url,
+      });
+
+      res.status(200).json({
+         agency: updatedAgency,
+         logo: {
+            url: uploadResult.url,
+            publicId: uploadResult.publicId,
+         },
+      });
+   },
+
+   /**
+    * Delete agency logo
+    * DELETE /:id/logo
+    */
+   deleteLogo: async (req: Request, res: Response): Promise<void> => {
+      const { id } = req.params;
+      const agencyId = Number(id);
+
+      if (isNaN(agencyId) || agencyId <= 0) {
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid agency ID");
+      }
+
+      // Verify agency exists
+      const agency = await repository.agencies.getById(agencyId);
+      if (!agency) {
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Agency not found");
+      }
+
+      // Remove logo URL from agency
+      const updatedAgency = await repository.agencies.update(agencyId, {
+         logo: null,
+      });
+
+      res.status(200).json({
+         agency: updatedAgency,
+         message: "Logo removed successfully",
+      });
    },
 };
 

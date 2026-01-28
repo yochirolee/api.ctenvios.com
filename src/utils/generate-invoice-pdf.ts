@@ -65,6 +65,21 @@ function calculateInvoiceTotals(order: OrderWithRelations) {
 const logoCache = new Map<string, Buffer>();
 const barcodeCache = new Map<string, Buffer>();
 
+/**
+ * Convert Cloudinary URLs to PNG format (PDFKit only supports PNG/JPEG, not WEBP)
+ */
+function convertCloudinaryToPng(url?: string): string | undefined {
+   if (!url) return undefined;
+   if (url.includes("res.cloudinary.com") && url.includes("/upload/")) {
+      if (url.includes("/upload/v")) {
+         return url.replace("/upload/v", "/upload/f_png/v");
+      } else if (url.includes("/upload/")) {
+         return url.replace("/upload/", "/upload/f_png,");
+      }
+   }
+   return url;
+}
+
 // Font paths
 const FONT_PATHS = {
    REGULAR: path.join(process.cwd(), "assets", "fonts", "Inter-Regular.ttf"),
@@ -126,9 +141,10 @@ export const generateInvoicePDF = async (invoice: OrderWithRelations): Promise<P
 };
 
 async function generateOptimizedInvoice(doc: PDFKit.PDFDocument, invoice: OrderWithRelations) {
-   // Pre-load assets
+   // Pre-load assets - convert Cloudinary URLs to PNG (PDFKit doesn't support WEBP)
+   const agencyLogoUrl = convertCloudinaryToPng(invoice.agency.logo ?? undefined);
    const [logoBuffer, barcodeBuffer] = await Promise.all([
-      loadLogo(invoice.agency.logo ?? undefined),
+      loadLogo(agencyLogoUrl),
       generateBarcode(invoice.id),
    ]);
 

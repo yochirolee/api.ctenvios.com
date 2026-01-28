@@ -104,6 +104,29 @@ const COLORS = {
 const ASSETS_PATH = path.join(process.cwd(), "assets");
 const DEFAULT_LOGO_FILENAME = "ctelogo.png";
 
+/**
+ * Convert Cloudinary URLs to PNG format (PDFKit only supports PNG/JPEG, not WEBP)
+ * Adds f_png transformation to Cloudinary URLs to force PNG output
+ */
+function convertCloudinaryToPng(url?: string): string | undefined {
+   if (!url) return undefined;
+
+   // Check if it's a Cloudinary URL
+   if (url.includes("res.cloudinary.com") && url.includes("/upload/")) {
+      // Add f_png transformation after /upload/ to convert to PNG
+      // Handle URLs that may or may not have existing transformations
+      if (url.includes("/upload/v")) {
+         // No existing transformations, add f_png before version
+         return url.replace("/upload/v", "/upload/f_png/v");
+      } else if (url.includes("/upload/")) {
+         // May have existing transformations, add f_png at the start
+         return url.replace("/upload/", "/upload/f_png,");
+      }
+   }
+
+   return url;
+}
+
 const LAYOUT = {
    PAGE_HEIGHT: 792,
    PAGE_WIDTH: 612,
@@ -137,8 +160,13 @@ export const generateOrderPDF = async (order: OrderPdfDetails): Promise<PDFKit.P
 };
 
 async function generateModernOrder(doc: PDFKit.PDFDocument, order: OrderPdfDetails) {
-   // Pre-load assets
-   const [logoBuffer, barcodeBuffer] = await Promise.all([loadLogo(), generateBarcode(order.id)]);
+   // Pre-load assets - use agency logo if available, otherwise default logo
+   // Convert Cloudinary URLs to PNG format (PDFKit only supports PNG/JPEG, not WEBP)
+   const agencyLogoUrl = convertCloudinaryToPng(order.agency.logo ?? undefined);
+   const [logoBuffer, barcodeBuffer] = await Promise.all([
+      loadLogo(agencyLogoUrl),
+      generateBarcode(order.id),
+   ]);
 
    // Pre-calculate values
    const calculations = calculateOrderTotals(order);
@@ -163,12 +191,21 @@ async function generateModernOrder(doc: PDFKit.PDFDocument, order: OrderPdfDetai
 
    // Add footer to all pages
    addModernFooterToAllPages(doc, order, totalPages);
+
+   // Add CANCELLED watermark if order is soft-deleted
+   if (order.deleted_at) {
+      addCancelledWatermark(doc);
+   }
 }
 
 // Optimized asset loading with caching
 async function loadLogo(logoUrl?: string): Promise<Buffer | null> {
-   const source = logoUrl?.trim() || DEFAULT_LOGO_FILENAME;
+   // Skip invalid logo URLs and use default
+   const isValidUrl =
+      logoUrl && logoUrl.trim() && (logoUrl.startsWith("http://") || logoUrl.startsWith("https://"));
+   const source = isValidUrl ? logoUrl.trim() : DEFAULT_LOGO_FILENAME;
    const cacheKey = source;
+
    if (logoCache.has(cacheKey)) {
       return logoCache.get(cacheKey)!;
    }
@@ -181,6 +218,13 @@ async function loadLogo(logoUrl?: string): Promise<Buffer | null> {
          if (!response.ok) {
             throw new Error(`Failed to fetch logo from URL: ${response.status} ${response.statusText}`);
          }
+
+         // Validate content type is an image
+         const contentType = response.headers.get("content-type");
+         if (!contentType || !contentType.startsWith("image/")) {
+            throw new Error(`Invalid content type: ${contentType}`);
+         }
+
          const arrayBuffer = await response.arrayBuffer();
          logoBuffer = Buffer.from(arrayBuffer);
       } else {
@@ -192,10 +236,22 @@ async function loadLogo(logoUrl?: string): Promise<Buffer | null> {
       return logoBuffer;
    } catch (error) {
       console.log(`Logo ${source} could not be loaded:`, error);
+      // Clear cache for this failed source to allow retry
+      logoCache.delete(cacheKey);
       if (source !== DEFAULT_LOGO_FILENAME) {
+         // Try default logo as fallback
          return loadLogo(DEFAULT_LOGO_FILENAME);
       }
       return null;
+   }
+}
+
+// Clear logo cache - useful when agency logo is updated
+export function clearLogoCache(logoUrl?: string): void {
+   if (logoUrl) {
+      logoCache.delete(logoUrl);
+   } else {
+      logoCache.clear();
    }
 }
 
@@ -802,6 +858,36 @@ function renderModernTotals(
       width: valueWidth,
       align: "right",
    });
+}
+
+function addCancelledWatermark(doc: PDFKit.PDFDocument) {
+   const range = doc.bufferedPageRange();
+
+   for (let i = range.start; i < range.start + range.count; i++) {
+      doc.switchToPage(i);
+
+      // Save current state
+      doc.save();
+
+      // Set watermark properties
+      doc.fillColor(COLORS.DESTRUCTIVE);
+      doc.opacity(0.3);
+      doc.font(FONTS.BOLD);
+      doc.fontSize(72);
+
+      // Rotate and position watermark diagonally across the page
+      const centerX = LAYOUT.PAGE_WIDTH / 2;
+      const centerY = LAYOUT.PAGE_HEIGHT / 2;
+
+      doc.rotate(-45, { origin: [centerX, centerY] });
+      doc.text("ANULADA", centerX - 150, centerY - 30, {
+         width: 300,
+         align: "center",
+      });
+
+      // Restore state
+      doc.restore();
+   }
 }
 
 function addModernFooterToAllPages(doc: PDFKit.PDFDocument, order: OrderPdfDetails, totalPages: number) {

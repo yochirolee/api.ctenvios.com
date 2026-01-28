@@ -58,7 +58,7 @@ const orders = {
    },
    getByIdWithDetails: async (id: number): Promise<OrderPdfDetails | null> => {
       return await prisma.order.findUnique({
-         where: { id, deleted_at: null },
+         where: { id },
          include: orderWithRelationsInclude,
       });
    },
