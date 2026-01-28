@@ -44,7 +44,7 @@ const shippingRates = {
             if (seller_agency_id !== user.agency_id) {
                throw new AppError(
                   HttpStatusCodes.FORBIDDEN,
-                  "You can only create pricing agreements where your agency is the seller"
+                  "You can only create pricing agreements where your agency is the seller",
                );
             }
 
@@ -52,7 +52,7 @@ const shippingRates = {
             if (!childAgencies.includes(buyer_agency_id)) {
                throw new AppError(
                   HttpStatusCodes.FORBIDDEN,
-                  "You can only create pricing agreements for your child agencies. To modify your own rates, contact your parent agency or administrator."
+                  "You can only create pricing agreements for your child agencies. To modify your own rates, contact your parent agency or administrator.",
                );
             }
          } else {
@@ -74,7 +74,7 @@ const shippingRates = {
          if (agency.agency_type !== AgencyType.FORWARDER) {
             throw new AppError(
                HttpStatusCodes.BAD_REQUEST,
-               "Only forwarder agencies can have internal rates (where seller equals buyer). Regular agencies must have rates set by their parent agency."
+               "Only forwarder agencies can have internal rates (where seller equals buyer). Regular agencies must have rates set by their parent agency.",
             );
          }
       }
@@ -143,10 +143,9 @@ const shippingRates = {
             if (!canUpdateRate) {
                throw new AppError(
                   HttpStatusCodes.FORBIDDEN,
-                  "You can only update shipping rates for your agency or child agencies"
+                  "You can only update shipping rates for your agency or child agencies",
                );
             }
-
             // AGENCY_ADMIN can modify agreement cost ONLY if they are the SELLER
             // (i.e., they are updating the cost they charge to their children)
             const isSeller = agreement.seller_agency_id === user.agency_id;
@@ -236,13 +235,12 @@ const shippingRates = {
          const childAgencies = await repository.agencies.getAllChildrenRecursively(user.agency_id);
 
          // User can toggle status for their own agency OR child agencies
-         const canToggle =
-            existingRate.agency_id === user.agency_id || childAgencies.includes(existingRate.agency_id);
+         const canToggle = existingRate.agency_id === user.agency_id || childAgencies.includes(existingRate.agency_id);
 
          if (!canToggle) {
             throw new AppError(
                HttpStatusCodes.FORBIDDEN,
-               "You can only toggle status for your agency's rates or your child agencies' rates"
+               "You can only toggle status for your agency's rates or your child agencies' rates",
             );
          }
       }
