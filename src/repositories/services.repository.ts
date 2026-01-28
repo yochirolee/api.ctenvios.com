@@ -111,6 +111,8 @@ const services = {
                      select: {
                         id: true,
                         price_in_cents: true,
+                        seller_agency_id: true,
+                        buyer_agency_id: true,
                      },
                   },
 

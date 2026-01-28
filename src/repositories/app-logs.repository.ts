@@ -1,5 +1,5 @@
 import prisma from "../lib/prisma.client";
-import { Prisma, LogLevel } from "@prisma/client";
+import { Prisma, LogLevel, AppLog } from "@prisma/client";
 
 interface CreateAppLogData {
    level: LogLevel;
@@ -29,6 +29,11 @@ interface GetAllFilters {
 }
 
 export const appLogs = {
+   getById: async (id: string): Promise<AppLog | null> => {
+      return prisma.appLog.findUnique({
+         where: { id: parseInt(id) },
+      });
+   },
    create: async (data: CreateAppLogData): Promise<void> => {
       await prisma.appLog.create({
          data: {

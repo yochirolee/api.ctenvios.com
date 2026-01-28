@@ -262,6 +262,14 @@ const flights = {
          throw new AppError(HttpStatusCodes.NOT_FOUND, `Parcel with tracking number ${tracking_number} not found`);
       }
 
+      // Check if parcel's order has been deleted
+      if (parcel.deleted_at) {
+         throw new AppError(
+            HttpStatusCodes.BAD_REQUEST,
+            `Cannot add parcel ${tracking_number} - its order has been deleted`
+         );
+      }
+
       // Validate service type - only AIR parcels can be added to flights
       if (parcel.service?.service_type !== "AIR") {
          throw new AppError(

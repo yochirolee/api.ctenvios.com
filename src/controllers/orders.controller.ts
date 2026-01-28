@@ -77,7 +77,7 @@ export const ordersController = {
          // =====================================
          if (!hasSearch) {
             // whereClause simplificado - solo fecha y RBAC
-            const whereClause: any = { deleted_at: null };
+            const whereClause: any = { };
 
             // Filtro de fecha
             if (hasDateFilter) {

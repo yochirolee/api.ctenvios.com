@@ -147,6 +147,17 @@ const logs = {
          filters: Object.keys(filters).length > 0 ? filters : undefined,
       });
    },
+   getLogById: async (req: LogsRequest, res: Response): Promise<void> => {
+      const { id } = req.params;
+      if (!id) {
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Log ID is required");
+      }
+      const log = await repository.appLogs.getById(id);
+      if (!log) {
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Log not found");
+      }
+      res.status(200).json(log);
+   },
    getLogsStats: async (req: LogsRequest, res: Response): Promise<void> => {
       const stats = await repository.appLogs.getStats();
       res.status(200).json(stats);

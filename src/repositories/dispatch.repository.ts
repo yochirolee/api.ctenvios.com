@@ -515,6 +515,14 @@ const dispatch = {
             throw new AppError(HttpStatusCodes.NOT_FOUND, `Parcel with tracking number ${tracking_number} not found`);
          }
 
+         // 3.1 VALIDATE: Parcel must not be from a deleted order
+         if (parcel.deleted_at) {
+            throw new AppError(
+               HttpStatusCodes.BAD_REQUEST,
+               `Cannot add parcel ${tracking_number} - its order has been deleted`
+            );
+         }
+
          // 4. VALIDATE: Parcel must belong to sender agency or its child agencies
          const isOwned = await validateParcelOwnershipInTx(tx, parcel.agency_id, currentDispatch.sender_agency_id);
          if (!isOwned) {

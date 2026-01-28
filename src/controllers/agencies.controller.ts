@@ -6,7 +6,6 @@ import { agencySchema } from "../types/types";
 import repository from "../repositories";
 import prisma from "../lib/prisma.client";
 import { auth } from "../lib/auth";
-import { pricingService } from "../services/pricing.service";
 import HttpStatusCodes from "../common/https-status-codes";
 
 // Extend Express Request type for authenticated requests
@@ -35,10 +34,7 @@ const create_agency_schema = z.object({
       contact: z.string().min(1),
       phone: z.string().min(10),
       email: z.string().email(),
-      website: z.preprocess(
-         (val) => (val === "" || val === null ? undefined : val),
-         z.string().url().optional()
-      ),
+      website: z.preprocess((val) => (val === "" || val === null ? undefined : val), z.string().url().optional()),
       agency_type: z.enum(["AGENCY", "RESELLER", "FORWARDER"]),
       parent_agency_id: z.number().int().positive().optional(),
    }),
@@ -128,7 +124,7 @@ const agencies = {
       if (!canCreateChild) {
          throw new AppError(
             HttpStatusCodes.FORBIDDEN,
-            "Only FORWARDER and RESELLER agencies can create child agencies"
+            "Only FORWARDER and RESELLER agencies can create child agencies",
          );
       }
       // Validate request body
@@ -278,6 +274,7 @@ const agencies = {
       if (!services_with_rates) {
          throw new AppError(HttpStatusCodes.NOT_FOUND, "No services found");
       }
+
       const formatted_services_with_rates = services_with_rates.map((service) => {
          return {
             ...service,
@@ -291,6 +288,8 @@ const agencies = {
                      price_in_cents: rate.price_in_cents,
                      cost_in_cents: rate.pricing_agreement.price_in_cents,
                      is_active: rate.is_active,
+                     seller_agency_id: rate.pricing_agreement.seller_agency_id,
+                     buyer_agency_id: rate.pricing_agreement.buyer_agency_id,
                   };
                }) || [],
          };

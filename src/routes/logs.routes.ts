@@ -2,6 +2,8 @@ import { Router } from "express";
 import { Roles } from "@prisma/client";
 import { authMiddleware, requireRoles } from "../middlewares/auth.middleware";
 import controllers from "../controllers";
+import HttpStatusCodes from "../common/https-status-codes";
+import { AppError } from "../common/app-errors";
 
 const router = Router();
 
@@ -30,6 +32,10 @@ const adminRoles = [Roles.ROOT, Roles.ADMINISTRATOR];
  *   GET /api/v1/logs?path=/api/orders&level=ERROR
  */
 router.get("/", authMiddleware, requireRoles(adminRoles), controllers.logs.getLogs);
+
+
+router.get("/:id", authMiddleware, requireRoles(adminRoles), controllers.logs.getLogById);
+
 
 /**
  * GET /api/v1/logs/stats

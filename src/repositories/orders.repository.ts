@@ -210,16 +210,34 @@ const orders = {
 
       // Store original status before cancellation for potential restore
       const originalStatus = order.status;
+      const deletedAt = new Date();
 
-      // Perform soft delete - change status to CANCELLED
-      const deletedOrder = await prisma.order.update({
-         where: { id },
-         data: {
-            status: Status.CANCELLED,
-            deleted_at: new Date(),
-            deleted_by_id: user.userId,
-            deletion_reason: reason || `Deleted by user. Original status: ${originalStatus}`,
-         },
+      // Perform soft delete in a transaction - delete order, parcels, and order items
+      const deletedOrder = await prisma.$transaction(async (tx) => {
+         // 1. Soft delete all parcels belonging to this order
+         await tx.parcel.updateMany({
+            where: { order_id: id },
+            data: { deleted_at: deletedAt },
+         });
+
+         // 2. Soft delete all order items belonging to this order
+         await tx.orderItem.updateMany({
+            where: { order_id: id },
+            data: { deleted_at: deletedAt },
+         });
+
+         // 3. Soft delete the order
+         const updatedOrder = await tx.order.update({
+            where: { id },
+            data: {
+               status: Status.CANCELLED,
+               deleted_at: deletedAt,
+               deleted_by_id: user.userId,
+               deletion_reason: reason || `Deleted by user. Original status: ${originalStatus}`,
+            },
+         });
+
+         return updatedOrder;
       });
 
       return { success: true, order: deletedOrder };
@@ -228,6 +246,7 @@ const orders = {
    /**
     * Restore a soft-deleted order
     * Restores to IN_AGENCY status (since only IN_AGENCY orders can be deleted)
+    * Also restores all parcels that were deleted with the order
     */
    restore: async (id: number): Promise<any> => {
       const order = await prisma.order.findUnique({
@@ -242,14 +261,32 @@ const orders = {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "Order is not deleted");
       }
 
-      return await prisma.order.update({
-         where: { id },
-         data: {
-            status: Status.IN_AGENCY, // Restore to original deletable status
-            deleted_at: null,
-            deleted_by_id: null,
-            deletion_reason: null,
-         },
+      // Restore in a transaction - restore order, parcels, and order items
+      return await prisma.$transaction(async (tx) => {
+         // 1. Restore all parcels belonging to this order
+         await tx.parcel.updateMany({
+            where: { order_id: id, deleted_at: { not: null } },
+            data: { deleted_at: null },
+         });
+
+         // 2. Restore all order items belonging to this order
+         await tx.orderItem.updateMany({
+            where: { order_id: id, deleted_at: { not: null } },
+            data: { deleted_at: null },
+         });
+
+         // 3. Restore the order
+         const restoredOrder = await tx.order.update({
+            where: { id },
+            data: {
+               status: Status.IN_AGENCY, // Restore to original deletable status
+               deleted_at: null,
+               deleted_by_id: null,
+               deletion_reason: null,
+            },
+         });
+
+         return restoredOrder;
       });
    },
 

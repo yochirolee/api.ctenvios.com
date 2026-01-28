@@ -252,6 +252,14 @@ const pallets = {
          throw new AppError(HttpStatusCodes.NOT_FOUND, `Parcel with tracking number ${tracking_number} not found`);
       }
 
+      // Check if parcel's order has been deleted
+      if (parcel.deleted_at) {
+         throw new AppError(
+            HttpStatusCodes.BAD_REQUEST,
+            `Cannot add parcel ${tracking_number} - its order has been deleted`
+         );
+      }
+
       if (parcel.pallet_id) {
          throw new AppError(
             HttpStatusCodes.CONFLICT,
