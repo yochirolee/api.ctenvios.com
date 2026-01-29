@@ -1,10 +1,27 @@
 import { Response } from "express";
-import { AgencyType, ContainerStatus } from "@prisma/client";
+import { z } from "zod";
+import { AgencyType, ContainerStatus, Prisma, Status } from "@prisma/client";
 import containersRepository from "../repositories/containers.repository";
 import AppError from "../utils/app.error";
 import prisma from "../lib/prisma.client";
 import repository from "../repositories";
 import { generateContainerManifestExcel, getContainerManifestData } from "../utils/generate-container-manifest-excel";
+
+const ALLOWED_CONTAINER_STATUSES: Status[] = [
+   Status.IN_AGENCY,
+   Status.IN_PALLET,
+   Status.IN_DISPATCH,
+   Status.RECEIVED_IN_DISPATCH,
+   Status.IN_WAREHOUSE,
+];
+
+const addParcelParamsSchema = z.object({
+   id: z.coerce.number().int().positive(),
+});
+
+const addParcelBodySchema = z.object({
+   tracking_number: z.string().min(1),
+});
 
 interface ContainerRequest {
    user?: {
@@ -13,13 +30,13 @@ interface ContainerRequest {
       agency_id?: number;
    };
    query: {
-      page?: number;
-      limit?: number;
-      status?: ContainerStatus;
+      page?: string;
+      limit?: string;
+      status?: string;
    };
-   body: any;
+   body: unknown;
    params: {
-      id?: number;
+      id?: string;
       containerNumber?: string;
       trackingNumber?: string;
    };
@@ -60,7 +77,7 @@ export const containers = {
     */
    getById: async (req: ContainerRequest, res: Response): Promise<void> => {
       const { id } = req.params;
-      const container = await containersRepository.getById(id!);
+      const container = await containersRepository.getById(Number(id));
 
       if (!container) {
          res.status(404).json({ error: "Container not found" });
@@ -90,6 +107,7 @@ export const containers = {
     */
    create: async (req: ContainerRequest, res: Response): Promise<void> => {
       const user = req.user!;
+      const body = req.body as Prisma.ContainerUncheckedCreateInput;
 
       if (!user.agency_id) {
          throw new AppError("User must belong to an agency", 403);
@@ -106,11 +124,11 @@ export const containers = {
       }
 
       const container = await containersRepository.create({
-         ...req.body,
+         ...body,
          forwarder_id: agency.forwarder_id,
          created_by_id: user.id,
-         estimated_departure: req.body.estimated_departure ? new Date(req.body.estimated_departure) : undefined,
-         estimated_arrival: req.body.estimated_arrival ? new Date(req.body.estimated_arrival) : undefined,
+         estimated_departure: body.estimated_departure ? new Date(body.estimated_departure as string) : undefined,
+         estimated_arrival: body.estimated_arrival ? new Date(body.estimated_arrival as string) : undefined,
       });
 
       res.status(201).json(container);
@@ -122,16 +140,17 @@ export const containers = {
    update: async (req: ContainerRequest, res: Response): Promise<void> => {
       const { id } = req.params;
       const user = req.user;
+      const body = req.body as Record<string, unknown>;
 
       const updateData = {
-         ...req.body,
-         estimated_departure: req.body.estimated_departure ? new Date(req.body.estimated_departure) : undefined,
-         estimated_arrival: req.body.estimated_arrival ? new Date(req.body.estimated_arrival) : undefined,
-         actual_departure: req.body.actual_departure ? new Date(req.body.actual_departure) : undefined,
-         actual_arrival: req.body.actual_arrival ? new Date(req.body.actual_arrival) : undefined,
+         ...body,
+         estimated_departure: body.estimated_departure ? new Date(body.estimated_departure as string) : undefined,
+         estimated_arrival: body.estimated_arrival ? new Date(body.estimated_arrival as string) : undefined,
+         actual_departure: body.actual_departure ? new Date(body.actual_departure as string) : undefined,
+         actual_arrival: body.actual_arrival ? new Date(body.actual_arrival as string) : undefined,
       };
 
-      const container = await containersRepository.update(id!, updateData, user?.id);
+      const container = await containersRepository.update(Number(id), updateData, user?.id);
 
       res.status(200).json(container);
    },
@@ -141,7 +160,7 @@ export const containers = {
     */
    delete: async (req: ContainerRequest, res: Response): Promise<void> => {
       const { id } = req.params;
-      const container = await containersRepository.delete(id!);
+      const container = await containersRepository.delete(Number(id));
       res.status(200).json(container);
    },
 
@@ -153,7 +172,7 @@ export const containers = {
       const page = Number(req.query.page) || 1;
       const limit = Number(req.query.limit) || 20;
 
-      const result = await containersRepository.getParcels(id!, page, limit);
+      const result = await containersRepository.getParcels(Number(id), page, limit);
 
       res.status(200).json({
          rows: result.parcels,
@@ -167,13 +186,62 @@ export const containers = {
     * Add parcel to container
     */
    addParcel: async (req: ContainerRequest, res: Response): Promise<void> => {
-      const { id } = req.params;
-      const { tracking_number } = req.body;
-      const user = req.user;
+      const user = req.user!;
+      const { id } = addParcelParamsSchema.parse(req.params);
+      const { tracking_number } = addParcelBodySchema.parse(req.body);
 
-      const parcel = await containersRepository.addParcel(id!, tracking_number, user!.id);
+      const parcel = await containersRepository.getParcelAttachInfo(tracking_number);
 
-      res.status(200).json(parcel);
+      if (!parcel) {
+         throw new AppError("Parcel not found", 404);
+      }
+
+      if (parcel.deleted_at) {
+         throw new AppError(`Cannot add parcel ${tracking_number} - its order has been deleted`, 400);
+      }
+
+      if (parcel.service?.service_type !== "MARITIME") {
+         throw new AppError(
+            `Parcel ${tracking_number} uses ${parcel.service?.service_name || "AIR"} service (${
+               parcel.service?.service_type
+            }). Only MARITIME parcels can be added to containers. Use flights for AIR parcels.`,
+            400,
+         );
+      }
+
+      if (parcel.container_id) {
+         throw new AppError(`Parcel ${tracking_number} is already in container ${parcel.container_id}`, 409);
+      }
+
+      if (parcel.flight_id) {
+         throw new AppError(`Parcel ${tracking_number} is already in flight ${parcel.flight_id}`, 409);
+      }
+
+      if (!ALLOWED_CONTAINER_STATUSES.includes(parcel.status)) {
+         throw new AppError(
+            `Parcel with status ${parcel.status} cannot be added to container. Allowed statuses: ${ALLOWED_CONTAINER_STATUSES.join(
+               ", ",
+            )}`,
+            400,
+         );
+      }
+
+      const container = await containersRepository.getContainerAttachInfo(id);
+
+      if (!container) {
+         throw new AppError(`Container with id ${id} not found`, 404);
+      }
+
+      if (container.status !== ContainerStatus.PENDING && container.status !== ContainerStatus.LOADING) {
+         throw new AppError(
+            `Cannot add parcels to container with status ${container.status}. Container must be PENDING or LOADING.`,
+            400,
+         );
+      }
+
+      const updatedParcel = await containersRepository.addParcel(id, tracking_number, user.id);
+
+      res.status(200).json({ data: updatedParcel });
    },
 
    /**
@@ -181,7 +249,7 @@ export const containers = {
     */
    addParcelsByOrderId: async (req: ContainerRequest, res: Response): Promise<void> => {
       const { id } = req.params;
-      const { order_id } = req.body;
+      const { order_id } = req.body as { order_id: number };
       const user = req.user;
 
       const result = await containersRepository.addParcelsByOrderId(Number(id), order_id, user!.id);
@@ -194,7 +262,7 @@ export const containers = {
     */
    addParcelsByDispatchId: async (req: ContainerRequest, res: Response): Promise<void> => {
       const { id } = req.params;
-      const { dispatch_id } = req.body;
+      const { dispatch_id } = req.body as { dispatch_id: number };
       const user = req.user;
 
       const result = await containersRepository.addParcelsByDispatchId(Number(id), dispatch_id, user!.id);
@@ -219,10 +287,14 @@ export const containers = {
     */
    updateStatus: async (req: ContainerRequest, res: Response): Promise<void> => {
       const { id } = req.params;
-      const { status, location, description } = req.body;
+      const { status, location, description } = req.body as {
+         status: ContainerStatus;
+         location?: string;
+         description?: string;
+      };
       const user = req.user;
 
-      const container = await containersRepository.updateStatus(id!, status, user!.id, location, description);
+      const container = await containersRepository.updateStatus(Number(id), status, user!.id, location, description);
 
       res.status(200).json(container);
    },
@@ -232,7 +304,7 @@ export const containers = {
     */
    getEvents: async (req: ContainerRequest, res: Response): Promise<void> => {
       const { id } = req.params;
-      const events = await containersRepository.getEvents(id!);
+      const events = await containersRepository.getEvents(Number(id));
       res.status(200).json(events);
    },
 

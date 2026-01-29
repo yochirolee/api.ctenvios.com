@@ -1,4 +1,4 @@
-import { Status } from "@prisma/client";
+import { Prisma, Status } from "@prisma/client";
 import prisma from "../lib/prisma.client";
 
 /**
@@ -140,12 +140,45 @@ export const updateOrderStatusFromParcels = async (order_id: number): Promise<St
 };
 
 /**
+ * Update order status based on its parcels' current statuses (transaction-aware)
+ */
+export const updateOrderStatusFromParcelsTx = async (
+   tx: Prisma.TransactionClient,
+   order_id: number
+): Promise<Status> => {
+   const parcels = await tx.parcel.findMany({
+      where: { order_id },
+      select: { status: true },
+   });
+
+   const parcelStatuses = parcels.map((p) => p.status);
+   const newOrderStatus = calculateOrderStatus(parcelStatuses);
+
+   await tx.order.update({
+      where: { id: order_id },
+      data: { status: newOrderStatus },
+   });
+
+   return newOrderStatus;
+};
+
+/**
  * Bulk update: Update order status for multiple orders
  * Useful when updating container/flight status affects many orders
  */
 export const updateMultipleOrdersStatus = async (order_ids: number[]): Promise<void> => {
    // Use Promise.all for parallel execution
    await Promise.all(order_ids.map((id) => updateOrderStatusFromParcels(id)));
+};
+
+/**
+ * Bulk update: Update order status for multiple orders (transaction-aware)
+ */
+export const updateMultipleOrdersStatusTx = async (
+   tx: Prisma.TransactionClient,
+   order_ids: number[]
+): Promise<void> => {
+   await Promise.all(order_ids.map((id) => updateOrderStatusFromParcelsTx(tx, id)));
 };
 
 /**
@@ -163,6 +196,25 @@ export const updateOrderStatusFromParcel = async (parcel_id: number): Promise<St
    }
 
    return updateOrderStatusFromParcels(parcel.order_id);
+};
+
+/**
+ * Update order status from a parcel ID (transaction-aware)
+ */
+export const updateOrderStatusFromParcelTx = async (
+   tx: Prisma.TransactionClient,
+   parcel_id: number
+): Promise<Status | null> => {
+   const parcel = await tx.parcel.findUnique({
+      where: { id: parcel_id },
+      select: { order_id: true },
+   });
+
+   if (!parcel?.order_id) {
+      return null;
+   }
+
+   return updateOrderStatusFromParcelsTx(tx, parcel.order_id);
 };
 
 /**

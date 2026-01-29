@@ -4,9 +4,9 @@ import { Container, ContainerStatus, Parcel, ParcelEventType, Prisma, Status } f
 import { AppError } from "../common/app-errors";
 import { getEventTypeForContainerStatus } from "../utils/parcel-event-visibility";
 import {
-   updateOrderStatusFromParcel,
-   updateOrderStatusFromParcels,
-   updateMultipleOrdersStatus,
+   updateMultipleOrdersStatusTx,
+   updateOrderStatusFromParcelTx,
+   updateOrderStatusFromParcelsTx,
 } from "../utils/order-status-calculator";
 
 // Allowed statuses for parcels to be added to container
@@ -25,7 +25,79 @@ const isValidStatusForContainer = (status: Status): boolean => {
    return ALLOWED_CONTAINER_STATUSES.includes(status);
 };
 
+interface ParcelAttachInfo {
+   id: number;
+   status: Status;
+   weight: Prisma.Decimal;
+   deleted_at: Date | null;
+   container_id: number | null;
+   flight_id: number | null;
+   service: {
+      service_type: string | null;
+      service_name: string | null;
+   } | null;
+}
+
+interface ContainerAttachInfo {
+   id: number;
+   status: ContainerStatus;
+   container_number: string;
+}
+
 const containers = {
+   /**
+    * Get minimal parcel info needed for container attach validation
+    */
+   getParcelAttachInfo: async (tracking_number: string): Promise<ParcelAttachInfo | null> => {
+      const parcel = await prisma.parcel.findUnique({
+         where: { tracking_number },
+         select: {
+            id: true,
+            status: true,
+            weight: true,
+            deleted_at: true,
+            container_id: true,
+            flight_id: true,
+            service: {
+               select: {
+                  service_type: true,
+                  name: true,
+               },
+            },
+         },
+      });
+
+      if (!parcel) {
+         return null;
+      }
+
+      return {
+         id: parcel.id,
+         status: parcel.status,
+         weight: parcel.weight,
+         deleted_at: parcel.deleted_at,
+         container_id: parcel.container_id,
+         flight_id: parcel.flight_id,
+         service: parcel.service
+            ? { service_type: parcel.service.service_type, service_name: parcel.service.name }
+            : null,
+      };
+   },
+
+   /**
+    * Get minimal container info needed for parcel attach validation
+    */
+   getContainerAttachInfo: async (container_id: number): Promise<ContainerAttachInfo | null> => {
+      return prisma.container.findUnique({
+         where: { id: container_id },
+         select: {
+            id: true,
+            status: true,
+            container_number: true,
+         },
+      });
+   },
+
    /**
     * Get all containers with pagination
     */
@@ -258,73 +330,52 @@ const containers = {
     * Add parcel to container
     */
    addParcel: async (container_id: number, tracking_number: string, user_id: string): Promise<Parcel> => {
-      const parcel = await prisma.parcel.findUnique({
-         where: { tracking_number },
-         include: {
-            service: { select: { service_type: true, name: true } },
-         },
-      });
-
-      if (!parcel) {
-         throw new AppError(HttpStatusCodes.NOT_FOUND, `Parcel with tracking number ${tracking_number} not found`);
-      }
-
-      // Check if parcel's order has been deleted
-      if (parcel.deleted_at) {
-         throw new AppError(
-            HttpStatusCodes.BAD_REQUEST,
-            `Cannot add parcel ${tracking_number} - its order has been deleted`
-         );
-      }
-
-      // Validate service type - only MARITIME parcels can be added to containers
-      if (parcel.service?.service_type !== "MARITIME") {
-         throw new AppError(
-            HttpStatusCodes.BAD_REQUEST,
-            `Parcel ${tracking_number} uses ${parcel.service?.name || "AIR"} service (${
-               parcel.service?.service_type
-            }). ` + `Only MARITIME parcels can be added to containers. Use flights for AIR parcels.`,
-         );
-      }
-
-      if (parcel.container_id) {
-         throw new AppError(
-            HttpStatusCodes.CONFLICT,
-            `Parcel ${tracking_number} is already in container ${parcel.container_id}`,
-         );
-      }
-
-      if (!isValidStatusForContainer(parcel.status)) {
-         throw new AppError(
-            HttpStatusCodes.BAD_REQUEST,
-            `Parcel with status ${
-               parcel.status
-            } cannot be added to container. Allowed statuses: ${ALLOWED_CONTAINER_STATUSES.join(", ")}`,
-         );
-      }
-
-      if (parcel.flight_id) {
-         throw new AppError(
-            HttpStatusCodes.CONFLICT,
-            `Parcel ${tracking_number} is already in flight ${parcel.flight_id}`,
-         );
-      }
-
-      const container = await prisma.container.findUnique({ where: { id: container_id } });
-
-      if (!container) {
-         throw new AppError(HttpStatusCodes.NOT_FOUND, `Container with id ${container_id} not found`);
-      }
-
-      if (container.status !== ContainerStatus.PENDING && container.status !== ContainerStatus.LOADING) {
-         throw new AppError(
-            HttpStatusCodes.BAD_REQUEST,
-            `Cannot add parcels to container with status ${container.status}. Container must be PENDING or LOADING.`,
-         );
-      }
-
       const updatedParcel = await prisma.$transaction(async (tx) => {
-         // Update parcel
+         const parcel = await tx.parcel.findUnique({
+            where: { tracking_number },
+            select: {
+               id: true,
+               status: true,
+               weight: true,
+               container_id: true,
+               flight_id: true,
+            },
+         });
+
+         if (!parcel) {
+            throw new AppError(HttpStatusCodes.NOT_FOUND, `Parcel with tracking number ${tracking_number} not found`);
+         }
+
+         if (parcel.container_id) {
+            throw new AppError(
+               HttpStatusCodes.CONFLICT,
+               `Parcel ${tracking_number} is already in container ${parcel.container_id}`,
+            );
+         }
+
+         if (parcel.flight_id) {
+            throw new AppError(
+               HttpStatusCodes.CONFLICT,
+               `Parcel ${tracking_number} is already in flight ${parcel.flight_id}`,
+            );
+         }
+
+         const container = await tx.container.findUnique({
+            where: { id: container_id },
+            select: { id: true, status: true, container_number: true },
+         });
+
+         if (!container) {
+            throw new AppError(HttpStatusCodes.NOT_FOUND, `Container with id ${container_id} not found`);
+         }
+
+         if (container.status !== ContainerStatus.PENDING && container.status !== ContainerStatus.LOADING) {
+            throw new AppError(
+               HttpStatusCodes.BAD_REQUEST,
+               `Cannot add parcels to container with status ${container.status}. Container must be PENDING or LOADING.`,
+            );
+         }
+
          const updated = await tx.parcel.update({
             where: { tracking_number },
             data: {
@@ -333,7 +384,6 @@ const containers = {
             },
          });
 
-         // Create parcel event with container reference
          await tx.parcelEvent.create({
             data: {
                parcel_id: parcel.id,
@@ -345,7 +395,6 @@ const containers = {
             },
          });
 
-         // Update container weight and status
          await tx.container.update({
             where: { id: container_id },
             data: {
@@ -356,11 +405,10 @@ const containers = {
             },
          });
 
+         await updateOrderStatusFromParcelTx(tx, parcel.id);
+
          return updated;
       });
-
-      // Update order status based on parcel changes
-      await updateOrderStatusFromParcel(parcel.id);
 
       return updatedParcel;
    },
@@ -460,13 +508,10 @@ const containers = {
                   status: ContainerStatus.LOADING,
                },
             });
+
+            await updateOrderStatusFromParcelsTx(tx, order_id);
          }
       });
-
-      // Update order status based on parcel changes
-      if (added > 0) {
-         await updateOrderStatusFromParcels(order_id);
-      }
 
       return { added, skipped, parcels: addedParcels };
    },
@@ -581,12 +626,11 @@ const containers = {
                },
             });
          }
-      });
 
-      // Update order statuses for all affected orders
-      for (const orderId of affectedOrderIds) {
-         await updateOrderStatusFromParcels(orderId);
-      }
+         if (affectedOrderIds.size > 0) {
+            await updateMultipleOrdersStatusTx(tx, [...affectedOrderIds]);
+         }
+      });
 
       return { added, skipped, parcels: addedParcels };
    },
@@ -656,11 +700,10 @@ const containers = {
             },
          });
 
+         await updateOrderStatusFromParcelTx(tx, parcel.id);
+
          return updated;
       });
-
-      // Update order status based on parcel changes
-      await updateOrderStatusFromParcel(parcel.id);
 
       return updatedParcel;
    },
@@ -744,15 +787,14 @@ const containers = {
          // Collect unique order IDs to update
          const orderIds = [...new Set(parcels.map((p) => p.order_id).filter((id): id is number => id !== null))];
 
-         return { updatedContainer, orderIds };
+         if (orderIds.length > 0) {
+            await updateMultipleOrdersStatusTx(tx, orderIds);
+         }
+
+         return updatedContainer;
       });
 
-      // Update order statuses based on parcel changes
-      if (updated.orderIds.length > 0) {
-         await updateMultipleOrdersStatus(updated.orderIds);
-      }
-
-      return updated.updatedContainer;
+      return updated;
    },
 
    /**
@@ -783,6 +825,7 @@ const containers = {
       const where: Prisma.ParcelWhereInput = {
          container_id: null,
          flight_id: null,
+         deleted_at: null,
          status: {
             in: ALLOWED_CONTAINER_STATUSES,
          },

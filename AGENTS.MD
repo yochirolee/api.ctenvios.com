@@ -1,8 +1,3 @@
----
-description: 
-alwaysApply: true
----
-
 # CTEnvios Backend - Package Tracking System
 
 ## Project Context
@@ -31,20 +26,20 @@ providers) throughout the delivery process until packages are delivered.
 
 ## File Structure Conventions
 
-- **Controllers**: Handle HTTP requests and responses and Bussines Logic Layer (`src/controllers/`)
+- **Controllers**: Handle HTTP requests and responses and Bussines Logic Layer (src/controllers/)
 
-- **Repository**: Data access layer (`src/repository/`)
-- **Routes**: API endpoint definitions (`src/routes/`)
-- **Middlewares**: Request/response middleware (`src/middlewares/`)
-- **Utils**: Utility functions and helpers (`src/utils/`)
-- **Types**: TypeScript type definitions (`src/types/`)
+- **Repository**: Data access layer (src/repository/)
+- **Routes**: API endpoint definitions (src/routes/)
+- **Middlewares**: Request/response middleware (src/middlewares/)
+- **Utils**: Utility functions and helpers (src/utils/)
+- **Types**: TypeScript type definitions (src/types/)
 
 ## Naming Conventions
 
-- Use lowercase with dashes for directories (e.g., `src/controllers/`)
+- Use lowercase with dashes for directories (e.g., src/controllers/)
 - Use PascalCase for class-like files and components
-- Use camelCase for utility files (e.g., `generateInvoicePdf.ts`)
-- Use kebab-case for route files (e.g., `customers.routes.ts`)
+- Use camelCase for utility files (e.g., generateInvoicePdf.ts)
+- Use kebab-case for route files (e.g., customers.routes.ts)
 - Database entities use PascalCase (Customer, Invoice, Receipt)
 
 ## TypeScript Usage
