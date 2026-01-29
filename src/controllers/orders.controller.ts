@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { services } from "../services";
 import { parseDateFlexible } from "../types/types";
 import { buildNameSearchFilter } from "../types/types";
+import { getDayRangeUTC } from "../utils/utils";
 import { PaymentStatus, Roles } from "@prisma/client";
 import prisma from "../lib/prisma.client";
 import repository from "../repositories";
@@ -79,19 +80,20 @@ export const ordersController = {
             // whereClause simplificado - solo fecha y RBAC
             const whereClause: any = { };
 
-            // Filtro de fecha
+            // Filtro de fecha (timezone-aware: EST -> UTC)
             if (hasDateFilter) {
                whereClause.created_at = {};
                if (startDate) {
                   const start = parseDateFlexible(startDate);
                   if (!start) return res.status(400).json({ message: "startDate invalida" });
-                  whereClause.created_at.gte = start;
+                  const { start: utcStart } = getDayRangeUTC(start);
+                  whereClause.created_at.gte = utcStart;
                }
                if (endDate) {
                   const end = parseDateFlexible(endDate);
                   if (!end) return res.status(400).json({ message: "endDate invalida" });
-                  end.setHours(23, 59, 59, 999);
-                  whereClause.created_at.lte = end;
+                  const { end: utcEnd } = getDayRangeUTC(end);
+                  whereClause.created_at.lte = utcEnd;
                }
             }
 
@@ -171,19 +173,20 @@ export const ordersController = {
 
          const filters: any[] = [{ deleted_at: null }];
 
-         // Filtro de fecha
+         // Filtro de fecha (timezone-aware: EST -> UTC)
          if (hasDateFilter) {
             const dateFilter: any = { created_at: {} };
             if (startDate) {
                const start = parseDateFlexible(startDate);
                if (!start) return res.status(400).json({ message: "startDate invalida" });
-               dateFilter.created_at.gte = start;
+               const { start: utcStart } = getDayRangeUTC(start);
+               dateFilter.created_at.gte = utcStart;
             }
             if (endDate) {
                const end = parseDateFlexible(endDate);
                if (!end) return res.status(400).json({ message: "endDate invalida" });
-               end.setHours(23, 59, 59, 999);
-               dateFilter.created_at.lte = end;
+               const { end: utcEnd } = getDayRangeUTC(end);
+               dateFilter.created_at.lte = utcEnd;
             }
             filters.push(dateFilter);
          }
