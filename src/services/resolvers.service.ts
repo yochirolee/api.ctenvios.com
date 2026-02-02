@@ -5,6 +5,7 @@ import repository from "../repositories";
 import { generateHBLFast } from "../utils/generate-hbl";
 import { pricingService } from "./pricing.service";
 import HttpStatusCodes from "../common/https-status-codes";
+import { createReceiverSchema } from "../types/types";
 
 interface ReceiverWithLocationNames extends Omit<Receiver, "province_id" | "city_id"> {
    province?: string;
@@ -69,10 +70,7 @@ export const resolvers = {
       // Scenario 1: Frontend provides receiver_id
       if (receiver_id) {
          const existingReceiver = await repository.receivers.getById(receiver_id);
-         if (!existingReceiver) {
-            throw new AppError(HttpStatusCodes.NOT_FOUND, `Receiver with ID ${receiver_id} not found`);
-         }
-         return existingReceiver;
+         if (existingReceiver) return existingReceiver;
       }
 
       // Scenario 2: Partners provide receiver data
@@ -82,25 +80,41 @@ export const resolvers = {
          if (existingReceiver) return existingReceiver;
       }
 
-      if (!receiver) {
-         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Receiver data is required");
-      }
-
       // If both province and city are provided as names, resolve them in parallel
+
       if (
-         receiver.province &&
-         typeof receiver.province === "string" &&
-         receiver.city &&
-         typeof receiver.city === "string"
+         receiver?.province &&
+         typeof receiver?.province === "string" &&
+         receiver?.city &&
+         typeof receiver?.city === "string"
       ) {
-         const resolvedProvinceId = await resolvers.resolveProvinceId(receiver.province);
+         const resolvedProvinceId = await resolvers.resolveProvinceId(receiver?.province);
          receiver.province_id = resolvedProvinceId;
-         receiver.city_id = await resolvers.resolveCityId(receiver.city, resolvedProvinceId);
+         receiver.city_id = await resolvers.resolveCityId(receiver?.city, resolvedProvinceId);
       }
 
       // Validate required location fields
-      if (!receiver.province_id || !receiver.city_id) {
+      if (!receiver?.province_id || !receiver?.city_id) {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "Province and city are required for creating a new receiver");
+      }
+      const parseResult = createReceiverSchema.safeParse({
+         first_name: receiver.first_name,
+         last_name: receiver.last_name,
+         ci: receiver.ci,
+         address: receiver.address,
+         province_id: receiver.province_id,
+         city_id: receiver.city_id,
+         middle_name: receiver.middle_name ?? null,
+         second_last_name: receiver.second_last_name ?? null,
+         passport: receiver.passport ?? null,
+         email: receiver.email ?? null,
+         mobile: receiver.mobile ?? null,
+         phone: receiver.phone ?? null,
+      });
+
+      if (!parseResult.success) {
+         const errors = parseResult.error.flatten().fieldErrors;
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, JSON.stringify({ message: "Validation failed", errors }));
       }
 
       // Create new receiver with resolved IDs
@@ -120,6 +134,7 @@ export const resolvers = {
       };
 
       const newReceiver = await repository.receivers.create(receiverData);
+
       return newReceiver as Receiver & { province: Province; city: City };
    },
 

@@ -64,6 +64,16 @@ const parcels = {
          },
       });
    },
+   getByOrderId: async (orderId: number, page = 1, limit = 10): Promise<{ parcels: Parcel[]; total: number }> => {
+      const parcels = await prisma.parcel.findMany({
+      where: { order_id: orderId },
+      orderBy: { tracking_number: "asc" },
+      take: limit,
+      skip: (page - 1) * limit,
+      });
+   const total = await prisma.parcel.count({ where: { order_id: orderId } });
+   return { parcels, total };
+   },
 
    /**
     * Gets the previous status of a parcel before it was added to dispatch

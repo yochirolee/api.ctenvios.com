@@ -245,7 +245,10 @@ export const dispatchController = {
     * - Parcel must have valid status and not be in another dispatch
     */
    addParcel: async (req: DispatchRequest, res: Response): Promise<void> => {
-      const dispatchId = parseInt(req.params.id!);
+      const dispatchId = Number(req.params.id);
+      if (!Number.isFinite(dispatchId)) {
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid dispatch id");
+      }
       const { hbl } = req.body;
       const user = req.user!;
 

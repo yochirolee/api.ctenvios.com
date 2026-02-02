@@ -133,6 +133,7 @@ export const ordersService = {
          return order;
       }
 
+    
       // Slow path for partners (requires entity resolution/creation)
       const [resolvedReceiver, resolvedCustomer] = await Promise.all([
          services.resolvers.resolveReceiver({
@@ -144,7 +145,8 @@ export const ordersService = {
             customer,
          }),
       ]);
-
+      
+  
       // Transform items_hbl to use relation syntax for nested creates
       const orderItemsWithRelations = items_hbl.map((item) => ({
          hbl: item.hbl,
@@ -166,6 +168,7 @@ export const ordersService = {
             connect: { tracking_number: item.hbl },
          },
       }));
+
 
       const orderData: Prisma.OrderUncheckedCreateInput = {
          partner_order_id,

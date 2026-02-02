@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { Request } from "express";
 import { AgencyType, DiscountType, FeeType, PaymentMethod, Roles, Unit } from "@prisma/client";
+import { isValidCubanCI } from "../utils/utils";
 
 // Role hierarchy types
 export interface RoleResponse {
@@ -85,14 +86,14 @@ export const createCustomerSchema = z.object({
 export const createReceiverSchema = z
    .object({
       first_name: z.string({ required_error: "First name is required" }).min(1),
-      middle_name: z.string().optional(),
+      middle_name: z.string().nullish(),
       last_name: z.string({ required_error: "Last name is required" }).min(1),
-      second_last_name: z.string().optional(),
+      second_last_name: z.string().nullish(),
       ci: z.string({ required_error: "CI is required" }).length(11, "Receiver CI must be 11 characters long."), // Carnet de Identidad
-      passport: z.string().optional(),
-      email: z.string().email().optional().or(z.literal("")),
-      mobile: z.string().optional(),
-      phone: z.string().optional(),
+      passport: z.string().nullish(),
+      email: z.union([z.string().email(), z.literal("")]).nullish(),
+      mobile: z.string().nullish(),
+      phone: z.string().nullish(),
       address: z.string({ required_error: "Address is required" }).min(1),
       // Support both ID (from frontend) and name (from partners)
       province_id: z.number().int().positive().optional(),
@@ -119,7 +120,11 @@ export const createReceiverSchema = z
          message: "Either city_id or city name must be provided",
          path: ["city"],
       }
-   );
+   )
+   .refine((data) => !data.ci || isValidCubanCI(data.ci), {
+      message: "CI (Carnet de Identidad) format or check digit is invalid",
+      path: ["ci"],
+   });
 
 // --- El Esquema Principal para la Creación de la Factura ---
 export const createOrderSchema = z

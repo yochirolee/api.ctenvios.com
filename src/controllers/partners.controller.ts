@@ -10,12 +10,6 @@ import { services } from "../services";
 
 import HttpStatusCodes from "../common/https-status-codes";
 
-// Use API_URL from environment if available, otherwise construct it
-const host = process.env.HOST || "localhost";
-const port = process.env.PORT || 3000;
-const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
-const apiUrl = `${protocol}://${host}:${port}/api/v1`;
-
 const partnerCreateSchema = z.object({
    name: z.string().min(1, "Name is required"),
    email: z.string().email("Valid email is required"),
@@ -86,7 +80,6 @@ const partners = {
       // Validate request body
       const result = partnerCreateSchema.safeParse(req.body);
       if (!result.success) {
-         const fieldErrors = result.error.flatten().fieldErrors;
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid partner data");
       }
 
@@ -393,57 +386,61 @@ const partners = {
    },
    //Order creation for partners
    createOrder: async (req: any, res: Response): Promise<void> => {
-      const {
-         partner_order_id,
-         customer_id,
-         receiver_id,
-         customer,
-         receiver,
-         service_id,
-         order_items,
-         total_delivery_fee_in_cents,
-         requires_home_delivery,
-      } = req.body;
-      // Get agency user (needed for order creation)
-      const agencyUser = await prisma.user.findFirst({
-         where: { agency_id: req.partner.agency_id },
-         select: { id: true },
-      });
+     
+         const {
+            partner_order_id,
+            customer_id,
+            receiver_id,
+            customer,
+            receiver,
+            service_id,
+            order_items,
+            total_delivery_fee_in_cents,
+            requires_home_delivery,
+         } = req.body;
+         // Get agency user (needed for order creation)
+         const agencyUser = await prisma.user.findFirst({
+            where: { agency_id: req.partner.agency_id },
+            select: { id: true },
+         });
 
-      if (!agencyUser) {
-         throw new AppError(HttpStatusCodes.INTERNAL_SERVER_ERROR, "No user found for partner's agency");
-      }
+         if (!agencyUser) {
+            throw new AppError(HttpStatusCodes.INTERNAL_SERVER_ERROR, "No user found for partner's agency");
+         }
 
-      const partner = req.partner || null;
-      const orderResult = await services.orders.create({
-         partner_order_id,
-         customer_id,
-         receiver_id,
-         customer,
-         receiver,
-         service_id,
-         order_items,
-         user_id: agencyUser.id,
-         agency_id: req.partner.agency_id,
-         total_delivery_fee_in_cents,
-         requires_home_delivery,
-         partner_id: partner?.id || null,
-      });
-      //create pdf urls for the order
-      const orderPdfUrl = `${apiUrl}/orders/${orderResult.id}/pdf`;
-      const orderLabelsPdfUrl = `${apiUrl}/orders/${orderResult.id}/labels-pdf`;
-      const orderHblPdfUrl = `${apiUrl}/orders/${orderResult.id}/hbl-pdf`;
+         const partner = req.partner || null;
 
-      orderResult.pdf_urls = {
-         order: orderPdfUrl,
-         labels: orderLabelsPdfUrl,
-         hbls: orderHblPdfUrl,
-      };
+       
+         const orderResult = await services.orders.create({
+            partner_order_id,
+            customer_id,
+            receiver_id,
+            customer,
+            receiver,
+            service_id,
+            order_items,
+            user_id: agencyUser.id,
+            agency_id: req.partner.agency_id,
+            total_delivery_fee_in_cents,
+            requires_home_delivery,
+            partner_id: partner?.id || null,
+         });
+         //create pdf urls for the order
+         const orderPdfUrl = `https://api.ctenvios.com/api/v1/orders/${orderResult.id}/pdf`;
+         const orderLabelsPdfUrl = `https://api.ctenvios.com/api/v1/orders/${orderResult.id}/labels-pdf`;
+         const orderHblPdfUrl = `https://api.ctenvios.com/api/v1/orders/${orderResult.id}/hbl-pdf`;
 
-      res.status(200).json({
-         message: "Order created successfully",
-         data: orderResult,
-      });
+         orderResult.pdf_urls = {
+            order: orderPdfUrl,
+            labels: orderLabelsPdfUrl,
+            hbls: orderHblPdfUrl,
+         };
+
+         res.status(200).json({
+            message: "Order created successfully",
+            data: orderResult,
+         });
+    
    },
    getServices: async (req: any, res: Response): Promise<void> => {
       const agency_id = req.partner.agency_id;

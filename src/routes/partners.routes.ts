@@ -9,6 +9,7 @@ import { Unit } from "@prisma/client";
 import { validate } from "../middlewares/validate.middleware";
 import { createCustomerSchema, createReceiverSchema } from "../types/types";
 import HttpStatusCodes from "../common/https-status-codes";
+import { isValidCubanCI } from "../utils/utils";
 
 const router = Router();
 
@@ -175,13 +176,37 @@ const partnerOrderItemSchema = z.object({
    charge_fee_in_cents: z.number().optional(),
 });
 
+const partnerReceiverSchema = z
+   .object({
+      first_name: z.optional(z.string({ required_error: "First name is required" }).min(1)),
+      middle_name: z.string().nullish(),
+      last_name: z.optional(z.string({ required_error: "Last name is required" }).min(1)),
+      second_last_name: z.string().nullish(),
+      ci: z.optional(
+         z.string({ required_error: "CI is required" }).length(11, "Receiver CI must be 11 characters long.")
+      ), // Carnet de Identidad
+      passport: z.string().nullish(),
+      email: z.union([z.string().email(), z.literal("")]).nullish(),
+      mobile: z.string().nullish(),
+      phone: z.string().nullish(),
+      address: z.string().nullish(),
+      province: z.string().nullish(),
+      city: z.string().nullish(),
+      province_id: z.number().int().positive().optional().nullable(),
+      city_id: z.number().int().positive().optional().nullable(),
+   })
+   .refine((data) => !data.ci || (typeof data.ci === "string" && data.ci.length === 11 && isValidCubanCI(data.ci)), {
+      message: "CI (Carnet de Identidad) format or check digit is invalid",
+      path: ["ci"],
+   });
+
 const partnerOrderSchema = z.object({
    partner_order_id: z.string().optional(),
    partner_id: z.number().optional(),
    customer_id: z.number().optional(),
    customer: createCustomerSchema.optional(),
    receiver_id: z.number().optional(),
-   receiver: createReceiverSchema.optional(),
+   receiver: partnerReceiverSchema.optional(),
    service_id: z.number().positive(),
    order_items: z.array(partnerOrderItemSchema).min(1).optional(),
    total_delivery_fee_in_cents: z.number().int().min(0).optional().default(0),
@@ -203,7 +228,7 @@ router.post(
    partnerAuthMiddleware,
    partnerLogMiddleware,
    validate({ body: partnerOrderSchema }),
-   controllers.partners.createOrder,
+   controllers.partners.createOrder
 );
 
 /**
