@@ -66,6 +66,7 @@ export const ItemSchema = z.object({
       .min(1, "Item description cannot be empty."),
    weight: z.number({ required_error: "Item weight is required." }).positive("Item weight must be a positive number."),
    rate_id: z.number().positive(),
+   customs_rates_id: z.number().optional().nullable(),
    price_in_cents: z.number().optional().default(0),
    unit: z.nativeEnum(Unit).optional().default(Unit.PER_LB),
 });

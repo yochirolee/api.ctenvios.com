@@ -66,7 +66,7 @@ const isValidStatusForDispatch = (status: Status): boolean => {
 const calculateDispatchStatus = async (
    prismaClient: { parcel: { findMany: typeof prisma.parcel.findMany; count: typeof prisma.parcel.count } },
    dispatchId: number,
-   currentStatus: DispatchStatus,
+   currentStatus: DispatchStatus
 ): Promise<DispatchStatus> => {
    // Count total parcels in dispatch
    const totalParcels = await prismaClient.parcel.count({
@@ -154,7 +154,7 @@ const recalculateDispatchWeight = async (
          findMany: typeof prisma.parcel.findMany;
       };
    },
-   dispatchId: number,
+   dispatchId: number
 ): Promise<number> => {
    // Get all parcels in dispatch
    const parcels = await prismaClient.parcel.findMany({
@@ -246,7 +246,7 @@ const dispatch = {
       agency_id?: number,
       status?: DispatchStatus,
       payment_status?: PaymentStatus,
-      dispatch_id?: number,
+      dispatch_id?: number
    ) => {
       // Build where clause with optional filters
       const where: Prisma.DispatchWhereInput = {
@@ -378,7 +378,7 @@ const dispatch = {
       id: number,
       status: Status | undefined,
       page: number = 1,
-      limit: number = 20,
+      limit: number = 20
    ): Promise<{ parcels: DispatchParcelListItem[]; total: number }> => {
       const where: Prisma.ParcelWhereInput = {
          dispatch_id: id,
@@ -454,7 +454,7 @@ const dispatch = {
       if (!isRoot && user_agency_id !== null && dispatch.sender_agency_id !== user_agency_id) {
          throw new AppError(
             HttpStatusCodes.FORBIDDEN,
-            `Only the sender agency can delete this dispatch. Your agency: ${user_agency_id}, Sender agency: ${dispatch.sender_agency_id}`,
+            `Only the sender agency can delete this dispatch. Your agency: ${user_agency_id}, Sender agency: ${dispatch.sender_agency_id}`
          );
       }
 
@@ -463,7 +463,7 @@ const dispatch = {
       if (!isRoot && !deletableStatuses.includes(dispatch.status)) {
          throw new AppError(
             HttpStatusCodes.BAD_REQUEST,
-            `Dispatch with status ${dispatch.status} cannot be deleted. Only dispatches with status DRAFT or CANCELLED can be deleted.`,
+            `Dispatch with status ${dispatch.status} cannot be deleted. Only dispatches with status DRAFT or CANCELLED can be deleted.`
          );
       }
 
@@ -524,7 +524,7 @@ const dispatch = {
       tracking_number: string,
       dispatchId: number,
       user_id: string,
-      userRole?: string,
+      userRole?: string
    ): Promise<Dispatch> => {
       // All logic inside transaction to prevent race conditions
       const { updatedDispatch, parcelId } = await prisma.$transaction(async (tx) => {
@@ -554,7 +554,7 @@ const dispatch = {
          if (parcel.deleted_at) {
             throw new AppError(
                HttpStatusCodes.BAD_REQUEST,
-               `Cannot add parcel ${tracking_number} - its order has been deleted`,
+               `Cannot add parcel ${tracking_number} - its order has been deleted`
             );
          }
 
@@ -564,7 +564,7 @@ const dispatch = {
             throw new AppError(
                HttpStatusCodes.FORBIDDEN,
                `Parcel ${tracking_number} does not belong to agency ${currentDispatch.sender_agency_id} or its child agencies. ` +
-                  `Parcel agency: ${parcel.agency_id}. An agency can only dispatch parcels from itself or its child agencies.`,
+                  `Parcel agency: ${parcel.agency_id}. An agency can only dispatch parcels from itself or its child agencies.`
             );
          }
 
@@ -574,7 +574,7 @@ const dispatch = {
                HttpStatusCodes.BAD_REQUEST,
                `Parcel with status ${
                   parcel.status
-               } cannot be added to dispatch. Allowed statuses: ${ALLOWED_DISPATCH_STATUSES.join(", ")}`,
+               } cannot be added to dispatch. Allowed statuses: ${ALLOWED_DISPATCH_STATUSES.join(", ")}`
             );
          }
 
@@ -582,7 +582,7 @@ const dispatch = {
          if (parcel.dispatch_id) {
             throw new AppError(
                HttpStatusCodes.CONFLICT,
-               `Parcel ${parcel.tracking_number} is already in dispatch ${parcel.dispatch_id}`,
+               `Parcel ${parcel.tracking_number} is already in dispatch ${parcel.dispatch_id}`
             );
          }
 
@@ -628,6 +628,115 @@ const dispatch = {
       await updateOrderStatusFromParcel(parcelId);
 
       return updatedDispatch;
+   },
+
+   /**
+    * Add all parcels from an order to dispatch (like containers add by order id).
+    * Validations: same as addParcelToDispatch per parcel (dispatch modifiable, ownership, status, not in another dispatch).
+    */
+   addParcelsByOrderId: async (
+      order_id: number,
+      dispatchId: number,
+      user_id: string,
+      userRole?: string
+   ): Promise<Parcel[]> => {
+      const parcels = await prisma.parcel.findMany({
+         where: { order_id },
+      });
+      if (parcels.length === 0) {
+         throw new AppError(HttpStatusCodes.NOT_FOUND, `No parcels found for order ${order_id}`);
+      }
+
+      const addedParcels: Parcel[] = [];
+      let totalWeight = 0;
+
+      await prisma.$transaction(async (tx) => {
+         const currentDispatch = await tx.dispatch.findUnique({
+            where: { id: dispatchId },
+            select: { status: true, sender_agency_id: true },
+         });
+         if (!currentDispatch) {
+            throw new AppError(HttpStatusCodes.NOT_FOUND, `Dispatch with id ${dispatchId} not found`);
+         }
+         validateDispatchModifiable(currentDispatch.status, userRole);
+
+         for (const parcel of parcels) {
+            if (parcel.deleted_at) {
+               throw new AppError(
+                  HttpStatusCodes.BAD_REQUEST,
+                  `Cannot add parcel ${parcel.tracking_number} - its order has been deleted`
+               );
+            }
+            const isOwned = await validateParcelOwnershipInTx(tx, parcel.agency_id, currentDispatch.sender_agency_id);
+            if (!isOwned) {
+               throw new AppError(
+                  HttpStatusCodes.FORBIDDEN,
+                  `Parcel ${parcel.tracking_number} does not belong to agency ${currentDispatch.sender_agency_id} or its child agencies. Parcel agency: ${parcel.agency_id}.`
+               );
+            }
+            if (!isValidStatusForDispatch(parcel.status)) {
+               throw new AppError(
+                  HttpStatusCodes.BAD_REQUEST,
+                  `Parcel ${parcel.tracking_number} has status ${
+                     parcel.status
+                  }. Allowed: ${ALLOWED_DISPATCH_STATUSES.join(", ")}`
+               );
+            }
+            if (parcel.dispatch_id && parcel.dispatch_id !== dispatchId) {
+               throw new AppError(
+                  HttpStatusCodes.CONFLICT,
+                  `Parcel ${parcel.tracking_number} is already in dispatch ${parcel.dispatch_id}`
+               );
+            }
+            if (parcel.dispatch_id === dispatchId) {
+               continue; // already in this dispatch
+            }
+
+            await tx.parcel.update({
+               where: { id: parcel.id },
+               data: {
+                  dispatch_id: dispatchId,
+                  status: Status.IN_DISPATCH,
+               },
+            });
+            await tx.parcelEvent.create({
+               data: {
+                  parcel_id: parcel.id,
+                  event_type: "ADDED_TO_DISPATCH",
+                  user_id,
+                  location_id: parcel.current_location_id || null,
+                  status: Status.IN_DISPATCH,
+                  dispatch_id: dispatchId,
+                  notes: `Added to dispatch (batch from order #${order_id})`,
+               },
+            });
+            totalWeight += Number(parcel.weight);
+            addedParcels.push(
+               await tx.parcel.findUniqueOrThrow({
+                  where: { id: parcel.id },
+                  include: { dispatch: true },
+               })
+            );
+         }
+
+         if (addedParcels.length > 0) {
+            const newStatus =
+               currentDispatch.status === DispatchStatus.DRAFT ? DispatchStatus.LOADING : currentDispatch.status;
+            await tx.dispatch.update({
+               where: { id: dispatchId },
+               data: {
+                  declared_weight: { increment: totalWeight },
+                  declared_parcels_count: { increment: addedParcels.length },
+                  status: newStatus,
+               },
+            });
+         }
+      });
+
+      if (addedParcels.length > 0) {
+         await updateOrderStatusFromParcel(addedParcels[0].id);
+      }
+      return addedParcels;
    },
    /**
     * Remove parcel from dispatch - Tracking only (no financial logic)
@@ -742,7 +851,7 @@ const dispatch = {
    readyForDispatch: async (
       agency_id: number,
       page: number,
-      limit: number,
+      limit: number
    ): Promise<{ parcels: DispatchParcelListItem[]; total: number }> => {
       const where: Prisma.ParcelWhereInput = {
          agency_id,
@@ -785,7 +894,7 @@ const dispatch = {
    completeDispatch: async (
       dispatchId: number,
       receiver_agency_id: number,
-      sender_agency_id: number,
+      sender_agency_id: number
    ): Promise<Dispatch> => {
       // Validate receiver agency exists
       const receiverAgency = await prisma.agency.findUnique({
@@ -834,7 +943,7 @@ const dispatch = {
          sender_agency_id,
          receiver_agency_id,
          dispatch.parcels,
-         dispatchId,
+         dispatchId
       );
 
       // Usar transacción para asegurar consistencia
@@ -884,7 +993,7 @@ const dispatch = {
    receiveInDispatch: async (
       tracking_number: string,
       dispatchId: number,
-      user_id: string,
+      user_id: string
    ): Promise<{ parcel: Parcel; wasAdded: boolean }> => {
       // All logic inside transaction to prevent race conditions
       const result = await prisma.$transaction(async (tx) => {
@@ -913,7 +1022,7 @@ const dispatch = {
          if (parcel.dispatch_id && parcel.dispatch_id !== dispatchId) {
             throw new AppError(
                HttpStatusCodes.CONFLICT,
-               `Parcel ${tracking_number} is already in dispatch ${parcel.dispatch_id}`,
+               `Parcel ${tracking_number} is already in dispatch ${parcel.dispatch_id}`
             );
          }
 
@@ -996,7 +1105,7 @@ const dispatch = {
     * Used to track reconciliation progress when receiving agency verifies dispatch contents
     */
    getReceptionStatus: async (
-      dispatchId: number,
+      dispatchId: number
    ): Promise<{
       totalExpected: number;
       totalReceived: number;
@@ -1093,7 +1202,7 @@ const dispatch = {
    createDispatchFromParcels: async (
       tracking_numbers: string[],
       sender_agency_id: number,
-      user_id: string,
+      user_id: string
    ): Promise<{
       dispatch: Dispatch;
       added: number;
@@ -1314,7 +1423,7 @@ const dispatch = {
    receiveParcelsWithoutDispatch: async (
       tracking_numbers: string[],
       receiver_agency_id: number,
-      user_id: string,
+      user_id: string
    ): Promise<{
       dispatches: Array<{
          dispatch: Dispatch;
@@ -1471,7 +1580,9 @@ const dispatch = {
                data: agencyParcels.map((p) => ({
                   parcel_id: p.id,
                   event_type: "RECEIVED_IN_DISPATCH" as const,
-                  notes: `Received without prior dispatch. Dispatch ${dispatch.id} created.${receiverIsForwarder ? " (arrived at warehouse)" : ""}`,
+                  notes: `Received without prior dispatch. Dispatch ${dispatch.id} created.${
+                     receiverIsForwarder ? " (arrived at warehouse)" : ""
+                  }`,
                   user_id,
                   location_id: p.current_location_id || null,
                   status: receivedParcelStatus,
@@ -1534,7 +1645,7 @@ const dispatch = {
     */
    finalizeDispatchReception: async (
       dispatchId: number,
-      user_id: string,
+      user_id: string
    ): Promise<{
       dispatch: Dispatch;
       declared_cost_in_cents: number;
@@ -1578,7 +1689,7 @@ const dispatch = {
          if (dispatch.status !== DispatchStatus.DISPATCHED && dispatch.status !== DispatchStatus.RECEIVING) {
             throw new AppError(
                HttpStatusCodes.BAD_REQUEST,
-               `Cannot finalize reception. Dispatch status is ${dispatch.status}, expected DISPATCHED or RECEIVING`,
+               `Cannot finalize reception. Dispatch status is ${dispatch.status}, expected DISPATCHED or RECEIVING`
             );
          }
 
@@ -1634,7 +1745,7 @@ const dispatch = {
             dispatch.sender_agency_id,
             dispatch.receiver_agency_id,
             dispatch.parcels,
-            dispatchId,
+            dispatchId
          );
 
          // 7. Create new debts with actual amounts
@@ -1693,7 +1804,7 @@ const dispatch = {
    smartReceive: async (
       tracking_numbers: string[],
       receiver_agency_id: number,
-      user_id: string,
+      user_id: string
    ): Promise<{
       summary: {
          total_scanned: number;
@@ -1839,7 +1950,7 @@ const dispatch = {
          const addToAccountingGroups = (
             senderAgencyId: number,
             receiverAgencyId: number,
-            parcelsToAdd: typeof parcels,
+            parcelsToAdd: typeof parcels
          ): void => {
             if (senderAgencyId === receiverAgencyId || parcelsToAdd.length === 0) {
                return;
@@ -2120,7 +2231,9 @@ const dispatch = {
                      data: dispatchSurplus.map((p) => ({
                         parcel_id: p.id,
                         event_type: "RECEIVED_IN_DISPATCH" as const,
-                        notes: `Smart receive: Surplus added to dispatch ${dispatchId}${receiverIsForwarder ? " (arrived at warehouse)" : ""}`,
+                        notes: `Smart receive: Surplus added to dispatch ${dispatchId}${
+                           receiverIsForwarder ? " (arrived at warehouse)" : ""
+                        }`,
                         user_id,
                         status: receivedParcelStatus,
                         dispatch_id: dispatchId,
@@ -2152,7 +2265,9 @@ const dispatch = {
                   data: receivedParcels.map((p) => ({
                      parcel_id: p.id,
                      event_type: "RECEIVED_IN_DISPATCH" as const,
-                     notes: `Smart receive: Received in dispatch ${dispatchId}${receiverIsForwarder ? " (arrived at warehouse)" : ""}`,
+                     notes: `Smart receive: Received in dispatch ${dispatchId}${
+                        receiverIsForwarder ? " (arrived at warehouse)" : ""
+                     }`,
                      user_id,
                      status: receivedParcelStatus,
                      dispatch_id: dispatchId,
@@ -2242,7 +2357,9 @@ const dispatch = {
                   data: receivedParcels.map((p) => ({
                      parcel_id: p.id,
                      event_type: "RECEIVED_IN_DISPATCH" as const,
-                     notes: `Smart receive: Extracted from dispatch ${dispatchId} to reception dispatch ${receptionDispatch.id}${receiverIsForwarder ? " (arrived at warehouse)" : ""}`,
+                     notes: `Smart receive: Extracted from dispatch ${dispatchId} to reception dispatch ${
+                        receptionDispatch.id
+                     }${receiverIsForwarder ? " (arrived at warehouse)" : ""}`,
                      user_id,
                      status: receivedParcelStatus,
                      dispatch_id: receptionDispatch.id,
@@ -2264,7 +2381,9 @@ const dispatch = {
                      data: dispatchSurplus.map((p) => ({
                         parcel_id: p.id,
                         event_type: "RECEIVED_IN_DISPATCH" as const,
-                        notes: `Smart receive: Surplus added to reception dispatch ${receptionDispatch.id}${receiverIsForwarder ? " (arrived at warehouse)" : ""}`,
+                        notes: `Smart receive: Surplus added to reception dispatch ${receptionDispatch.id}${
+                           receiverIsForwarder ? " (arrived at warehouse)" : ""
+                        }`,
                         user_id,
                         status: receivedParcelStatus,
                         dispatch_id: receptionDispatch.id,
@@ -2380,7 +2499,9 @@ const dispatch = {
                data: agencyParcels.map((p) => ({
                   parcel_id: p.id,
                   event_type: "RECEIVED_IN_DISPATCH" as const,
-                  notes: `Smart receive: Created reception dispatch ${newDispatch.id}${receiverIsForwarder ? " (arrived at warehouse)" : ""}`,
+                  notes: `Smart receive: Created reception dispatch ${newDispatch.id}${
+                     receiverIsForwarder ? " (arrived at warehouse)" : ""
+                  }`,
                   user_id,
                   status: receivedParcelStatus,
                   dispatch_id: newDispatch.id,
@@ -2412,7 +2533,7 @@ const dispatch = {
          for (const [, group] of accountingGroups) {
             const totalWeight = group.parcels.reduce((sum, p) => sum + Number(p.weight), 0);
             const matchingReceptionDispatch = receptionDispatches.find(
-               (d) => d.sender_agency_id === group.receiver_agency_id,
+               (d) => d.sender_agency_id === group.receiver_agency_id
             );
 
             const accountingDispatch = await tx.dispatch.create({
@@ -2484,7 +2605,7 @@ const dispatch = {
                         : null,
                   })),
                })),
-               dispatchId,
+               dispatchId
             );
 
             for (const debtInfo of debtInfos) {
@@ -2497,7 +2618,9 @@ const dispatch = {
                      original_sender_agency_id: debtInfo.debtor_agency_id,
                      relationship: debtInfo.relationship,
                      status: DebtStatus.PENDING,
-                     notes: `Smart receive: ${debtInfo.parcels_count} parcels, ${debtInfo.weight_in_lbs.toFixed(2)} lbs`,
+                     notes: `Smart receive: ${debtInfo.parcels_count} parcels, ${debtInfo.weight_in_lbs.toFixed(
+                        2
+                     )} lbs`,
                   },
                });
 
@@ -2542,7 +2665,7 @@ const dispatch = {
                         : null,
                   })),
                })),
-               dispatchId,
+               dispatchId
             );
 
             for (const debtInfo of debtInfos) {
@@ -2555,7 +2678,9 @@ const dispatch = {
                      original_sender_agency_id: debtInfo.debtor_agency_id,
                      relationship: debtInfo.relationship,
                      status: DebtStatus.PENDING,
-                     notes: `Accounting dispatch: ${debtInfo.parcels_count} parcels, ${debtInfo.weight_in_lbs.toFixed(2)} lbs`,
+                     notes: `Accounting dispatch: ${debtInfo.parcels_count} parcels, ${debtInfo.weight_in_lbs.toFixed(
+                        2
+                     )} lbs`,
                   },
                });
 

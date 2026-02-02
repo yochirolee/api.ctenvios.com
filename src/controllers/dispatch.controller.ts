@@ -238,7 +238,7 @@ export const dispatchController = {
 
    /**
     * Add a parcel to dispatch by tracking number
-    * 
+    *
     * Validations (handled in repository):
     * - Dispatch must be in DRAFT or LOADING status (ROOT can bypass)
     * - Parcel must belong to sender agency or its child agencies
@@ -263,8 +263,28 @@ export const dispatchController = {
    },
 
    /**
+    * Add parcels to dispatch by order id
+    */
+   addParcelsByOrderId: async (req: DispatchRequest, res: Response): Promise<void> => {
+      const dispatchId = Number(req.params.id);
+      if (!Number.isFinite(dispatchId)) {
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid dispatch id");
+      }
+      const { order_id } = req.body as { order_id?: number };
+      const user = req.user!;
+
+      if (order_id == null || !Number.isFinite(Number(order_id))) {
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "order_id is required and must be a positive number");
+      }
+
+      const parcels = await repository.dispatch.addParcelsByOrderId(Number(order_id), dispatchId, user.id, user.role);
+
+      res.status(200).json(parcels);
+   },
+
+   /**
     * Remove a parcel from dispatch
-    * 
+    *
     * Validations (handled in repository):
     * - Dispatch must be in DRAFT or LOADING status (ROOT can bypass)
     * - Once DISPATCHED, parcels cannot be removed (except by ROOT)

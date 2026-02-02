@@ -1,8 +1,17 @@
 import { Router } from "express";
+import { z } from "zod";
 import { authMiddleware } from "../middlewares/auth.middleware";
+import { validate } from "../middlewares/validate.middleware";
 import dispatchController from "../controllers/dispatch.controller";
 
 const router = Router();
+
+const dispatchIdParamSchema = z.object({
+   id: z.string().regex(/^\d+$/, "Dispatch ID must be a number").transform(Number),
+});
+const addByOrderBodySchema = z.object({
+   order_id: z.number().int().positive("Order ID is required"),
+});
 
 // GET /dispatches - Get all dispatches with filters
 router.get("/", authMiddleware, dispatchController.getAll);
@@ -41,6 +50,13 @@ router.post("/", authMiddleware, dispatchController.create);
 // POST /dispatches/:id/add-parcel - Add parcel to dispatch
 router.post("/:id/add-parcel", authMiddleware, dispatchController.addParcel);
 
+// POST /dispatches/:id/add-by-order - Add parcels to dispatch by order id (like containers /parcels/by-order)
+router.post(
+   "/:id/add-parcels-by-order",
+   authMiddleware,
+   validate({ params: dispatchIdParamSchema, body: addByOrderBodySchema }),
+   dispatchController.addParcelsByOrderId
+);
 // POST /dispatches/:id/finalize-create - Finalize dispatch creation with financials
 router.post("/:id/finalize-create", authMiddleware, dispatchController.finalizeCreate);
 

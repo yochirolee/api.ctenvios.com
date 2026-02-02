@@ -224,6 +224,7 @@ export const resolvers = {
             rate_id: item.rate_id,
             insurance_fee_in_cents: item.insurance_fee_in_cents || 0,
             customs_fee_in_cents: item.customs_fee_in_cents || 0,
+            customs_rates_id: item.customs_rates_id || null,
             quantity: 1,
             weight: item.weight,
             service_id,
