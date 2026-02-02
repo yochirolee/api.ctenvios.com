@@ -7,7 +7,7 @@ import { z } from "zod";
 import { AppError } from "../common/app-errors";
 import { Unit } from "@prisma/client";
 import { validate } from "../middlewares/validate.middleware";
-import { createCustomerSchema, createReceiverSchema } from "../types/types";
+import { createCustomerSchema } from "../types/types";
 import HttpStatusCodes from "../common/https-status-codes";
 import { isValidCubanCI } from "../utils/utils";
 
@@ -173,6 +173,8 @@ const partnerOrderItemSchema = z.object({
    price_in_cents: z.number().optional(),
    unit: z.nativeEnum(Unit).optional().default(Unit.PER_LB),
    insurance_fee_in_cents: z.number().optional(),
+   delivery_fee_in_cents: z.number().optional(),
+   customs_fee_in_cents: z.number().optional(),
    charge_fee_in_cents: z.number().optional(),
 });
 
