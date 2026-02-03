@@ -337,7 +337,7 @@ const agencies = {
       if (isNaN(agencyId) || agencyId <= 0) {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid agency ID");
       }
-      const { parcels: parcels_data, total } = await repository.parcels.getInAgency(agencyId, pageNumber, limitNumber);
+      const { rows: parcels_data, total } = await repository.parcels.getInAgency(agencyId, pageNumber, limitNumber);
       res.status(200).json({ rows: parcels_data, total: total });
    },
 

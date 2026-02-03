@@ -173,7 +173,7 @@ const parcels = {
       page = 1,
       limit = 10
    ): Promise<{
-      rows: Array<Pick<Parcel, "id" | "tracking_number" | "description" | "weight" | "agency_id" | "service_id" | "status" | "order_id" | "dispatch_id">>;
+      rows: Array<Pick<Parcel, "id" | "external_reference" | "tracking_number" | "description" | "weight" | "agency_id" | "service_id" | "status" | "order_id" | "dispatch_id">>;
       total: number;
    }> => {
       const where = { agency_id, dispatch_id: null };
@@ -186,6 +186,7 @@ const parcels = {
             select: {
                id: true,
                tracking_number: true,
+               external_reference: true,
                description: true,
                weight: true,
                agency_id: true,
