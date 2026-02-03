@@ -1,7 +1,13 @@
 import { Response } from "express";
 import { Status } from "@prisma/client";
-import prisma from "../lib/prisma.client";
-import AppError from "../utils/app.error";
+import repository from "../repositories";
+import { AppError } from "../common/app-errors";
+import HttpStatusCodes from "../common/https-status-codes";
+
+/**
+ * Parcels controller – HTTP + thin logic only.
+ * Calls repository directly (no service; per .cursorrules: skip service for simple CRUD).
+ */
 
 interface ParcelRequest {
    user?: {
@@ -13,7 +19,7 @@ interface ParcelRequest {
       limit?: string;
       status?: string;
    };
-   body: any;
+   body: { status?: Status; notes?: string };
    params: {
       id?: string;
       hbl?: string;
@@ -21,261 +27,100 @@ interface ParcelRequest {
    };
 }
 
+const parsePage = (q: string | undefined, fallback: number): number => {
+   const n = Number(q);
+   return Number.isFinite(n) && n >= 1 ? n : fallback;
+};
+
+const parseLimit = (q: string | undefined, fallback: number): number => {
+   const n = Number(q);
+   return Number.isFinite(n) && n >= 1 ? n : fallback;
+};
+
 export const parcels = {
-   /**
-    * Get all parcels with pagination
-    */
    getAll: async (req: ParcelRequest, res: Response): Promise<void> => {
-      const page = Number(req.query.page) || 1;
-      const limit = Number(req.query.limit) || 25;
-      const status = req.query.status as Status | undefined;
-
-      const where = status ? { status } : {};
-
-      const [rows, total] = await Promise.all([
-         prisma.parcel.findMany({
-            where,
-            skip: (page - 1) * limit,
-            take: limit,
-            orderBy: { created_at: "desc" },
-
-            include: {
-               agency: { select: { id: true, name: true } },
-               service: { select: { id: true, name: true } },
-               order_items: true,
-               order: {
-                  select: {
-                     id: true,
-                     receiver: { select: { id: true, first_name: true, last_name: true, second_last_name: true } },
-                  },
-               },
-            },
-         }),
-         prisma.parcel.count({ where }),
-      ]);
-      console.log(rows);
-      res.status(200).json({ rows, total, page, limit });
+      const page = parsePage(req.query.page, 1);
+      const limit = parseLimit(req.query.limit, 25);
+      const where = req.query.status ? { status: req.query.status as Status } : {};
+      const result = await repository.parcels.getAllPaginated(where, page, limit);
+      res.status(200).json({ ...result, page, limit });
    },
 
-   /**
-    * Get parcel by HBL (tracking number)
-    */
    getByHbl: async (req: ParcelRequest, res: Response): Promise<void> => {
       const { hbl } = req.params;
-
-      const parcel = await prisma.parcel.findUnique({
-         where: { tracking_number: hbl },
-         include: {
-            agency: { select: { id: true, name: true } },
-            service: { select: { id: true, name: true } },
-            order: {
-               select: {
-                  id: true,
-                  receiver: {
-                     select: {
-                        id: true,
-                        first_name: true,
-                        last_name: true,
-                        second_last_name: true,
-                        phone: true,
-                        address: true,
-                     },
-                  },
-               },
-            },
-            order_items: true,
-            container: { select: { id: true, container_name: true, container_number: true, status: true } },
-            flight: { select: { id: true, awb_number: true, flight_number: true, status: true } },
-            dispatch: { select: { id: true, status: true } },
-         },
-      });
-
-      if (!parcel) {
-         throw new AppError("Parcel not found", 404);
+      if (!hbl) {
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "HBL (tracking number) is required");
       }
-
+      const parcel = await repository.parcels.getByHblWithDetails(hbl);
+      if (!parcel) {
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Parcel not found");
+      }
       res.status(200).json(parcel);
    },
 
-   /**
-    * Get parcels by order ID
-    */
    getByOrderId: async (req: ParcelRequest, res: Response): Promise<void> => {
-      const { orderId } = req.params;
-
-      const rows = await prisma.parcel.findMany({
-         where: { order_id: Number(orderId) },
-         include: {
-            service: { select: { id: true, name: true } },
-         },
-      });
-
-      res.status(200).json({ rows });
+      const orderId = Number(req.params.orderId);
+      if (!Number.isFinite(orderId)) {
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Valid order ID is required");
+      }
+      const { parcels } = await repository.parcels.getByOrderId(orderId, 1, 1000);
+      res.status(200).json({ rows: parcels });
    },
 
-   /**
-    * Get parcel events/history
-    */
    getEvents: async (req: ParcelRequest, res: Response): Promise<void> => {
       const { hbl } = req.params;
-
-      const parcel = await prisma.parcel.findUnique({
-         where: { tracking_number: hbl },
-         select: { id: true },
-      });
-
-      if (!parcel) {
-         throw new AppError("Parcel not found", 404);
+      if (!hbl) {
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "HBL (tracking number) is required");
       }
-
-      const events = await prisma.parcelEvent.findMany({
-         where: { parcel_id: parcel.id },
-         orderBy: { created_at: "desc" },
-         include: {
-            user: { select: { id: true, name: true } },
-            location: { select: { id: true, name: true } },
-            dispatch: { select: { id: true } },
-            container: { select: { id: true, container_name: true, container_number: true } },
-            flight: { select: { id: true, awb_number: true, flight_number: true } },
-         },
-      });
-
+      const events = await repository.parcels.getEventsByHbl(hbl);
+      if (events === null) {
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Parcel not found");
+      }
       res.status(200).json(events);
    },
 
-   /**
-    * Get parcels in agency (not dispatched)
-    */
    getInAgency: async (req: ParcelRequest, res: Response): Promise<void> => {
-      const page = Number(req.query.page) || 1;
-      const limit = Number(req.query.limit) || 25;
-      const user = req.user!;
-
-      if (!user.agency_id) {
-         throw new AppError("User must belong to an agency", 403);
+      const page = parsePage(req.query.page, 1);
+      const limit = parseLimit(req.query.limit, 25);
+      const agencyId = req.user?.agency_id;
+      if (agencyId == null) {
+         throw new AppError(HttpStatusCodes.FORBIDDEN, "User must belong to an agency");
       }
-
-      const where = { agency_id: user.agency_id, dispatch_id: null };
-
-      const [rows, total] = await Promise.all([
-         prisma.parcel.findMany({
-            where,
-            skip: (page - 1) * limit,
-            take: limit,
-            orderBy: { tracking_number: "asc" },
-            select: {
-               id: true,
-               tracking_number: true,
-               description: true,
-               weight: true,
-               agency_id: true,
-               service_id: true,
-               status: true,
-               order_id: true,
-               dispatch_id: true,
-            },
-         }),
-         prisma.parcel.count({ where }),
-      ]);
-
-      res.status(200).json({ rows, total, page, limit });
+      const result = await repository.parcels.getInAgency(agencyId, page, limit);
+      res.status(200).json({ ...result, page, limit });
    },
 
-   /**
-    * Update parcel status
-    */
    updateStatus: async (req: ParcelRequest, res: Response): Promise<void> => {
       const { hbl } = req.params;
-      const { status, notes } = req.body;
-      const user = req.user!;
+      const { status, notes } = req.body ?? {};
+      const userId = req.user?.id;
 
-      const parcel = await prisma.parcel.findUnique({
-         where: { tracking_number: hbl },
-      });
-
-      if (!parcel) {
-         throw new AppError("Parcel not found", 404);
+      if (!hbl) {
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "HBL (tracking number) is required");
+      }
+      if (!userId) {
+         throw new AppError(HttpStatusCodes.UNAUTHORIZED, "Authentication required");
+      }
+      if (!status) {
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "status is required");
       }
 
-      const updated = await prisma.$transaction(async (tx) => {
-         const updatedParcel = await tx.parcel.update({
-            where: { tracking_number: hbl },
-            data: { status },
-         });
-
-         await tx.parcelEvent.create({
-            data: {
-               parcel_id: parcel.id,
-               event_type: "STATUS_CORRECTED",
-               user_id: user.id,
-               status,
-               notes,
-            },
-         });
-
-         return updatedParcel;
-      });
-
+      const updated = await repository.parcels.updateStatusWithEvent(hbl, status, notes ?? null, userId);
+      if (!updated) {
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Parcel not found");
+      }
       res.status(200).json(updated);
    },
 
-   /**
-    * Public tracking - Get parcel status by HBL (no auth required)
-    */
    track: async (req: ParcelRequest, res: Response): Promise<void> => {
       const { hbl } = req.params;
-
-      const parcel = await prisma.parcel.findUnique({
-         where: { tracking_number: hbl },
-         select: {
-            tracking_number: true,
-            status: true,
-            description: true,
-            weight: true,
-            created_at: true,
-            order: {
-               select: {
-                  id: true,
-                  receiver: {
-                     select: {
-                        first_name: true,
-                        last_name: true,
-                        province: { select: { name: true } },
-                        city: { select: { name: true } },
-                     },
-                  },
-               },
-            },
-            container: {
-               select: {
-                  container_name: true,
-                  status: true,
-                  estimated_arrival: true,
-               },
-            },
-            flight: {
-               select: {
-                  flight_number: true,
-                  status: true,
-                  estimated_arrival: true,
-               },
-            },
-            events: {
-               orderBy: { created_at: "desc" },
-               select: {
-                  status: true,
-                  notes: true,
-                  created_at: true,
-                  location: { select: { name: true } },
-               },
-            },
-         },
-      });
-
-      if (!parcel) {
-         throw new AppError("Parcel not found", 404);
+      if (!hbl) {
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "HBL (tracking number) is required");
       }
-
+      const parcel = await repository.parcels.getTrackByHbl(hbl);
+      if (!parcel) {
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Parcel not found");
+      }
       res.status(200).json(parcel);
    },
 };

@@ -1,122 +1,117 @@
-// ===========================================
-// PRICING - Productos, Tarifas, Precios
-// ===========================================
-
 model Product {
-    id                 Int                @id @default(autoincrement())
-    provider_id        Int
-    provider           Agency             @relation(fields: [provider_id], references: [id])
-    name               String
-    description        String?
-    type               ProductType        @default(SHIPPING)
-    unit               Unit               @default(PER_LB)
-    length             Float?
-    width              Float?
-    height             Float?
-    is_active          Boolean            @default(true)
-    created_at         DateTime           @default(now())
-    updated_at         DateTime           @updatedAt
-    pricing_agreements PricingAgreement[]
-    shipping_rates     ShippingRate[]
-    services           Service[]
+  id                 Int                @id @default(autoincrement())
+  provider_id        Int
+  name               String
+  description        String?
+  type               ProductType        @default(SHIPPING)
+  unit               Unit               @default(PER_LB)
+  length             Float?
+  width              Float?
+  height             Float?
+  is_active          Boolean            @default(true)
+  created_at         DateTime           @default(now())
+  updated_at         DateTime           @updatedAt
+  pricing_agreements PricingAgreement[]
+  provider           Agency             @relation(fields: [provider_id], references: [id])
+  shipping_rates     ShippingRate[]
+  services           Service[]          @relation("ProductToService")
 
-    @@unique([provider_id, name])
+  @@unique([provider_id, name])
 }
 
 model PricingAgreement {
-    id               Int            @id @default(autoincrement())
-    seller_agency_id Int
-    buyer_agency_id  Int
-    product_id       Int
-    product          Product        @relation(fields: [product_id], references: [id])
-    service_id       Int
-    service          Service        @relation(fields: [service_id], references: [id])
-    effective_from   DateTime       @default(now())
-    effective_to     DateTime?
-    price_in_cents   Int            @default(0)
-    is_active        Boolean        @default(true)
-    created_at       DateTime       @default(now())
-    updated_at       DateTime       @updatedAt
-    shipping_rates   ShippingRate[]
+  id               Int            @id @default(autoincrement())
+  seller_agency_id Int
+  buyer_agency_id  Int
+  product_id       Int
+  service_id       Int
+  effective_from   DateTime       @default(now())
+  effective_to     DateTime?
+  price_in_cents   Int            @default(0)
+  is_active        Boolean        @default(true)
+  created_at       DateTime       @default(now())
+  updated_at       DateTime       @updatedAt
+  product          Product        @relation(fields: [product_id], references: [id])
+  service          Service        @relation(fields: [service_id], references: [id])
+  shipping_rates   ShippingRate[]
 
-    @@unique([seller_agency_id, buyer_agency_id, product_id, service_id])
-    @@index([seller_agency_id, buyer_agency_id, product_id, service_id, is_active])
+  @@unique([seller_agency_id, buyer_agency_id, product_id, service_id])
+  @@index([seller_agency_id, buyer_agency_id, product_id, service_id, is_active])
 }
 
 model ShippingRate {
-    id                   Int              @id @default(autoincrement())
-    service_id           Int
-    service              Service          @relation(fields: [service_id], references: [id])
-    agency_id            Int
-    agency               Agency           @relation(fields: [agency_id], references: [id])
-    pricing_agreement_id Int
-    pricing_agreement    PricingAgreement @relation(fields: [pricing_agreement_id], references: [id])
-    scope                RateScope        @default(PUBLIC)
-    price_in_cents       Int              @default(0)
-    tiers                RateTier[]
-    effective_from       DateTime
-    effective_to         DateTime?
-    is_active            Boolean          @default(true)
-    created_at           DateTime         @default(now())
-    updated_at           DateTime         @updatedAt
-    order_items          OrderItem[]
-    product_id           Int
-    product              Product          @relation(fields: [product_id], references: [id])
+  id                   Int              @id @default(autoincrement())
+  service_id           Int
+  agency_id            Int
+  pricing_agreement_id Int
+  scope                RateScope        @default(PUBLIC)
+  price_in_cents       Int              @default(0)
+  effective_from       DateTime
+  effective_to         DateTime?
+  is_active            Boolean          @default(true)
+  created_at           DateTime         @default(now())
+  updated_at           DateTime         @updatedAt
+  product_id           Int
+  order_items          OrderItem[]
+  tiers                RateTier[]
+  agency               Agency           @relation(fields: [agency_id], references: [id])
+  pricing_agreement    PricingAgreement @relation(fields: [pricing_agreement_id], references: [id])
+  product              Product          @relation(fields: [product_id], references: [id])
+  service              Service          @relation(fields: [service_id], references: [id])
 
-    @@index([agency_id, service_id, scope, is_active])
-    @@index([service_id, is_active])
+  @@index([agency_id, service_id, scope, is_active])
+  @@index([service_id, is_active])
 }
 
 model CustomsRates {
-    id                     Int         @id @default(autoincrement())
-    name                   String
-    description            String?
-    country_id             Int         @default(1)
-    country                Country     @relation(fields: [country_id], references: [id])
-    chapter                String?
-    custom_value           Float?
-    price_in_cup           Float?
-    fee_type               FeeType     @default(UNIT)
-    fee_in_cents           Int         @default(0)
-    insurance_fee_in_cents Int         @default(0)
-    min_weight             Float?
-    max_weight             Float?
-    max_quantity           Int?
-    created_at             DateTime    @default(now())
-    updated_at             DateTime    @updatedAt
-    order_items            OrderItem[]
-    agency                 Agency?     @relation(fields: [agencyId], references: [id])
-    agencyId               Int?
+  id                     Int         @id @default(autoincrement())
+  name                   String
+  description            String?
+  country_id             Int         @default(1)
+  chapter                String?
+  custom_value           Float?
+  price_in_cup           Float?
+  fee_type               FeeType     @default(UNIT)
+  fee_in_cents           Int         @default(0)
+  min_weight             Float?
+  max_weight             Float?
+  max_quantity           Int?
+  created_at             DateTime    @default(now())
+  updated_at             DateTime    @updatedAt
+  agencyId               Int?
+  insurance_fee_in_cents Int         @default(0)
+  agency                 Agency?     @relation(fields: [agencyId], references: [id])
+  country                Country     @relation(fields: [country_id], references: [id])
+  order_items            OrderItem[]
 
-    @@index([country_id, fee_type])
-    @@index([id])
+  @@index([country_id, fee_type])
+  @@index([id])
 }
 
 model RateTier {
-    id               Int          @id @default(autoincrement())
-    shipping_rate_id Int
-    shipping_rate    ShippingRate @relation(fields: [shipping_rate_id], references: [id], onDelete: Cascade)
-    from_weight      Float
-    to_weight        Float?
-    price_in_cents   Int
+  id               Int          @id @default(autoincrement())
+  shipping_rate_id Int
+  from_weight      Float
+  to_weight        Float?
+  price_in_cents   Int
+  shipping_rate    ShippingRate @relation(fields: [shipping_rate_id], references: [id], onDelete: Cascade)
 
-    @@index([shipping_rate_id])
+  @@index([shipping_rate_id])
 }
 
 model Surcharge {
-    id             Int           @id @default(autoincrement())
-    name           String
-    description    String?
-    type           SurchargeType
-    value          Float
-    service_id     Int?
-    service        Service?      @relation(fields: [service_id], references: [id])
-    agency_id      Int
-    agency         Agency        @relation(fields: [agency_id], references: [id])
-    is_active      Boolean       @default(true)
-    effective_from DateTime
-    effective_to   DateTime?
+  id             Int           @id @default(autoincrement())
+  name           String
+  description    String?
+  type           SurchargeType
+  value          Float
+  service_id     Int?
+  agency_id      Int
+  is_active      Boolean       @default(true)
+  effective_from DateTime
+  effective_to   DateTime?
+  agency         Agency        @relation(fields: [agency_id], references: [id])
+  service        Service?      @relation(fields: [service_id], references: [id])
 
-    @@index([agency_id, service_id, is_active])
+  @@index([agency_id, service_id, is_active])
 }
-

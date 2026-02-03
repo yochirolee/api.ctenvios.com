@@ -450,7 +450,7 @@ export const financialReportsController = {
          // User filter (optional)
          const userIdFilter = user_id ? String(user_id) : undefined;
 
-         const { generateSalesReportPdf } = await import("../utils/generate-sales-report-pdf");
+         const { generateSalesReportPdf } = await import("../utils/pdf/generate-sales-report-pdf");
          const buffer = await generateSalesReportPdf(startDate, endDate, agencyId, userIdFilter);
 
          const dateStr =

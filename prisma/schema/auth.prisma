@@ -1,51 +1,46 @@
-// ===========================================
-// AUTH - Autenticación y sesiones
-// ===========================================
-
 model Session {
-    id             String   @id @default(uuid())
-    expiresAt      DateTime
-    token          String   @unique
-    createdAt      DateTime @default(now())
-    updatedAt      DateTime @updatedAt
-    ipAddress      String?
-    userAgent      String?
-    userId         String
-    user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-    impersonatedBy String?
+  id             String   @id @default(uuid())
+  expiresAt      DateTime
+  token          String   @unique
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  ipAddress      String?
+  userAgent      String?
+  userId         String
+  impersonatedBy String?
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-    @@map("session")
+  @@map("session")
 }
 
 model Account {
-    id                    String    @id @default(uuid())
-    accountId             String
-    providerId            String
-    userId                String
-    user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-    accessToken           String?
-    refreshToken          String?
-    idToken               String?
-    accessTokenExpiresAt  DateTime?
-    refreshTokenExpiresAt DateTime?
-    scope                 String?
-    password              String?
-    createdAt             DateTime  @default(now())
-    updatedAt             DateTime  @updatedAt
+  id                    String    @id @default(uuid())
+  accountId             String
+  providerId            String
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-    @@unique([providerId, accountId])
-    @@map("account")
+  @@unique([providerId, accountId])
+  @@map("account")
 }
 
 model Verification {
-    id         String   @id @default(uuid())
-    identifier String
-    value      String
-    expiresAt  DateTime
-    createdAt  DateTime @default(now())
-    updatedAt  DateTime @updatedAt
+  id         String   @id @default(uuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-    @@unique([identifier, value])
-    @@map("verification")
+  @@unique([identifier, value])
+  @@map("verification")
 }
-

@@ -1,6 +1,6 @@
 import PDFKit from "pdfkit";
 import * as path from "path";
-import prisma from "../lib/prisma.client";
+import prisma from "../../lib/prisma.client";
 import { PaymentMethod, PaymentStatus } from "@prisma/client";
 
 // Font paths

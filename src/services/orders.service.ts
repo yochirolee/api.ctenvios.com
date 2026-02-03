@@ -47,10 +47,12 @@ export const ordersService = {
          service_id,
          agency_id,
       });
+console.log("items_hbl", items_hbl);
 
       const parcels = items_hbl.map((item) => ({
          tracking_number: item.hbl,
          description: item.description,
+         external_reference: item.external_reference || null,
          weight: item.weight,
          status: Status.IN_AGENCY,
          user_id: user_id,
@@ -124,7 +126,8 @@ export const ordersService = {
 
          // 🚀 Non-blocking receiver connection
          repository.receivers
-            .connect(receiver_id, customer_id)
+   
+               .connect(receiver_id, customer_id)
             .catch((err) => console.error("Receiver connection failed (non-critical):", err));
          //connect customer to agency
          repository.agencies.addCustomerToAgency(agency_id, customer_id);

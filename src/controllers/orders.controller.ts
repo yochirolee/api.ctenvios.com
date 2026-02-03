@@ -8,10 +8,10 @@ import prisma from "../lib/prisma.client";
 import repository from "../repositories";
 import { AppError } from "../common/app-errors";
 import HttpStatusCodes from "../common/https-status-codes";
-import { generateOrderPDF } from "../utils/generate-order-pdf";
-import { generateCTEnviosLabels } from "../utils/generate-labels-pdf";
+import { generateOrderPDF } from "../utils/pdf/generate-order-pdf";
+import { generateCTEnviosLabels } from "../utils/pdf/generate-labels-pdf";
 import { orderWithRelationsInclude } from "../types/order-with-relations";
-import { generateHblPdf } from "../utils/generate-hbl-pdf";
+import { generateHblPdf } from "../utils/pdf/generate-hbl-pdf";
 import { getOrderStatusSummary } from "../utils/order-status-calculator";
 
 export const ordersController = {
@@ -78,7 +78,7 @@ export const ordersController = {
          // =====================================
          if (!hasSearch) {
             // whereClause simplificado - solo fecha y RBAC
-            const whereClause: any = { };
+            const whereClause: any = {};
 
             // Filtro de fecha (timezone-aware: EST -> UTC)
             if (hasDateFilter) {

@@ -3,7 +3,7 @@ import { DispatchStatus, PaymentStatus, Roles } from "@prisma/client";
 import repository from "../repositories";
 import { AppError } from "../common/app-errors";
 import HttpStatusCodes from "../common/https-status-codes";
-import { generateDispatchPDF, DispatchPdfDetails } from "../utils/generate-dispatch-pdf";
+import { generateDispatchPDF, DispatchPdfDetails } from "../utils/pdf/generate-dispatch-pdf";
 
 interface DispatchRequest {
    user?: {

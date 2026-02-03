@@ -3,9 +3,9 @@ import * as bwipjs from "bwip-js";
 import { promises as fs } from "fs";
 import * as path from "path";
 import { Unit } from "@prisma/client";
-import type { OrderPdfDetails } from "../repositories/orders.repository";
-import { formatName } from "./capitalize";
-import { calculate_row_subtotal, formatCents, formatDateTimeLocal, toNumber } from "./utils";
+import type { OrderPdfDetails } from "../../repositories/orders.repository";
+import { formatName } from "../capitalize";
+import { calculate_row_subtotal, formatCents, formatDateTimeLocal, toNumber } from "../utils";
 
 // Pre-calculate all financial totals
 function calculateOrderTotals(order: OrderPdfDetails) {
@@ -163,10 +163,7 @@ async function generateModernOrder(doc: PDFKit.PDFDocument, order: OrderPdfDetai
    // Pre-load assets - use agency logo if available, otherwise default logo
    // Convert Cloudinary URLs to PNG format (PDFKit only supports PNG/JPEG, not WEBP)
    const agencyLogoUrl = convertCloudinaryToPng(order.agency.logo ?? undefined);
-   const [logoBuffer, barcodeBuffer] = await Promise.all([
-      loadLogo(agencyLogoUrl),
-      generateBarcode(order.id),
-   ]);
+   const [logoBuffer, barcodeBuffer] = await Promise.all([loadLogo(agencyLogoUrl), generateBarcode(order.id)]);
 
    // Pre-calculate values
    const calculations = calculateOrderTotals(order);
@@ -201,8 +198,7 @@ async function generateModernOrder(doc: PDFKit.PDFDocument, order: OrderPdfDetai
 // Optimized asset loading with caching
 async function loadLogo(logoUrl?: string): Promise<Buffer | null> {
    // Skip invalid logo URLs and use default
-   const isValidUrl =
-      logoUrl && logoUrl.trim() && (logoUrl.startsWith("http://") || logoUrl.startsWith("https://"));
+   const isValidUrl = logoUrl && logoUrl.trim() && (logoUrl.startsWith("http://") || logoUrl.startsWith("https://"));
    const source = isValidUrl ? logoUrl.trim() : DEFAULT_LOGO_FILENAME;
    const cacheKey = source;
 

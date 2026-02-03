@@ -3,8 +3,8 @@ import * as bwipjs from "bwip-js";
 import { promises as fs } from "fs";
 import * as path from "path";
 import { Order, Customer, Receiver, Agency, Service, OrderItem, Unit } from "@prisma/client";
-import { formatName } from "./capitalize";
-import { calculate_row_subtotal, formatCents, toNumber } from "./utils";
+import { formatName } from "../capitalize";
+import { calculate_row_subtotal, formatCents, toNumber } from "../utils";
 
 interface OrderWithRelations extends Order {
    customer: Customer;
@@ -143,10 +143,7 @@ export const generateInvoicePDF = async (invoice: OrderWithRelations): Promise<P
 async function generateOptimizedInvoice(doc: PDFKit.PDFDocument, invoice: OrderWithRelations) {
    // Pre-load assets - convert Cloudinary URLs to PNG (PDFKit doesn't support WEBP)
    const agencyLogoUrl = convertCloudinaryToPng(invoice.agency.logo ?? undefined);
-   const [logoBuffer, barcodeBuffer] = await Promise.all([
-      loadLogo(agencyLogoUrl),
-      generateBarcode(invoice.id),
-   ]);
+   const [logoBuffer, barcodeBuffer] = await Promise.all([loadLogo(agencyLogoUrl), generateBarcode(invoice.id)]);
 
    // Pre-calculate values
    const calculations = calculateInvoiceTotals(invoice);

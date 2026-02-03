@@ -1,107 +1,103 @@
-// ===========================================
-// TRANSPORT - Contenedores y Vuelos
-// ===========================================
-
 model Container {
-    id                  Int              @id @default(autoincrement())
-    container_name      String           // Internal reference (e.g., "Enero 2026", "Lote Miami #15")
-    container_number    String           @unique
-    bl_number           String?
-    seal_number         String?
-    container_type      ContainerType    @default(DRY_40FT)
-    status              ContainerStatus  @default(PENDING)
-    vessel_name         String?
-    voyage_number       String?
-    origin_port         String
-    destination_port    String
-    max_weight_kg       Decimal?
-    current_weight_kg   Decimal?         @default("0.00")
-    estimated_departure DateTime?
-    estimated_arrival   DateTime?
-    actual_departure    DateTime?
-    actual_arrival      DateTime?
-    notes               String?
-    forwarder_id        Int
-    forwarder           Forwarder        @relation(fields: [forwarder_id], references: [id])
-    provider_id         Int
-    provider            Provider         @relation(fields: [provider_id], references: [id])
-    parcels             Parcel[]
-    events              ContainerEvent[]
-    parcel_events       ParcelEvent[] // Historial de eventos de parcels
-    verifications       ManifestVerification[]
-    created_at          DateTime         @default(now())
-    updated_at          DateTime         @updatedAt
-    created_by_id       String
-    created_by          User             @relation("created_containers", fields: [created_by_id], references: [id])
+  id                  Int                    @id @default(autoincrement())
+  container_number    String                 @unique
+  bl_number           String?
+  seal_number         String?
+  container_type      ContainerType          @default(DRY_40FT)
+  status              ContainerStatus        @default(PENDING)
+  vessel_name         String?
+  voyage_number       String?
+  origin_port         String
+  destination_port    String
+  max_weight_kg       Decimal?
+  current_weight_kg   Decimal?               @default(0.00)
+  estimated_departure DateTime?
+  estimated_arrival   DateTime?
+  actual_departure    DateTime?
+  actual_arrival      DateTime?
+  notes               String?
+  forwarder_id        Int
+  provider_id         Int
+  created_at          DateTime               @default(now())
+  updated_at          DateTime               @updatedAt
+  created_by_id       String
+  container_name      String
+  created_by          User                   @relation("created_containers", fields: [created_by_id], references: [id])
+  forwarder           Forwarder              @relation(fields: [forwarder_id], references: [id])
+  provider            Provider               @relation(fields: [provider_id], references: [id])
+  events              ContainerEvent[]
+  verifications       ManifestVerification[]
+  parcels             Parcel[]
+  parcel_events       ParcelEvent[]
 
-    @@index([container_number])
-    @@index([bl_number])
-    @@index([status])
-    @@index([forwarder_id])
-    @@index([provider_id])
-    @@index([estimated_arrival])
+  @@index([container_number])
+  @@index([bl_number])
+  @@index([status])
+  @@index([forwarder_id])
+  @@index([provider_id])
+  @@index([estimated_arrival])
 }
 
 model ContainerEvent {
-    id            Int             @id @default(autoincrement())
-    container_id  Int
-    container     Container       @relation(fields: [container_id], references: [id], onDelete: Cascade)
-    status        ContainerStatus
-    location      String?
-    description   String?
-    created_at    DateTime        @default(now())
-    created_by_id String?
-    created_by    User?           @relation("container_events", fields: [created_by_id], references: [id])
+  id            Int             @id @default(autoincrement())
+  container_id  Int
+  status        ContainerStatus
+  location      String?
+  description   String?
+  created_at    DateTime        @default(now())
+  created_by_id String?
+  container     Container       @relation(fields: [container_id], references: [id], onDelete: Cascade)
+  created_by    User?           @relation("container_events", fields: [created_by_id], references: [id])
 
-    @@index([container_id, created_at(sort: Desc)])
+  @@index([container_id, created_at(sort: Desc)])
 }
 
 model Flight {
-    id                  Int           @id @default(autoincrement())
-    awb_number          String        @unique
-    flight_number       String?
-    status              FlightStatus  @default(PENDING)
-    airline             String?
-    origin_airport      String
-    destination_airport String
-    estimated_departure DateTime?
-    estimated_arrival   DateTime?
-    actual_departure    DateTime?
-    actual_arrival      DateTime?
-    total_weight_kg     Decimal?      @default("0.00")
-    total_pieces        Int?          @default(0)
-    notes               String?
-    forwarder_id        Int
-    forwarder           Forwarder     @relation(fields: [forwarder_id], references: [id])
-    provider_id         Int
-    provider            Provider      @relation(fields: [provider_id], references: [id])
-    parcels             Parcel[]
-    events              FlightEvent[]
-    parcel_events       ParcelEvent[] // Historial de eventos de parcels
-    verifications       ManifestVerification[]
-    created_at          DateTime      @default(now())
-    updated_at          DateTime      @updatedAt
-    created_by_id       String
-    created_by          User          @relation("created_flights", fields: [created_by_id], references: [id])
+  id                  Int                    @id @default(autoincrement())
+  awb_number          String                 @unique
+  flight_number       String?
+  status              FlightStatus           @default(PENDING)
+  airline             String?
+  origin_airport      String
+  destination_airport String
+  estimated_departure DateTime?
+  estimated_arrival   DateTime?
+  actual_departure    DateTime?
+  actual_arrival      DateTime?
+  total_weight_kg     Decimal?               @default(0.00)
+  total_pieces        Int?                   @default(0)
+  notes               String?
+  forwarder_id        Int
+  provider_id         Int
+  created_at          DateTime               @default(now())
+  updated_at          DateTime               @updatedAt
+  created_by_id       String
+  created_by          User                   @relation("created_flights", fields: [created_by_id], references: [id])
+  forwarder           Forwarder              @relation(fields: [forwarder_id], references: [id])
+  provider            Provider               @relation(fields: [provider_id], references: [id])
+  events              FlightEvent[]
+  verifications       ManifestVerification[]
+  parcels             Parcel[]
+  parcel_events       ParcelEvent[]
 
-    @@index([awb_number])
-    @@index([flight_number])
-    @@index([status])
-    @@index([forwarder_id])
-    @@index([provider_id])
-    @@index([estimated_arrival])
+  @@index([awb_number])
+  @@index([flight_number])
+  @@index([status])
+  @@index([forwarder_id])
+  @@index([provider_id])
+  @@index([estimated_arrival])
 }
 
 model FlightEvent {
-    id            Int          @id @default(autoincrement())
-    flight_id     Int
-    flight        Flight       @relation(fields: [flight_id], references: [id], onDelete: Cascade)
-    status        FlightStatus
-    location      String?
-    description   String?
-    created_at    DateTime     @default(now())
-    created_by_id String?
-    created_by    User?        @relation("flight_events", fields: [created_by_id], references: [id])
+  id            Int          @id @default(autoincrement())
+  flight_id     Int
+  status        FlightStatus
+  location      String?
+  description   String?
+  created_at    DateTime     @default(now())
+  created_by_id String?
+  created_by    User?        @relation("flight_events", fields: [created_by_id], references: [id])
+  flight        Flight       @relation(fields: [flight_id], references: [id], onDelete: Cascade)
 
-    @@index([flight_id, created_at(sort: Desc)])
+  @@index([flight_id, created_at(sort: Desc)])
 }

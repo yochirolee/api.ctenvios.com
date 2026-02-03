@@ -2,7 +2,7 @@ import { Customer, Receiver, Province, City, Prisma, Unit } from "@prisma/client
 import prisma from "../lib/prisma.client";
 import { AppError } from "../common/app-errors";
 import repository from "../repositories";
-import { generateHBLFast } from "../utils/generate-hbl";
+import { generateHBLFast } from "../utils/pdf/generate-hbl";
 import { pricingService } from "./pricing.service";
 import HttpStatusCodes from "../common/https-status-codes";
 import { createReceiverSchema } from "../types/types";
@@ -217,6 +217,7 @@ export const resolvers = {
          }
          items_hbl[i] = {
             hbl: allHblCodes[i],
+            external_reference: item.external_reference || null,
             description: item.description,
             price_in_cents: item.price_in_cents || rate?.price_in_cents || 0,
             charge_fee_in_cents: item.charge_fee_in_cents || 0,

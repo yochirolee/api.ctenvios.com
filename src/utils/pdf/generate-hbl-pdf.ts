@@ -2,10 +2,10 @@ import PDFKit from "pdfkit";
 import { OrderItem } from "@prisma/client";
 import * as fs from "fs";
 import * as path from "path";
-import { formatName } from "./capitalize";
+import { formatName } from "../capitalize";
 import { FONTS, registerPdfFonts } from "./pdf-fonts";
-import { OrderWithRelations } from "../types/order-with-relations";
-import { toNumber } from "./utils";
+import { OrderWithRelations } from "../../types/order-with-relations";
+import { toNumber } from "../utils";
 
 const LOGO_PATH = path.join(process.cwd(), "assets", "ctelogo.png");
 

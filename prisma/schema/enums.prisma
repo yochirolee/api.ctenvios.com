@@ -1,301 +1,282 @@
-// ===========================================
-// ENUMS - Todas las enumeraciones del sistema
-// ===========================================
-
 enum AgencyType {
-    AGENCY
-    RESELLER
-    FORWARDER
+  AGENCY
+  RESELLER
+  FORWARDER
 }
 
 enum Roles {
-    ROOT
-    ADMINISTRATOR
-    FORWARDER_RESELLER
-    AGENCY_SALES
-    AGENCY_ADMIN
-    AGENCY_SUPERVISOR
-    FORWARDER_ADMIN
-    CARRIER_OWNER
-    CARRIER_ADMIN
-    CARRIER_ISSUES_MANAGER
-    CARRIER_WAREHOUSE_WORKER
-    MESSENGER
-    USER
+  ROOT
+  ADMINISTRATOR
+  FORWARDER_RESELLER
+  AGENCY_SALES
+  AGENCY_ADMIN
+  AGENCY_SUPERVISOR
+  FORWARDER_ADMIN
+  CARRIER_ADMIN
+  MESSENGER
+  USER
+  CARRIER_OWNER
+  CARRIER_ISSUES_MANAGER
+  CARRIER_WAREHOUSE_WORKER
 }
 
 enum ProductType {
-    SHIPPING
-    DELIVERY
-    CUSTOMS
+  SHIPPING
+  DELIVERY
+  CUSTOMS
 }
 
 enum RateScope {
-    PUBLIC
-    WHOLESALE
+  PUBLIC
+  WHOLESALE
 }
 
 enum Unit {
-    PER_LB
-    PER_KG
-    FIXED
-    PER_CITY
-    PER_VALUE
+  PER_LB
+  PER_KG
+  FIXED
+  PER_CITY
+  PER_VALUE
 }
 
 enum SurchargeType {
-    PERCENTAGE
-    FIXED_AMOUNT
+  PERCENTAGE
+  FIXED_AMOUNT
 }
 
 enum PaymentStatus {
-    PENDING
-    PAID
-    PARTIALLY_PAID
-    FULL_DISCOUNT
-    REFUNDED
-    CANCELLED
+  PENDING
+  PAID
+  PARTIALLY_PAID
+  FULL_DISCOUNT
+  REFUNDED
+  CANCELLED
 }
 
 enum PaymentMethod {
-    CASH
-    CREDIT_CARD
-    DEBIT_CARD
-    BANK_TRANSFER
-    PAYPAL
-    ZELLE
-    CHECK
+  CASH
+  CREDIT_CARD
+  DEBIT_CARD
+  BANK_TRANSFER
+  PAYPAL
+  ZELLE
+  CHECK
 }
 
 enum DiscountType {
-    PERCENTAGE
-    CASH
-    RATE
-    FIXED
-    CUSTOM
+  PERCENTAGE
+  CASH
+  RATE
+  FIXED
+  CUSTOM
 }
 
 enum ServiceType {
-    MARITIME
-    AIR
+  MARITIME
+  AIR
 }
 
 enum FeeType {
-    UNIT
-    WEIGHT
-    VALUE
+  UNIT
+  WEIGHT
+  VALUE
 }
 
 enum OrderEventType {
-    PAYMENT
-    PRIVATE_TRACKING
-    PUBLIC_TRACKING
-    SYSTEM_ACTION
-    ISSUE_REPORTED
+  PAYMENT
+  PRIVATE_TRACKING
+  PUBLIC_TRACKING
+  SYSTEM_ACTION
+  ISSUE_REPORTED
 }
 
 enum OrderStage {
-    BILLING
-    WAREHOUSE
-    TRANSPORT
-    DELIVERY
-    COMPLETED
-    EXCEPTION
+  BILLING
+  WAREHOUSE
+  TRANSPORT
+  DELIVERY
+  COMPLETED
+  EXCEPTION
 }
 
 enum Status {
-    // Estados base de parcels
-    IN_AGENCY
-    IN_PALLET
-    IN_DISPATCH
-    RECEIVED_IN_DISPATCH
-    IN_WAREHOUSE
-    IN_CONTAINER
-    IN_TRANSIT
-    AT_PORT_OF_ENTRY
-    CUSTOMS_INSPECTION
-    RELEASED_FROM_CUSTOMS
-    OUT_FOR_DELIVERY
-    FAILED_DELIVERY
-    DELIVERED
-    RETURNED_TO_SENDER
-    CANCELLED // Orden cancelada/eliminada
-
-    // Estados parciales para órdenes (cuando parcels están en diferentes etapas)
-    PARTIALLY_IN_PALLET
-    PARTIALLY_IN_DISPATCH
-    PARTIALLY_IN_CONTAINER
-    PARTIALLY_IN_TRANSIT
-    PARTIALLY_AT_PORT
-    PARTIALLY_IN_CUSTOMS
-    PARTIALLY_RELEASED
-    PARTIALLY_OUT_FOR_DELIVERY
-    PARTIALLY_DELIVERED
+  IN_AGENCY
+  IN_PALLET
+  IN_DISPATCH
+  RECEIVED_IN_DISPATCH
+  IN_WAREHOUSE
+  IN_CONTAINER
+  IN_TRANSIT
+  AT_PORT_OF_ENTRY
+  CUSTOMS_INSPECTION
+  RELEASED_FROM_CUSTOMS
+  OUT_FOR_DELIVERY
+  FAILED_DELIVERY
+  PARTIALLY_DELIVERED
+  DELIVERED
+  RETURNED_TO_SENDER
+  PARTIALLY_IN_PALLET
+  PARTIALLY_IN_DISPATCH
+  PARTIALLY_IN_CONTAINER
+  PARTIALLY_IN_TRANSIT
+  PARTIALLY_AT_PORT
+  PARTIALLY_IN_CUSTOMS
+  PARTIALLY_RELEASED
+  PARTIALLY_OUT_FOR_DELIVERY
+  CANCELLED
 }
 
 enum CityType {
-    SPECIAL
-    CAPITAL
-    CITY
+  SPECIAL
+  CAPITAL
+  CITY
 }
 
 enum DispatchStatus {
-    DRAFT // Empty dispatch, no parcels
-    LOADING // Dispatch has parcels being added
-    DISPATCHED // Ready for dispatch / in transit to receiver
-    PARTIAL_RECEIVED // Some parcels were extracted and received in a new dispatch
-    RECEIVING // At least one parcel has been received at destination
-    RECEIVED // All parcels received / completed
-    DISCREPANCY // Reception discrepancy detected
-    CANCELLED // Dispatch cancelled
+  DRAFT
+  DISPATCHED
+  RECEIVED
+  DISCREPANCY
+  CANCELLED
+  LOADING
+  RECEIVING
+  PARTIAL_RECEIVED
 }
 
 enum DebtStatus {
-    PENDING
-    PAID
-    CANCELLED
+  PENDING
+  PAID
+  CANCELLED
 }
 
 enum LogLevel {
-    ERROR
-    WARN
-    INFO
-    HTTP
-    DEBUG
+  ERROR
+  WARN
+  INFO
+  HTTP
+  DEBUG
 }
 
 enum IssueType {
-    COMPLAINT
-    DAMAGE
-    LOSS
-    DELAY
-    MISSING_ITEM
-    WRONG_ADDRESS
-    OTHER
+  COMPLAINT
+  DAMAGE
+  LOSS
+  DELAY
+  MISSING_ITEM
+  WRONG_ADDRESS
+  OTHER
 }
 
 enum IssuePriority {
-    LOW
-    MEDIUM
-    HIGH
-    URGENT
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
 }
 
 enum IssueStatus {
-    OPEN
-    IN_PROGRESS
-    PENDING
-    RESOLVED
-    CLOSED
-    CANCELLED
+  OPEN
+  IN_PROGRESS
+  PENDING
+  RESOLVED
+  CLOSED
+  CANCELLED
 }
 
-// Transport enums
 enum ContainerType {
-    DRY_20FT
-    DRY_40FT
-    DRY_40FT_HC
-    REEFER_20FT
-    REEFER_40FT
+  DRY_20FT
+  DRY_40FT
+  DRY_40FT_HC
+  REEFER_20FT
+  REEFER_40FT
 }
 
 enum ContainerStatus {
-    PENDING
-    LOADING
-    SEALED
-    DEPARTED
-    IN_TRANSIT
-    AT_PORT
-    CUSTOMS_HOLD
-    CUSTOMS_CLEARED
-    UNLOADING
-    COMPLETED
+  PENDING
+  LOADING
+  SEALED
+  DEPARTED
+  IN_TRANSIT
+  AT_PORT
+  CUSTOMS_HOLD
+  CUSTOMS_CLEARED
+  UNLOADING
+  COMPLETED
 }
 
 enum FlightStatus {
-    PENDING
-    LOADING
-    DEPARTED
-    IN_TRANSIT
-    LANDED
-    CUSTOMS_HOLD
-    CUSTOMS_CLEARED
-    UNLOADING
-    COMPLETED
+  PENDING
+  LOADING
+  DEPARTED
+  IN_TRANSIT
+  LANDED
+  CUSTOMS_HOLD
+  CUSTOMS_CLEARED
+  UNLOADING
+  COMPLETED
 }
 
-// Parcel Event Types - Define visibilidad pública/interna
 enum ParcelEventType {
-    // === PÚBLICOS (Cliente ve) ===
-    BILLED // Paquete recibido en agencia
-    IN_TRANSIT // En tránsito hacia destino
-    ARRIVED_DESTINATION // Arribó al país
-    CUSTOMS_PROCESSING // En proceso de aduana
-    CUSTOMS_RELEASED // Liberado de aduana
-    OUT_FOR_DELIVERY // En camino para entrega
-    DELIVERED // Entregado
-    DELIVERY_FAILED // Intento de entrega fallido
-    DELIVERY_RESCHEDULED // Entrega reprogramada
-
-    // === INTERNOS (Solo staff) ===
-    ADDED_TO_PALLET // Agregado a pallet
-    REMOVED_FROM_PALLET // Removido de pallet
-    ADDED_TO_DISPATCH // Agregado a despacho
-    REMOVED_FROM_DISPATCH // Removido de despacho
-    RECEIVED_IN_DISPATCH // Recibido en agencia destino
-    LOADED_TO_CONTAINER // Cargado en contenedor
-    REMOVED_FROM_CONTAINER // Removido de contenedor
-    LOADED_TO_FLIGHT // Cargado en vuelo
-    REMOVED_FROM_FLIGHT // Removido de vuelo
-    MANIFEST_SCANNED // Escaneado en verificación
-    WAREHOUSE_RECEIVED // Recibido en almacén carrier
-    WAREHOUSE_TRANSFERRED // Transferido entre almacenes
-    ASSIGNED_TO_ROUTE // Asignado a ruta de entrega
-    ASSIGNED_TO_MESSENGER // Asignado a mensajero
-
-    // === SISTEMA/INCIDENCIAS ===
-    DISCREPANCY_FOUND // Discrepancia en manifest
-    DISCREPANCY_RESOLVED // Discrepancia resuelta
-    ISSUE_REPORTED // Incidencia reportada
-    NOTE_ADDED // Nota interna agregada
-    STATUS_CORRECTED // Corrección de estado
+  BILLED
+  IN_TRANSIT
+  ARRIVED_DESTINATION
+  CUSTOMS_PROCESSING
+  CUSTOMS_RELEASED
+  OUT_FOR_DELIVERY
+  DELIVERED
+  DELIVERY_FAILED
+  DELIVERY_RESCHEDULED
+  ADDED_TO_PALLET
+  REMOVED_FROM_PALLET
+  ADDED_TO_DISPATCH
+  RECEIVED_IN_DISPATCH
+  LOADED_TO_CONTAINER
+  REMOVED_FROM_CONTAINER
+  LOADED_TO_FLIGHT
+  REMOVED_FROM_FLIGHT
+  MANIFEST_SCANNED
+  WAREHOUSE_RECEIVED
+  WAREHOUSE_TRANSFERRED
+  ASSIGNED_TO_ROUTE
+  ASSIGNED_TO_MESSENGER
+  DISCREPANCY_FOUND
+  DISCREPANCY_RESOLVED
+  ISSUE_REPORTED
+  NOTE_ADDED
+  STATUS_CORRECTED
+  REMOVED_FROM_DISPATCH
 }
 
-// Pallet Status
 enum PalletStatus {
-    OPEN // Aceptando paquetes
-    SEALED // Cerrado, listo para despacho
-    DISPATCHED // En un dispatch
-    RECEIVED // Recibido en destino
+  OPEN
+  SEALED
+  DISPATCHED
+  RECEIVED
 }
 
-// Delivery Route Status
 enum RouteStatus {
-    PLANNING
-    READY
-    IN_PROGRESS
-    COMPLETED
+  PLANNING
+  READY
+  IN_PROGRESS
+  COMPLETED
 }
 
-// Delivery Assignment Status
 enum DeliveryStatus {
-    PENDING
-    OUT_FOR_DELIVERY
-    DELIVERED
-    FAILED
-    RESCHEDULED
+  PENDING
+  OUT_FOR_DELIVERY
+  DELIVERED
+  FAILED
+  RESCHEDULED
 }
 
-// Manifest Verification Status
 enum VerificationStatus {
-    IN_PROGRESS
-    COMPLETED
-    COMPLETED_WITH_DISCREPANCIES
+  IN_PROGRESS
+  COMPLETED
+  COMPLETED_WITH_DISCREPANCIES
 }
 
-// Discrepancy Types
 enum DiscrepancyType {
-    MISSING // Esperado pero no llegó
-    EXTRA // Llegó pero no estaba en manifest
-    DAMAGED // Llegó dañado
+  MISSING
+  EXTRA
+  DAMAGED
 }

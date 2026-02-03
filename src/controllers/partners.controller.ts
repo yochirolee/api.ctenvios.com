@@ -386,62 +386,60 @@ const partners = {
    },
    //Order creation for partners
    createOrder: async (req: any, res: Response): Promise<void> => {
-     
-         const {
-            partner_order_id,
-            customer_id,
-            receiver_id,
-            customer,
-            receiver,
-            service_id,
-            order_items,
-            total_delivery_fee_in_cents,
-            requires_home_delivery,
-         } = req.body;
-         // Get agency user (needed for order creation)
-         const agencyUser = await prisma.user.findFirst({
-            where: { agency_id: req.partner.agency_id },
-            select: { id: true },
-         });
+      const {
+         partner_order_id,
+         customer_id,
+         receiver_id,
+         customer,
+         receiver,
+         service_id,
+         order_items,
+         total_delivery_fee_in_cents,
+         requires_home_delivery,
+      } = req.body;
+      // Get agency user (needed for order creation)
+      const agencyUser = await prisma.user.findFirst({
+         where: { agency_id: req.partner.agency_id },
+         select: { id: true },
+      });
 
-         if (!agencyUser) {
-            throw new AppError(HttpStatusCodes.INTERNAL_SERVER_ERROR, "No user found for partner's agency");
-         }
+      if (!agencyUser) {
+         throw new AppError(HttpStatusCodes.INTERNAL_SERVER_ERROR, "No user found for partner's agency");
+      }
 
-         const partner = req.partner || null;
+      const partner = req.partner || null;
 
-       
-         const orderResult = await services.orders.create({
-            partner_order_id,
-            customer_id,
-            receiver_id,
-            customer,
-            receiver,
-            service_id,
-            order_items,
-            user_id: agencyUser.id,
-            agency_id: req.partner.agency_id,
-            total_delivery_fee_in_cents,
-            requires_home_delivery,
-            partner_id: partner?.id || null,
-         });
-         //create pdf urls for the order
-         const orderPdfUrl = `https://api.ctenvios.com/api/v1/orders/${orderResult.id}/pdf`;
-         const orderLabelsPdfUrl = `https://api.ctenvios.com/api/v1/orders/${orderResult.id}/labels-pdf`;
-         const orderHblPdfUrl = `https://api.ctenvios.com/api/v1/orders/${orderResult.id}/hbl-pdf`;
+      const orderResult = await services.orders.create({
+         partner_order_id,
+         customer_id,
+         receiver_id,
+         customer,
+         receiver,
+         service_id,
+         order_items,
+         user_id: agencyUser.id,
+         agency_id: req.partner.agency_id,
+         total_delivery_fee_in_cents,
+         requires_home_delivery,
+         partner_id: partner?.id || null,
+      });
+      //create pdf urls for the order
+      const orderPdfUrl = `https://api.ctenvios.com/api/v1/orders/${orderResult.id}/pdf`;
+      const orderLabelsPdfUrl = `https://api.ctenvios.com/api/v1/orders/${orderResult.id}/labels-pdf`;
+      const orderHblPdfUrl = `https://api.ctenvios.com/api/v1/orders/${orderResult.id}/hbls-pdf`;
 
-         orderResult.pdf_urls = {
-            order: orderPdfUrl,
-            labels: orderLabelsPdfUrl,
-            hbls: orderHblPdfUrl,
-         };
+      orderResult.pdf_urls = {
+         order: orderPdfUrl,
+         labels: orderLabelsPdfUrl,
+         hbls: orderHblPdfUrl,
+      };
 
-         res.status(200).json({
-            message: "Order created successfully",
-            data: orderResult,
-         });
-    
+      res.status(200).json({
+         message: "Order created successfully",
+         data: orderResult,
+      });
    },
+
    getServices: async (req: any, res: Response): Promise<void> => {
       const agency_id = req.partner.agency_id;
       console.log(agency_id, "agency_id in partner middleware");

@@ -85,6 +85,9 @@ const orders = {
                   customs_fee_in_cents: true,
                   charge_fee_in_cents: true,
                   delivery_fee_in_cents: true,
+                  parcel: {
+                     select: { tracking_number: true, external_reference: true },
+                  },
                },
             },
          },

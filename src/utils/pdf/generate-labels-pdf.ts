@@ -2,10 +2,10 @@ import PDFKit from "pdfkit";
 import { OrderItem, ServiceType } from "@prisma/client";
 import bwipjs from "bwip-js";
 import QRCode from "qrcode";
-import { formatName } from "./capitalize";
+import { formatName } from "../capitalize";
 import { FONTS, registerPdfFonts } from "./pdf-fonts";
-import { OrderWithRelations } from "../types/order-with-relations";
-import { toNumber } from "./utils";
+import { OrderWithRelations } from "../../types/order-with-relations";
+import { toNumber } from "../utils";
 
 export const generateCTEnviosLabels = (order: OrderWithRelations): Promise<PDFKit.PDFDocument> => {
    // 4x6 inch labels (288x432 points at 72 DPI)
@@ -483,11 +483,7 @@ async function generateCleanCTEnviosLabel(
       });
 }
 
-function addLabelCancelledWatermark(
-   doc: PDFKit.PDFDocument,
-   labelWidth: number,
-   labelHeight: number
-) {
+function addLabelCancelledWatermark(doc: PDFKit.PDFDocument, labelWidth: number, labelHeight: number) {
    // Save current state
    doc.save();
 

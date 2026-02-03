@@ -176,6 +176,7 @@ const partnerOrderItemSchema = z.object({
    delivery_fee_in_cents: z.number().optional(),
    customs_fee_in_cents: z.number().optional(),
    charge_fee_in_cents: z.number().optional(),
+   external_reference: z.string().optional(),
 });
 
 const partnerReceiverSchema = z
@@ -301,6 +302,9 @@ router.get("/orders/:id", partnerAuthMiddleware, partnerLogMiddleware, async (re
                   insurance_fee_in_cents: true,
                   customs_fee_in_cents: true,
                   unit: true,
+                  parcel: {
+                     select: { external_reference: true },
+                  },
                },
                orderBy: { hbl: "asc" },
             },

@@ -1,312 +1,299 @@
-// ===========================================
-// CORE - Modelos principales del sistema
-// User, Agency, Customer, Receiver, Forwarder, Provider, Carrier, Service
-// ===========================================
-
 model User {
-    id                       String                  @id @default(uuid())
-    name                     String
-    email                    String                  @unique
-    emailVerified            Boolean                 @default(false)
-    phone                    String?
-    image                    String?
-    createdAt                DateTime                @default(now())
-    updatedAt                DateTime                @updatedAt
-    created_by               String?
-    forwarder_id             Int?
-    forwarder                Forwarder?              @relation(fields: [forwarder_id], references: [id])
-    agency_id                Int?
-    agency                   Agency?                 @relation(fields: [agency_id], references: [id], onDelete: Cascade)
-    carrier_id               Int?
-    carrier                  Carrier?                @relation(fields: [carrier_id], references: [id], onDelete: SetNull)
-    role                     Roles                   @default(AGENCY_SALES)
-    payments                 Payment[]
-    discounts                Discount[]
-    sessions                 Session[]
-    accounts                 Account[]
-    banned                   Boolean?                @default(false)
-    banReason                String?
-    banExpires               DateTime?
-    orders                   Order[]                 @relation("user")
-    order_history            OrderHistory[]
-    created_dispatches       Dispatch[]              @relation("created_by")
-    received_dispatches      Dispatch[]              @relation("received_by")
-    paid_dispatches          Dispatch[]              @relation("paid_by")
-    parcels                  Parcel[]
-    parcels_events           ParcelEvent[]
-    app_logs                 AppLog[]
-    created_issues           Issue[]                 @relation("created_issues")
-    assigned_issues          Issue[]                 @relation("assigned_issues")
-    resolved_issues          Issue[]                 @relation("resolved_issues")
-    issue_comments           IssueComment[]
-    issue_attachments        IssueAttachment[]
-    created_legacy_issues    LegacyIssue[]           @relation("created_legacy_issues")
-    assigned_legacy_issues   LegacyIssue[]           @relation("assigned_legacy_issues")
-    resolved_legacy_issues   LegacyIssue[]           @relation("resolved_legacy_issues")
-    legacy_issue_comments    LegacyIssueComment[]    @relation("legacy_issue_comments")
-    legacy_issue_attachments LegacyIssueAttachment[] @relation("legacy_issue_attachments")
-    paid_debts               InterAgencyDebt[]       @relation("DebtPaidBy")
-    // Transporte internacional
-    created_containers       Container[]             @relation("created_containers")
-    container_events         ContainerEvent[]        @relation("container_events")
-    created_flights          Flight[]                @relation("created_flights")
-    flight_events            FlightEvent[]           @relation("flight_events")
-    // Pallets
-    created_pallets          Pallet[]                @relation("created_pallets")
-    // Warehouses
-    managed_warehouses       Warehouse[]             @relation("warehouse_manager")
-    // Manifest Verification
-    manifest_verifications   ManifestVerification[]  @relation("manifest_verifications")
-    discrepancy_resolutions  ManifestDiscrepancy[]   @relation("discrepancy_resolutions")
-    // Delivery Routes
-    messenger_routes         DeliveryRoute[]         @relation("route_messenger")
-    created_routes           DeliveryRoute[]         @relation("route_created_by")
-    messenger_assignments    DeliveryAssignment[]    @relation("assignment_messenger")
-    // Soft deleted orders
-    deleted_orders           Order[]                 @relation("deleted_orders")
+  id                       String                  @id @default(uuid())
+  name                     String
+  email                    String                  @unique
+  emailVerified            Boolean                 @default(false)
+  phone                    String?
+  image                    String?
+  createdAt                DateTime                @default(now())
+  updatedAt                DateTime                @updatedAt
+  created_by               String?
+  forwarder_id             Int?
+  agency_id                Int?
+  role                     Roles                   @default(AGENCY_SALES)
+  banned                   Boolean?                @default(false)
+  banReason                String?
+  banExpires               DateTime?
+  carrier_id               Int?
+  created_containers       Container[]             @relation("created_containers")
+  container_events         ContainerEvent[]        @relation("container_events")
+  messenger_assignments    DeliveryAssignment[]    @relation("assignment_messenger")
+  created_routes           DeliveryRoute[]         @relation("route_created_by")
+  messenger_routes         DeliveryRoute[]         @relation("route_messenger")
+  discounts                Discount[]
+  created_dispatches       Dispatch[]              @relation("created_by")
+  paid_dispatches          Dispatch[]              @relation("paid_by")
+  received_dispatches      Dispatch[]              @relation("received_by")
+  created_flights          Flight[]                @relation("created_flights")
+  flight_events            FlightEvent[]           @relation("flight_events")
+  paid_debts               InterAgencyDebt[]       @relation("DebtPaidBy")
+  assigned_issues          Issue[]                 @relation("assigned_issues")
+  created_issues           Issue[]                 @relation("created_issues")
+  resolved_issues          Issue[]                 @relation("resolved_issues")
+  issue_attachments        IssueAttachment[]
+  issue_comments           IssueComment[]
+  assigned_legacy_issues   LegacyIssue[]           @relation("assigned_legacy_issues")
+  created_legacy_issues    LegacyIssue[]           @relation("created_legacy_issues")
+  resolved_legacy_issues   LegacyIssue[]           @relation("resolved_legacy_issues")
+  legacy_issue_attachments LegacyIssueAttachment[] @relation("legacy_issue_attachments")
+  legacy_issue_comments    LegacyIssueComment[]    @relation("legacy_issue_comments")
+  discrepancy_resolutions  ManifestDiscrepancy[]   @relation("discrepancy_resolutions")
+  manifest_verifications   ManifestVerification[]  @relation("manifest_verifications")
+  deleted_orders           Order[]                 @relation("deleted_orders")
+  orders                   Order[]                 @relation("user")
+  order_history            OrderHistory[]
+  created_pallets          Pallet[]                @relation("created_pallets")
+  parcels                  Parcel[]
+  parcels_events           ParcelEvent[]
+  payments                 Payment[]
+  managed_warehouses       Warehouse[]             @relation("warehouse_manager")
+  accounts                 Account[]
+  app_logs                 AppLog[]
+  sessions                 Session[]
+  agency                   Agency?                 @relation(fields: [agency_id], references: [id], onDelete: Cascade)
+  carrier                  Carrier?                @relation(fields: [carrier_id], references: [id])
+  forwarder                Forwarder?              @relation(fields: [forwarder_id], references: [id])
 
-    @@index([agency_id, role])
-    @@index([carrier_id, role])
-    @@map("user")
+  @@index([agency_id, role])
+  @@index([carrier_id, role])
+  @@map("user")
 }
 
 model Agency {
-    id                    Int               @id @default(autoincrement())
-    name                  String
-    address               String
-    contact               String
-    phone                 String
-    email                 String            @unique
-    logo                  String?
-    website               String?
-    created_at            DateTime          @default(now())
-    updated_at            DateTime          @updatedAt
-    forwarder_id          Int
-    forwarder             Forwarder         @relation(fields: [forwarder_id], references: [id])
-    parent_agency_id      Int?
-    parent_agency         Agency?           @relation("AgencyHierarchy", fields: [parent_agency_id], references: [id], onDelete: SetNull)
-    child_agencies        Agency[]          @relation("AgencyHierarchy")
-    services              Service[]
-    users                 User[]
-    products              Product[]
-    shipping_rates        ShippingRate[]
-    customs_rates         CustomsRates[]
-    surcharges            Surcharge[]
-    customers             Customer[]        @relation("AgencyToCustomer")
-    receivers             Receiver[]        @relation("AgencyToReceiver")
-    order_items           OrderItem[]
-    counters              Counter[]
-    partners              Partner[]
-    issues                Issue[]
-    legacy_issues         LegacyIssue[]     @relation("legacy_issues")
-    agency_type           AgencyType        @default(AGENCY)
-    is_active             Boolean           @default(false)
-    commission_rate       Float?            @default(0.0)
-    orders                Order[]
-    created_dispatches    Dispatch[]        @relation("created_dispatches")
-    received_dispatches   Dispatch[]        @relation("received_dispatches")
-    created_parcels       Parcel[]          @relation("created_parcels")
-    holding_parcels       Parcel[]          @relation("holding_parcels")
-    pallets               Pallet[]
-    debtor_debts          InterAgencyDebt[] @relation("DebtorAgency")
-    creditor_debts        InterAgencyDebt[] @relation("CreditorAgency")
-    original_sender_debts InterAgencyDebt[] @relation("OriginalSenderAgency")
+  id                    Int               @id @default(autoincrement())
+  name                  String
+  address               String
+  contact               String
+  phone                 String
+  email                 String            @unique
+  logo                  String?
+  website               String?
+  created_at            DateTime          @default(now())
+  updated_at            DateTime          @updatedAt
+  forwarder_id          Int
+  parent_agency_id      Int?
+  agency_type           AgencyType        @default(AGENCY)
+  is_active             Boolean           @default(false)
+  commission_rate       Float?            @default(0.0)
+  forwarder             Forwarder         @relation(fields: [forwarder_id], references: [id])
+  parent_agency         Agency?           @relation("AgencyHierarchy", fields: [parent_agency_id], references: [id])
+  child_agencies        Agency[]          @relation("AgencyHierarchy")
+  counters              Counter[]
+  customs_rates         CustomsRates[]
+  received_dispatches   Dispatch[]        @relation("received_dispatches")
+  created_dispatches    Dispatch[]        @relation("created_dispatches")
+  creditor_debts        InterAgencyDebt[] @relation("CreditorAgency")
+  debtor_debts          InterAgencyDebt[] @relation("DebtorAgency")
+  original_sender_debts InterAgencyDebt[] @relation("OriginalSenderAgency")
+  issues                Issue[]
+  legacy_issues         LegacyIssue[]     @relation("legacy_issues")
+  orders                Order[]
+  order_items           OrderItem[]
+  pallets               Pallet[]
+  created_parcels       Parcel[]          @relation("created_parcels")
+  holding_parcels       Parcel[]          @relation("holding_parcels")
+  partners              Partner[]
+  products              Product[]
+  shipping_rates        ShippingRate[]
+  surcharges            Surcharge[]
+  users                 User[]
+  customers             Customer[]        @relation("AgencyToCustomer")
+  receivers             Receiver[]        @relation("AgencyToReceiver")
+  services              Service[]         @relation("AgencyToService")
 
-    @@index([forwarder_id, is_active])
-    @@index([parent_agency_id])
+  @@index([forwarder_id, is_active])
+  @@index([parent_agency_id])
 }
 
 model Customer {
-    id                Int        @id @default(autoincrement())
-    first_name        String
-    middle_name       String?
-    last_name         String
-    second_last_name  String?
-    identity_document String?    @unique
-    email             String?    @unique
-    mobile            String
-    address           String?
-    created_at        DateTime   @default(now())
-    updated_at        DateTime   @updatedAt
-    receivers         Receiver[] @relation("CustomerToReceiver")
-    agencies          Agency[]   @relation("AgencyToCustomer")
-    is_active         Boolean    @default(true)
-    orders            Order[]
+  id                Int        @id @default(autoincrement())
+  first_name        String
+  middle_name       String?
+  last_name         String
+  second_last_name  String?
+  identity_document String?    @unique
+  email             String?    @unique
+  mobile            String
+  address           String?
+  created_at        DateTime   @default(now())
+  updated_at        DateTime   @updatedAt
+  is_active         Boolean    @default(true)
+  orders            Order[]
+  agencies          Agency[]   @relation("AgencyToCustomer")
+  receivers         Receiver[] @relation("CustomerToReceiver")
 
-    @@unique([mobile, first_name, last_name])
-    @@index([created_at(sort: Desc)])
-    @@index([id])
-    @@index([first_name, last_name])
-    @@index([mobile])
+  @@unique([mobile, first_name, last_name])
+  @@index([created_at(sort: Desc)])
+  @@index([id])
+  @@index([first_name, last_name])
+  @@index([mobile])
 }
 
 model Receiver {
-    id               Int        @id @default(autoincrement())
-    first_name       String
-    middle_name      String?
-    last_name        String
-    second_last_name String?
-    passport         String?    @unique
-    ci               String     @unique @db.VarChar(11)
-    email            String?    @unique
-    mobile           String?
-    phone            String?
-    address          String
-    created_at       DateTime   @default(now())
-    updated_at       DateTime   @updatedAt
-    customers        Customer[] @relation("CustomerToReceiver")
-    agencies         Agency[]   @relation("AgencyToReceiver")
-    province_id      Int
-    province         Province   @relation(fields: [province_id], references: [id])
-    city_id          Int
-    city             City       @relation(fields: [city_id], references: [id])
-    orders           Order[]
+  id               Int        @id @default(autoincrement())
+  first_name       String
+  middle_name      String?
+  last_name        String
+  second_last_name String?
+  passport         String?    @unique
+  ci               String     @unique @db.VarChar(11)
+  email            String?    @unique
+  mobile           String?
+  phone            String?
+  address          String
+  created_at       DateTime   @default(now())
+  updated_at       DateTime   @updatedAt
+  province_id      Int
+  city_id          Int
+  orders           Order[]
+  city             City       @relation(fields: [city_id], references: [id])
+  province         Province   @relation(fields: [province_id], references: [id])
+  agencies         Agency[]   @relation("AgencyToReceiver")
+  customers        Customer[] @relation("CustomerToReceiver")
 
-    @@index([mobile])
-    @@index([ci])
-    @@index([first_name, last_name])
+  @@index([mobile])
+  @@index([ci])
+  @@index([first_name, last_name])
 }
 
 model Forwarder {
-    id         Int         @id @default(autoincrement())
-    name       String      @unique
-    logo       String?
-    address    String
-    contact    String
-    phone      String
-    email      String
-    created_at DateTime    @default(now())
-    updated_at DateTime    @updatedAt
-    services   Service[]
-    agencies   Agency[]
-    users      User[]
-    providers  Provider[]
-    carriers   Carrier[]
-    partners   Partner[]
-    // Transporte internacional
-    containers Container[]
-    flights    Flight[]
+  id         Int         @id @default(autoincrement())
+  name       String      @unique
+  logo       String?
+  address    String
+  contact    String
+  phone      String
+  email      String
+  created_at DateTime    @default(now())
+  updated_at DateTime    @updatedAt
+  agencies   Agency[]
+  carriers   Carrier[]
+  containers Container[]
+  flights    Flight[]
+  partners   Partner[]
+  services   Service[]
+  users      User[]
+  providers  Provider[]  @relation("ForwarderToProvider")
 }
 
 model Service {
-    id                 Int                @id @default(autoincrement())
-    name               String             @unique
-    description        String?
-    created_at         DateTime           @default(now())
-    updated_at         DateTime           @updatedAt
-    service_type       ServiceType
-    forwarder_id       Int
-    forwarder          Forwarder          @relation(fields: [forwarder_id], references: [id])
-    provider_id        Int
-    provider           Provider           @relation(fields: [provider_id], references: [id])
-    carrier_id         Int?
-    carrier            Carrier?           @relation(fields: [carrier_id], references: [id])
-    agencies           Agency[]
-    is_active          Boolean            @default(true)
-    order_items        OrderItem[]
-    surcharges         Surcharge[]
-    volumetric_divisor Int?
-    orders             Order[]
-    products           Product[]
-    pricing_agreements PricingAgreement[]
-    shipping_rates     ShippingRate[]
-    parcels            Parcel[]
+  id                 Int                @id @default(autoincrement())
+  name               String             @unique
+  description        String?
+  created_at         DateTime           @default(now())
+  updated_at         DateTime           @updatedAt
+  service_type       ServiceType
+  forwarder_id       Int
+  provider_id        Int
+  carrier_id         Int?
+  is_active          Boolean            @default(true)
+  volumetric_divisor Int?
+  orders             Order[]
+  order_items        OrderItem[]
+  parcels            Parcel[]
+  pricing_agreements PricingAgreement[]
+  carrier            Carrier?           @relation(fields: [carrier_id], references: [id])
+  forwarder          Forwarder          @relation(fields: [forwarder_id], references: [id])
+  provider           Provider           @relation(fields: [provider_id], references: [id])
+  shipping_rates     ShippingRate[]
+  surcharges         Surcharge[]
+  agencies           Agency[]           @relation("AgencyToService")
+  products           Product[]          @relation("ProductToService")
 }
 
 model Carrier {
-    id              Int             @id @default(autoincrement())
-    name            String          @unique
-    created_at      DateTime        @default(now())
-    updated_at      DateTime        @updatedAt
-    forwarder_id    Int
-    forwarder       Forwarder       @relation(fields: [forwarder_id], references: [id])
-    services        Service[]
-    users           User[]
-    warehouses      Warehouse[]
-    delivery_routes DeliveryRoute[]
+  id              Int             @id @default(autoincrement())
+  name            String          @unique
+  created_at      DateTime        @default(now())
+  updated_at      DateTime        @updatedAt
+  forwarder_id    Int
+  forwarder       Forwarder       @relation(fields: [forwarder_id], references: [id])
+  delivery_routes DeliveryRoute[]
+  services        Service[]
+  warehouses      Warehouse[]
+  users           User[]
 }
 
 model Warehouse {
-    id              Int             @id @default(autoincrement())
-    name            String
-    address         String
-    carrier_id      Int
-    carrier         Carrier         @relation(fields: [carrier_id], references: [id])
-    province_id     Int
-    province        Province        @relation(fields: [province_id], references: [id])
-    is_main         Boolean         @default(false) // Almacén principal del carrier
-    is_active       Boolean         @default(true)
-    manager_id      String? // Jefe de almacén
-    manager         User?           @relation("warehouse_manager", fields: [manager_id], references: [id])
-    parcels         Parcel[]
-    parcel_events   ParcelEvent[]
-    delivery_routes DeliveryRoute[]
-    created_at      DateTime        @default(now())
-    updated_at      DateTime        @updatedAt
+  id              Int             @id @default(autoincrement())
+  name            String
+  address         String
+  carrier_id      Int
+  province_id     Int
+  is_main         Boolean         @default(false)
+  is_active       Boolean         @default(true)
+  manager_id      String?
+  created_at      DateTime        @default(now())
+  updated_at      DateTime        @updatedAt
+  delivery_routes DeliveryRoute[]
+  parcels         Parcel[]
+  parcel_events   ParcelEvent[]
+  carrier         Carrier         @relation(fields: [carrier_id], references: [id])
+  manager         User?           @relation("warehouse_manager", fields: [manager_id], references: [id])
+  province        Province        @relation(fields: [province_id], references: [id])
 
-    @@unique([carrier_id, province_id, is_main])
-    @@index([carrier_id, is_active])
-    @@index([province_id])
+  @@unique([carrier_id, province_id, is_main])
+  @@index([carrier_id, is_active])
+  @@index([province_id])
 }
 
 model Provider {
-    id         Int         @id @default(autoincrement())
-    name       String      @unique
-    address    String
-    contact    String
-    phone      String
-    email      String
-    logo       String?
-    created_at DateTime    @default(now())
-    updated_at DateTime    @updatedAt
-    services   Service[]
-    forwarders Forwarder[]
-    // Transporte internacional
-    containers Container[]
-    flights    Flight[]
+  id         Int         @id @default(autoincrement())
+  name       String      @unique
+  address    String
+  contact    String
+  phone      String
+  email      String
+  logo       String?
+  created_at DateTime    @default(now())
+  updated_at DateTime    @updatedAt
+  containers Container[]
+  flights    Flight[]
+  services   Service[]
+  forwarders Forwarder[] @relation("ForwarderToProvider")
 }
 
 model Province {
-    id              Int             @id @default(autoincrement())
-    code            String          @unique @db.VarChar(2) // DPA code: 21-35, 40
-    name            String
-    created_at      DateTime        @default(now())
-    updated_at      DateTime        @updatedAt
-    cities          City[]
-    receivers       Receiver[]
-    warehouses      Warehouse[]
-    delivery_routes DeliveryRoute[]
+  id              Int             @id @default(autoincrement())
+  name            String
+  created_at      DateTime        @default(now())
+  updated_at      DateTime        @updatedAt
+  code            String          @unique @db.VarChar(2)
+  cities          City[]
+  delivery_routes DeliveryRoute[]
+  receivers       Receiver[]
+  warehouses      Warehouse[]
 
-    @@index([code])
+  @@index([code])
 }
 
 model City {
-    id          Int        @id @default(autoincrement())
-    code        String     @db.VarChar(2) // DPA code within province: 01-15
-    name        String
-    created_at  DateTime   @default(now())
-    updated_at  DateTime   @updatedAt
-    province_id Int
-    province    Province   @relation(fields: [province_id], references: [id])
-    city_type   CityType   @default(CITY)
-    receivers   Receiver[]
+  id          Int        @id @default(autoincrement())
+  name        String
+  created_at  DateTime   @default(now())
+  updated_at  DateTime   @updatedAt
+  province_id Int
+  city_type   CityType   @default(CITY)
+  code        String     @db.VarChar(2)
+  province    Province   @relation(fields: [province_id], references: [id])
+  receivers   Receiver[]
 
-    @@unique([province_id, code]) // Unique code per province
-    @@index([code])
+  @@unique([province_id, code])
+  @@index([code])
 }
 
 model Country {
-    id            Int            @id @default(autoincrement())
-    name          String
-    code          String         @unique
-    customs_rates CustomsRates[]
+  id            Int            @id @default(autoincrement())
+  name          String
+  code          String         @unique
+  customs_rates CustomsRates[]
 }
 
 model Location {
-    id             Int           @id @default(autoincrement())
-    name           String
-    created_at     DateTime      @default(now())
-    updated_at     DateTime      @updatedAt
-    parcels        Parcel[]
-    parcels_events ParcelEvent[]
+  id             Int           @id @default(autoincrement())
+  name           String
+  created_at     DateTime      @default(now())
+  updated_at     DateTime      @updatedAt
+  parcels        Parcel[]
+  parcels_events ParcelEvent[]
 }

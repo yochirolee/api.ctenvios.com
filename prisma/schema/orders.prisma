@@ -78,7 +78,7 @@ model OrderItem {
     issues                 Issue[]
 
     // Soft delete field (synced with order deletion)
-    deleted_at             DateTime?
+    deleted_at DateTime?
 
     @@index([order_id])
     @@index([hbl])
@@ -89,6 +89,7 @@ model OrderItem {
 model Parcel {
     id                   Int                   @id @default(autoincrement())
     tracking_number      String                @unique
+    external_reference   String?               @unique
     agency_id            Int?
     agency               Agency?               @relation("created_parcels", fields: [agency_id], references: [id], onDelete: SetNull)
     current_agency_id    Int?
@@ -129,7 +130,7 @@ model Parcel {
     delivery_assignment  DeliveryAssignment?
 
     // Soft delete field (synced with order deletion)
-    deleted_at           DateTime?
+    deleted_at DateTime?
 
     @@index([tracking_number])
     @@index([dispatch_id])
@@ -210,9 +211,9 @@ model Dispatch {
     // Self-reference: Reception dispatch links to origin dispatch
     // When parcels are received from an existing dispatch, they are extracted
     // and placed in a new "reception dispatch" that references the original
-    origin_dispatch_id     Int?
-    origin_dispatch        Dispatch?         @relation("DispatchReceptions", fields: [origin_dispatch_id], references: [id], onDelete: SetNull)
-    reception_dispatches   Dispatch[]        @relation("DispatchReceptions")
+    origin_dispatch_id   Int?
+    origin_dispatch      Dispatch?  @relation("DispatchReceptions", fields: [origin_dispatch_id], references: [id], onDelete: SetNull)
+    reception_dispatches Dispatch[] @relation("DispatchReceptions")
 
     @@index([origin_dispatch_id])
 }
