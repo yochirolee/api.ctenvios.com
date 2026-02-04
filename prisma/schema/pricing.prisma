@@ -9,8 +9,8 @@ model Product {
   width              Float?
   height             Float?
   is_active          Boolean            @default(true)
-  created_at         DateTime           @default(now())
-  updated_at         DateTime           @updatedAt
+  created_at         DateTime @db.Timestamptz(3)           @default(now())
+  updated_at         DateTime @db.Timestamptz(3)           @updatedAt
   pricing_agreements PricingAgreement[]
   provider           Agency             @relation(fields: [provider_id], references: [id])
   shipping_rates     ShippingRate[]
@@ -25,12 +25,12 @@ model PricingAgreement {
   buyer_agency_id  Int
   product_id       Int
   service_id       Int
-  effective_from   DateTime       @default(now())
-  effective_to     DateTime?
+  effective_from   DateTime @db.Timestamptz(3)       @default(now())
+  effective_to     DateTime? @db.Timestamptz(3)
   price_in_cents   Int            @default(0)
   is_active        Boolean        @default(true)
-  created_at       DateTime       @default(now())
-  updated_at       DateTime       @updatedAt
+  created_at       DateTime @db.Timestamptz(3)       @default(now())
+  updated_at       DateTime @db.Timestamptz(3)       @updatedAt
   product          Product        @relation(fields: [product_id], references: [id])
   service          Service        @relation(fields: [service_id], references: [id])
   shipping_rates   ShippingRate[]
@@ -46,11 +46,11 @@ model ShippingRate {
   pricing_agreement_id Int
   scope                RateScope        @default(PUBLIC)
   price_in_cents       Int              @default(0)
-  effective_from       DateTime
-  effective_to         DateTime?
+  effective_from       DateTime @db.Timestamptz(3)
+  effective_to         DateTime? @db.Timestamptz(3)
   is_active            Boolean          @default(true)
-  created_at           DateTime         @default(now())
-  updated_at           DateTime         @updatedAt
+  created_at           DateTime @db.Timestamptz(3)         @default(now())
+  updated_at           DateTime @db.Timestamptz(3)         @updatedAt
   product_id           Int
   order_items          OrderItem[]
   tiers                RateTier[]
@@ -76,8 +76,8 @@ model CustomsRates {
   min_weight             Float?
   max_weight             Float?
   max_quantity           Int?
-  created_at             DateTime    @default(now())
-  updated_at             DateTime    @updatedAt
+  created_at             DateTime @db.Timestamptz(3)    @default(now())
+  updated_at             DateTime @db.Timestamptz(3)    @updatedAt
   agencyId               Int?
   insurance_fee_in_cents Int         @default(0)
   agency                 Agency?     @relation(fields: [agencyId], references: [id])
@@ -108,8 +108,8 @@ model Surcharge {
   service_id     Int?
   agency_id      Int
   is_active      Boolean       @default(true)
-  effective_from DateTime
-  effective_to   DateTime?
+  effective_from DateTime @db.Timestamptz(3)
+  effective_to   DateTime? @db.Timestamptz(3)
   agency         Agency        @relation(fields: [agency_id], references: [id])
   service        Service?      @relation(fields: [service_id], references: [id])
 

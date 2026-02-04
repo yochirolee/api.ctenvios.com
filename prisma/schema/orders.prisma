@@ -16,8 +16,8 @@ model Order {
     total_in_cents         Int            @default(0)
     paid_in_cents          Int            @default(0)
     requires_home_delivery Boolean        @default(true)
-    created_at             DateTime       @default(now())
-    updated_at             DateTime       @updatedAt
+    created_at             DateTime @db.Timestamptz(3)       @default(now())
+    updated_at             DateTime @db.Timestamptz(3)       @updatedAt
     user_id                String
     user                   User           @relation("user", fields: [user_id], references: [id])
     agency_id              Int
@@ -33,7 +33,7 @@ model Order {
     issues                 Issue[]
 
     // Soft delete fields
-    deleted_at      DateTime?
+    deleted_at      DateTime? @db.Timestamptz(3)
     deleted_by_id   String?
     deleted_by      User?     @relation("deleted_orders", fields: [deleted_by_id], references: [id])
     deletion_reason String?
@@ -48,8 +48,8 @@ model Order {
 model OrderItem {
     hbl                    String        @id
     description            String
-    created_at             DateTime      @default(now())
-    updated_at             DateTime      @updatedAt
+    created_at             DateTime @db.Timestamptz(3)      @default(now())
+    updated_at             DateTime @db.Timestamptz(3)      @updatedAt
     weight                 Decimal       @default("0.00")
     volume                 Float?        @default(0)
     length                 Float?
@@ -78,7 +78,7 @@ model OrderItem {
     issues                 Issue[]
 
     // Soft delete field (synced with order deletion)
-    deleted_at DateTime?
+    deleted_at DateTime? @db.Timestamptz(3)
 
     @@index([order_id])
     @@index([hbl])
@@ -103,8 +103,8 @@ model Parcel {
     status               Status                @default(IN_AGENCY)
     current_location_id  Int?
     current_location     Location?             @relation(fields: [current_location_id], references: [id])
-    created_at           DateTime              @default(now())
-    updated_at           DateTime              @updatedAt
+    created_at           DateTime @db.Timestamptz(3)              @default(now())
+    updated_at           DateTime @db.Timestamptz(3)              @updatedAt
     order_items          OrderItem[]
     events               ParcelEvent[]
     dispatch_id          Int?
@@ -130,7 +130,7 @@ model Parcel {
     delivery_assignment  DeliveryAssignment?
 
     // Soft delete field (synced with order deletion)
-    deleted_at DateTime?
+    deleted_at DateTime? @db.Timestamptz(3)
 
     @@index([tracking_number])
     @@index([dispatch_id])
@@ -165,8 +165,8 @@ model ParcelEvent {
     warehouse_id Int?
     warehouse    Warehouse?      @relation(fields: [warehouse_id], references: [id], onDelete: SetNull)
     notes        String? // Notas adicionales del evento
-    created_at   DateTime        @default(now())
-    updated_at   DateTime        @updatedAt
+    created_at   DateTime @db.Timestamptz(3)        @default(now())
+    updated_at   DateTime @db.Timestamptz(3)        @updatedAt
 
     @@index([parcel_id, created_at(sort: Desc)])
     @@index([event_type])
@@ -193,14 +193,14 @@ model Dispatch {
     declared_cost_in_cents Int               @default(0)
     cost_in_cents          Int               @default(0)
     payment_status         PaymentStatus     @default(PENDING)
-    payment_date           DateTime?
+    payment_date           DateTime? @db.Timestamptz(3)
     payment_method         PaymentMethod     @default(CASH)
     payment_reference      String?
     payment_notes          String?
     paid_by_id             String?
     paid_by                User?             @relation("paid_by", fields: [paid_by_id], references: [id])
-    created_at             DateTime          @default(now())
-    updated_at             DateTime          @updatedAt
+    created_at             DateTime @db.Timestamptz(3)          @default(now())
+    updated_at             DateTime @db.Timestamptz(3)          @updatedAt
     created_by_id          String
     created_by             User              @relation("created_by", fields: [created_by_id], references: [id])
     received_by_id         String?
@@ -228,5 +228,5 @@ model OrderHistory {
     changed_fields Json
     type           OrderEventType @default(SYSTEM_ACTION)
     comment        String?
-    created_at     DateTime       @default(now())
+    created_at     DateTime @db.Timestamptz(3)       @default(now())
 }

@@ -6,12 +6,12 @@ model DeliveryRoute {
   messenger_id   String
   province_id    Int
   status         RouteStatus          @default(PLANNING)
-  scheduled_date DateTime
-  started_at     DateTime?
-  completed_at   DateTime?
+  scheduled_date DateTime @db.Timestamptz(3)
+  started_at     DateTime? @db.Timestamptz(3)
+  completed_at   DateTime? @db.Timestamptz(3)
   notes          String?
-  created_at     DateTime             @default(now())
-  updated_at     DateTime             @updatedAt
+  created_at     DateTime @db.Timestamptz(3)             @default(now())
+  updated_at     DateTime @db.Timestamptz(3)             @updatedAt
   created_by_id  String
   assignments    DeliveryAssignment[]
   carrier        Carrier              @relation(fields: [carrier_id], references: [id])
@@ -34,15 +34,15 @@ model DeliveryAssignment {
   messenger_id    String?
   status          DeliveryStatus @default(PENDING)
   attempts        Int            @default(0)
-  last_attempt_at DateTime?
-  delivered_at    DateTime?
+  last_attempt_at DateTime? @db.Timestamptz(3)
+  delivered_at    DateTime? @db.Timestamptz(3)
   recipient_name  String?
   recipient_ci    String?
   signature       String?
   photo_proof     String?
   notes           String?
-  created_at      DateTime       @default(now())
-  updated_at      DateTime       @updatedAt
+  created_at      DateTime @db.Timestamptz(3)       @default(now())
+  updated_at      DateTime @db.Timestamptz(3)       @updatedAt
   messenger       User?          @relation("assignment_messenger", fields: [messenger_id], references: [id])
   parcel          Parcel         @relation(fields: [parcel_id], references: [id])
   route           DeliveryRoute? @relation(fields: [route_id], references: [id])

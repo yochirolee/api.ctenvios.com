@@ -13,7 +13,7 @@ model AppLog {
   user_agent  String?
   user_id     String?
   user_email  String?
-  created_at  DateTime @default(now())
+  created_at  DateTime @db.Timestamptz(3) @default(now())
   user        User?    @relation(fields: [user_id], references: [id])
 
   @@index([level, created_at(sort: Desc)])
@@ -30,7 +30,7 @@ model AppConfig {
   key         String   @unique
   value       String
   description String?
-  updated_at  DateTime @default(now()) @updatedAt
+  updated_at  DateTime @db.Timestamptz(3) @default(now()) @updatedAt
   updated_by  String?
 
   @@map("app_config")

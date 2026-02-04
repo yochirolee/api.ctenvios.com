@@ -7,8 +7,8 @@ model Pallet {
   parcels_count   Int           @default(0)
   notes           String?
   dispatch_id     Int?
-  created_at      DateTime      @default(now())
-  updated_at      DateTime      @updatedAt
+  created_at      DateTime @db.Timestamptz(3)      @default(now())
+  updated_at      DateTime @db.Timestamptz(3)      @updatedAt
   created_by_id   String
   agency          Agency        @relation(fields: [agency_id], references: [id])
   created_by      User          @relation("created_pallets", fields: [created_by_id], references: [id])

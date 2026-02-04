@@ -8,11 +8,11 @@ model ManifestVerification {
   missing_count  Int                   @default(0)
   extra_count    Int                   @default(0)
   verified_by_id String
-  started_at     DateTime              @default(now())
-  completed_at   DateTime?
+  started_at     DateTime @db.Timestamptz(3)              @default(now())
+  completed_at   DateTime? @db.Timestamptz(3)
   notes          String?
-  created_at     DateTime              @default(now())
-  updated_at     DateTime              @updatedAt
+  created_at     DateTime @db.Timestamptz(3)              @default(now())
+  updated_at     DateTime @db.Timestamptz(3)              @updatedAt
   discrepancies  ManifestDiscrepancy[]
   container      Container?            @relation(fields: [container_id], references: [id])
   flight         Flight?               @relation(fields: [flight_id], references: [id])
@@ -30,10 +30,10 @@ model ManifestDiscrepancy {
   tracking_number  String
   discrepancy_type DiscrepancyType
   resolution       String?
-  resolved_at      DateTime?
+  resolved_at      DateTime? @db.Timestamptz(3)
   resolved_by_id   String?
-  created_at       DateTime             @default(now())
-  updated_at       DateTime             @updatedAt
+  created_at       DateTime @db.Timestamptz(3)             @default(now())
+  updated_at       DateTime @db.Timestamptz(3)             @updatedAt
   parcel           Parcel?              @relation(fields: [parcel_id], references: [id])
   resolved_by      User?                @relation("discrepancy_resolutions", fields: [resolved_by_id], references: [id])
   verification     ManifestVerification @relation(fields: [verification_id], references: [id], onDelete: Cascade)

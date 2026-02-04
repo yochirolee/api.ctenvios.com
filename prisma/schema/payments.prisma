@@ -5,10 +5,10 @@ model Payment {
   charge_in_cents Int           @default(0)
   method          PaymentMethod
   reference       String?
-  date            DateTime      @default(now())
+  date            DateTime @db.Timestamptz(3)      @default(now())
   notes           String?
-  created_at      DateTime      @default(now())
-  updated_at      DateTime      @updatedAt
+  created_at      DateTime @db.Timestamptz(3)      @default(now())
+  updated_at      DateTime @db.Timestamptz(3)      @updatedAt
   user_id         String
   order           Order         @relation(fields: [order_id], references: [id], onDelete: Cascade)
   user            User          @relation(fields: [user_id], references: [id])
@@ -22,7 +22,7 @@ model Discount {
   description       String?
   rate              Int?         @default(0)
   discount_in_cents Int          @default(0)
-  created_at        DateTime     @default(now())
+  created_at        DateTime @db.Timestamptz(3)     @default(now())
   order             Order        @relation(fields: [order_id], references: [id], onDelete: Cascade)
   user              User         @relation(fields: [user_id], references: [id], onDelete: Cascade)
 }
@@ -36,9 +36,9 @@ model InterAgencyDebt {
   original_sender_agency_id Int
   relationship              String
   status                    DebtStatus @default(PENDING)
-  created_at                DateTime   @default(now())
-  updated_at                DateTime   @updatedAt
-  paid_at                   DateTime?
+  created_at                DateTime @db.Timestamptz(3)   @default(now())
+  updated_at                DateTime @db.Timestamptz(3)   @updatedAt
+  paid_at                   DateTime? @db.Timestamptz(3)
   paid_by_id                String?
   notes                     String?
   creditor_agency           Agency     @relation("CreditorAgency", fields: [creditor_agency_id], references: [id])
@@ -60,8 +60,8 @@ model Counter {
   date       String
   agency_id  Int
   counter    Int
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
+  created_at DateTime @db.Timestamptz(3) @default(now())
+  updated_at DateTime @db.Timestamptz(3) @updatedAt
   agency     Agency   @relation(fields: [agency_id], references: [id], onDelete: Cascade)
 
   @@unique([date, agency_id])

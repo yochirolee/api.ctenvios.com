@@ -8,8 +8,8 @@ model Partner {
   agency_id    Int
   forwarder_id Int
   rate_limit   Int?         @default(100)
-  created_at   DateTime     @default(now())
-  updated_at   DateTime     @updatedAt
+  created_at   DateTime @db.Timestamptz(3)     @default(now())
+  updated_at   DateTime @db.Timestamptz(3)     @updatedAt
   api_keys     ApiKey[]
   orders       Order[]
   agency       Agency       @relation(fields: [agency_id], references: [id], onDelete: Cascade)
@@ -25,9 +25,9 @@ model ApiKey {
   name       String?
   partner_id Int
   is_active  Boolean      @default(true)
-  expires_at DateTime?
-  created_at DateTime     @default(now())
-  last_used  DateTime?
+  expires_at DateTime? @db.Timestamptz(3)
+  created_at DateTime @db.Timestamptz(3)     @default(now())
+  last_used  DateTime? @db.Timestamptz(3)
   key_plain  String?
   partner    Partner      @relation(fields: [partner_id], references: [id], onDelete: Cascade)
   logs       PartnerLog[]
@@ -43,7 +43,7 @@ model Webhook {
   secret     String
   is_active  Boolean        @default(true)
   events     String[]
-  created_at DateTime       @default(now())
+  created_at DateTime @db.Timestamptz(3)       @default(now())
   partner    Partner        @relation(fields: [partner_id], references: [id], onDelete: Cascade)
   event_logs WebhookEvent[]
 }
@@ -56,7 +56,7 @@ model WebhookEvent {
   status_code Int?
   response    String?
   is_success  Boolean
-  created_at  DateTime @default(now())
+  created_at  DateTime @db.Timestamptz(3) @default(now())
   webhook     Webhook  @relation(fields: [webhook_id], references: [id], onDelete: Cascade)
 }
 
@@ -71,7 +71,7 @@ model PartnerLog {
   response_body Json?
   ip_address    String?
   user_agent    String?
-  created_at    DateTime @default(now())
+  created_at    DateTime @db.Timestamptz(3) @default(now())
   api_key       ApiKey   @relation(fields: [api_key_id], references: [id], onDelete: Cascade)
   partner       Partner  @relation(fields: [partner_id], references: [id], onDelete: Cascade)
 

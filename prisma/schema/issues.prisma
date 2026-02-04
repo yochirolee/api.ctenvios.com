@@ -11,11 +11,11 @@ model Issue {
   created_by_id    String
   assigned_to_id   String?
   agency_id        Int?
-  resolved_at      DateTime?
+  resolved_at      DateTime? @db.Timestamptz(3)
   resolved_by_id   String?
   resolution_notes String?
-  created_at       DateTime          @default(now())
-  updated_at       DateTime          @updatedAt
+  created_at       DateTime @db.Timestamptz(3)          @default(now())
+  updated_at       DateTime @db.Timestamptz(3)          @updatedAt
   agency           Agency?           @relation(fields: [agency_id], references: [id], onDelete: Cascade)
   assigned_to      User?             @relation("assigned_issues", fields: [assigned_to_id], references: [id])
   created_by       User              @relation("created_issues", fields: [created_by_id], references: [id])
@@ -43,8 +43,8 @@ model IssueComment {
   user_id     String
   content     String
   is_internal Boolean  @default(false)
-  created_at  DateTime @default(now())
-  updated_at  DateTime @updatedAt
+  created_at  DateTime @db.Timestamptz(3) @default(now())
+  updated_at  DateTime @db.Timestamptz(3) @updatedAt
   issue       Issue    @relation(fields: [issue_id], references: [id], onDelete: Cascade)
   user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
@@ -61,7 +61,7 @@ model IssueAttachment {
   file_size      Int?
   uploaded_by_id String
   description    String?
-  created_at     DateTime @default(now())
+  created_at     DateTime @db.Timestamptz(3) @default(now())
   issue          Issue    @relation(fields: [issue_id], references: [id], onDelete: Cascade)
   uploaded_by    User     @relation(fields: [uploaded_by_id], references: [id], onDelete: Cascade)
 
@@ -73,7 +73,7 @@ model IssueParcel {
   id         Int      @id @default(autoincrement())
   issue_id   Int
   parcel_id  Int
-  created_at DateTime @default(now())
+  created_at DateTime @db.Timestamptz(3) @default(now())
   issue      Issue    @relation(fields: [issue_id], references: [id], onDelete: Cascade)
   parcel     Parcel   @relation(fields: [parcel_id], references: [id], onDelete: Cascade)
 
@@ -95,11 +95,11 @@ model LegacyIssue {
   legacy_hbl        String?
   created_by_id     String
   assigned_to_id    String?
-  resolved_at       DateTime?
+  resolved_at       DateTime? @db.Timestamptz(3)
   resolved_by_id    String?
   resolution_notes  String?
-  created_at        DateTime                @default(now())
-  updated_at        DateTime                @updatedAt
+  created_at        DateTime @db.Timestamptz(3)                @default(now())
+  updated_at        DateTime @db.Timestamptz(3)                @updatedAt
   agency_id         Int?
   agency            Agency?                 @relation("legacy_issues", fields: [agency_id], references: [id])
   assigned_to       User?                   @relation("assigned_legacy_issues", fields: [assigned_to_id], references: [id])
@@ -125,7 +125,7 @@ model LegacyIssueParcel {
   issue_id         Int
   legacy_parcel_id String
   legacy_order_id  Int?
-  created_at       DateTime    @default(now())
+  created_at       DateTime @db.Timestamptz(3)    @default(now())
   issue            LegacyIssue @relation(fields: [issue_id], references: [id], onDelete: Cascade)
 
   @@unique([issue_id, legacy_parcel_id])
@@ -139,8 +139,8 @@ model LegacyIssueComment {
   user_id     String
   content     String
   is_internal Boolean     @default(false)
-  created_at  DateTime    @default(now())
-  updated_at  DateTime    @updatedAt
+  created_at  DateTime @db.Timestamptz(3)    @default(now())
+  updated_at  DateTime @db.Timestamptz(3)    @updatedAt
   issue       LegacyIssue @relation(fields: [issue_id], references: [id], onDelete: Cascade)
   user        User        @relation("legacy_issue_comments", fields: [user_id], references: [id], onDelete: Cascade)
 
@@ -157,7 +157,7 @@ model LegacyIssueAttachment {
   file_size      Int?
   uploaded_by_id String
   description    String?
-  created_at     DateTime    @default(now())
+  created_at     DateTime @db.Timestamptz(3)    @default(now())
   issue          LegacyIssue @relation(fields: [issue_id], references: [id], onDelete: Cascade)
   uploaded_by    User        @relation("legacy_issue_attachments", fields: [uploaded_by_id], references: [id], onDelete: Cascade)
 
