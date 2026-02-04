@@ -36,7 +36,12 @@ RUN npm run build
 # =========================
 FROM node:22-alpine AS production
 
-RUN apk add --no-cache openssl
+ENV TZ=America/New_York
+RUN apk add --no-cache tzdata
+
+
+RUN apk add --no-cache openssl 
+
 
 WORKDIR /app
 ENV NODE_ENV=production
