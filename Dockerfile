@@ -4,7 +4,7 @@
 FROM node:22-alpine AS builder
 
 # Prisma necesita openssl
-RUN apk add --no-cache openssl
+RUN apk add --no-cache openssl python3 make g++
 
 WORKDIR /app
 
@@ -12,12 +12,14 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 COPY prisma ./prisma
 COPY prisma.config.* ./
+COPY package.json package-lock.json* ./
+
 
 # DATABASE_URL dummy solo para prisma generate
 ENV DATABASE_URL="postgresql://user:pass@localhost:5432/dummy"
 
 # Instala deps (incluye devDependencies)
-RUN npm ci
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
 # Genera Prisma Client
 RUN npx prisma generate
