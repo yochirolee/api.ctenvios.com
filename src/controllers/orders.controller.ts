@@ -31,6 +31,7 @@ export const ordersController = {
          total_delivery_fee_in_cents,
          requires_home_delivery,
       } = req.body;
+
       const user = req.user;
 
       const orderResult = await services.orders.create({

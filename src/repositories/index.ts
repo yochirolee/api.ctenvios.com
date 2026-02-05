@@ -17,7 +17,6 @@ import dispatch from "./dispatch.repository";
 import parcels from "./parcels.repository";
 import appLogs from "./app-logs.repository";
 import issues from "./issues.repository";
-import legacyIssues from "./legacy-issues.repository";
 import interAgencyDebts from "./inter-agency-debts.repository";
 import containers from "./containers.repository";
 import flights from "./flights.repository";
@@ -42,7 +41,6 @@ export const repository = {
    parcels,
    appLogs,
    issues,
-   legacyIssues,
    interAgencyDebts,
    containers,
    flights,

@@ -5,7 +5,10 @@ import containersRepository from "../repositories/containers.repository";
 import AppError from "../utils/app.error";
 import prisma from "../lib/prisma.client";
 import repository from "../repositories";
-import { generateContainerManifestExcel, getContainerManifestData } from "../utils/generate-container-manifest-excel";
+import {
+   generateContainerManifestExcel,
+   getContainerManifestData,
+} from "../utils/excel/generate-container-manifest-excel";
 
 const ALLOWED_CONTAINER_STATUSES: Status[] = [
    Status.IN_AGENCY,
@@ -205,7 +208,7 @@ export const containers = {
             `Parcel ${tracking_number} uses ${parcel.service?.service_name || "AIR"} service (${
                parcel.service?.service_type
             }). Only MARITIME parcels can be added to containers. Use flights for AIR parcels.`,
-            400,
+            400
          );
       }
 
@@ -219,10 +222,10 @@ export const containers = {
 
       if (!ALLOWED_CONTAINER_STATUSES.includes(parcel.status)) {
          throw new AppError(
-            `Parcel with status ${parcel.status} cannot be added to container. Allowed statuses: ${ALLOWED_CONTAINER_STATUSES.join(
-               ", ",
-            )}`,
-            400,
+            `Parcel with status ${
+               parcel.status
+            } cannot be added to container. Allowed statuses: ${ALLOWED_CONTAINER_STATUSES.join(", ")}`,
+            400
          );
       }
 
@@ -235,7 +238,7 @@ export const containers = {
       if (container.status !== ContainerStatus.PENDING && container.status !== ContainerStatus.LOADING) {
          throw new AppError(
             `Cannot add parcels to container with status ${container.status}. Container must be PENDING or LOADING.`,
-            400,
+            400
          );
       }
 

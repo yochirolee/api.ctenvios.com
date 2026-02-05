@@ -14,7 +14,6 @@ import shippingRates from "./shipping.rates.controller";
 import config from "./config.controller";
 import logs from "./logs.controller";
 import issues from "./issues.controller";
-import legacyIssues from "./legacy-issues.controller";
 import users from "./users.controller";
 import containers from "./containers.controller";
 import flights from "./flights.controller";
@@ -38,7 +37,6 @@ const controllers = {
    config,
    logs,
    issues,
-   legacyIssues,
    users,
    containers,
    flights,

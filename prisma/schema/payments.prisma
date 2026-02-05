@@ -55,14 +55,4 @@ model InterAgencyDebt {
   @@index([debtor_agency_id, status])
 }
 
-model Counter {
-  id         Int      @id @default(autoincrement())
-  date       String
-  agency_id  Int
-  counter    Int
-  created_at DateTime @db.Timestamptz(3) @default(now())
-  updated_at DateTime @db.Timestamptz(3) @updatedAt
-  agency     Agency   @relation(fields: [agency_id], references: [id], onDelete: Cascade)
 
-  @@unique([date, agency_id])
-}

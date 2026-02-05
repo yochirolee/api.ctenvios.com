@@ -462,20 +462,26 @@ async function generateCleanCTEnviosLabel(
          });
    }
 
-   // Large tracking number in center - positioned safely within page bounds
-   doc.fontSize(20)
+   // Large tracking number in center - positioned safely within page bounds.
+   // Use smaller font for 5+ digit order IDs so they don't wrap and cause an extra page.
+   const orderIdStr = String(order.id);
+   const orderIdFontSize = orderIdStr.length >= 5 ? 16 : 20;
+   const orderIdWidth = 80; // Enough for 5+ digits without wrap
+   const orderIdX = labelWidth - 170;
+
+   doc.fontSize(orderIdFontSize)
       .font(FONTS.BOLD)
       .fillColor("#000000")
-      .text(`${order.id}`, labelWidth - 160, labelHeight - 40, { width: 60, align: "center" });
+      .text(orderIdStr, orderIdX, labelHeight - 40, { width: orderIdWidth, align: "center" });
 
    doc.fontSize(8)
       .font(FONTS.REGULAR)
-      .text("Factura", labelWidth - 165, labelHeight - 50, { width: 60, align: "center" });
+      .text("Factura", orderIdX - 5, labelHeight - 50, { width: orderIdWidth, align: "center" });
    // Pack number
    doc.fontSize(8)
       .font(FONTS.REGULAR)
       .text("Paquete", labelWidth - 85, labelHeight - 50, { width: 60, align: "center" });
-   doc.fontSize(20)
+   doc.fontSize(orderIdFontSize)
       .font(FONTS.BOLD)
       .text(`${itemIndex + 1}-${order.order_items.length}`, labelWidth - 85, labelHeight - 40, {
          width: 80,
@@ -533,9 +539,10 @@ async function generateProvinceLabel(
          width: labelWidth - margin * 2,
          align: "center",
       });
+   // Use 2-digit DPA codes (from seed), not database ids
    doc.fontSize(40)
       .font(FONTS.BOLD)
-      .text(`${order.receiver.province?.id || ""} - ${order.receiver.city?.id || ""}`, margin, labelHeight - 60, {
+      .text(`${order.receiver.province?.code ?? ""} - ${order.receiver.city?.code ?? ""}`, margin, labelHeight - 60, {
          width: labelWidth - margin * 2,
          align: "center",
       });

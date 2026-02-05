@@ -6,6 +6,7 @@ import { PAYMENT_CONFIG } from "../config/payment.config";
 import prisma from "../lib/prisma.client";
 import StatusCodes from "../common/https-status-codes";
 import { AppError } from "../common/app-errors";
+import { buildHBL, todayYYMM } from "../utils/generate-hbl";
 
 interface OrderCreateInput {
    partner_id?: number;
@@ -42,167 +43,150 @@ export const ordersService = {
       total_delivery_fee_in_cents,
       requires_home_delivery = true,
    }: OrderCreateInput): Promise<any> => {
-      const items_hbl = await services.resolvers.resolveItemsWithHbl({
+      // 1) Resolver customer/receiver igual que antes (fast/slow path)
+      let finalCustomerId = customer_id;
+      let finalReceiverId = receiver_id;
+
+      if (!customer_id || !receiver_id) {
+         const [resolvedReceiver, resolvedCustomer] = await Promise.all([
+            services.resolvers.resolveReceiver({ receiver_id, receiver }),
+            services.resolvers.resolveCustomer({ customer_id, customer }),
+         ]);
+         finalCustomerId = resolvedCustomer.id;
+         finalReceiverId = resolvedReceiver.id;
+      }
+
+      // 2) Resolver items SIN HBL (nuevo)
+      //    Debe devolverte: description, price_in_cents, rate_id, insurance_fee_in_cents, customs_fee_in_cents,
+      //    quantity, weight, agency_id, unit, etc.
+      const items = await services.resolvers.resolveItems({
          order_items,
          service_id,
          agency_id,
       });
-console.log("items_hbl", items_hbl);
 
-      const parcels = items_hbl.map((item) => ({
-         tracking_number: item.hbl,
-         description: item.description,
-         external_reference: item.external_reference || null,
-         weight: item.weight,
-         status: Status.IN_AGENCY,
-         user_id: user_id,
-         agency_id: agency_id,
-         service_id: service_id,
-         // Create initial event when parcel is created
-         events: {
-            create: {
-               event_type: "BILLED" as const,
-               user_id: user_id,
-               status: Status.IN_AGENCY,
-            },
-         },
-      }));
+      // 3) Fees / totals (igual que tú)
+      const finalTotal = calculateOrderTotal(items);
 
-      //calculate delivery fee for each item temporarily
-      const finalTotal = calculateOrderTotal(items_hbl);
-
-      // Distribute cents across items without losing rounding (e.g., 600 cents over 11 items must still sum to 600).
       const totalDeliveryFeeCents = Math.round(total_delivery_fee_in_cents ?? 0);
-      const perItemDeliveryFees = distributeCents(totalDeliveryFeeCents, items_hbl.length);
-      for (let i = 0; i < items_hbl.length; i++) {
-         items_hbl[i].delivery_fee_in_cents = perItemDeliveryFees[i] ?? 0;
-      }
-      // 🚀 OPTIMIZATION: Fast path for frontend (IDs provided, no lookups needed)
-      if (customer_id && receiver_id) {
-         // Transform items_hbl to use relation syntax for nested creates
-         const orderItemsWithRelations = items_hbl.map((item) => ({
-            hbl: item.hbl,
-            description: item.description,
-            price_in_cents: item.price_in_cents,
-            charge_fee_in_cents: item.charge_fee_in_cents,
-            delivery_fee_in_cents: item.delivery_fee_in_cents,
-            rate: { connect: { id: item.rate_id } },
-            insurance_fee_in_cents: item.insurance_fee_in_cents,
-            customs_fee_in_cents: item.customs_fee_in_cents,
-            quantity: item.quantity,
-            weight: item.weight,
-            agency: { connect: { id: item.agency_id } },
-            service: { connect: { id: service_id } },
-            unit: item.unit,
-            status: Status.IN_AGENCY,
-            // Connect to parcel created at Order level (matching by tracking_number)
-            parcel: {
-               connect: { tracking_number: item.hbl },
-            },
-         }));
-
-         const orderData: Prisma.OrderUncheckedCreateInput = {
-            partner_order_id,
-            customer_id,
-            receiver_id,
-            service_id,
-            user_id,
-            agency_id,
-            status: Status.IN_AGENCY,
-            requires_home_delivery,
-            partner_id,
-            // Create parcels at Order level so they get order_id automatically
-            // Events are created nested within each parcel
-            parcels: {
-               create: parcels,
-            },
-            order_items: {
-               create: orderItemsWithRelations,
-            },
-            total_in_cents: finalTotal + (total_delivery_fee_in_cents || 0),
-         };
-
-         const order = await repository.orders.create(orderData);
-
-         // 🚀 Non-blocking receiver connection
-         repository.receivers
-   
-               .connect(receiver_id, customer_id)
-            .catch((err) => console.error("Receiver connection failed (non-critical):", err));
-         //connect customer to agency
-         repository.agencies.addCustomerToAgency(agency_id, customer_id);
-         //connect receiver to agency
-         repository.agencies.addReceiverToAgency(agency_id, receiver_id);
-         return order;
+      const perItemDeliveryFees = distributeCents(totalDeliveryFeeCents, items.length);
+      for (let i = 0; i < items.length; i++) {
+         items[i].delivery_fee_in_cents = perItemDeliveryFees[i] ?? 0;
       }
 
-      // Slow path for partners (requires entity resolution/creation)
-      const [resolvedReceiver, resolvedCustomer] = await Promise.all([
-         services.resolvers.resolveReceiver({
-            receiver_id,
-            receiver,
-         }),
-         services.resolvers.resolveCustomer({
-            customer_id,
-            customer,
-         }),
-      ]);
+      const total_in_cents = finalTotal + (total_delivery_fee_in_cents || 0);
 
-      // Transform items_hbl to use relation syntax for nested creates
-      const orderItemsWithRelations = items_hbl.map((item) => ({
-         hbl: item.hbl,
-         description: item.description,
-         price_in_cents: item.price_in_cents,
-         charge_fee_in_cents: item.charge_fee_in_cents,
-         delivery_fee_in_cents: item.delivery_fee_in_cents,
-         rate: { connect: { id: item.rate_id } },
-         insurance_fee_in_cents: item.insurance_fee_in_cents,
-         customs_fee_in_cents: item.customs_fee_in_cents,
-         quantity: item.quantity,
-         weight: item.weight,
-         agency: { connect: { id: item.agency_id } },
-         service: { connect: { id: service_id } },
-         unit: item.unit,
-         status: Status.IN_AGENCY,
-         // Connect to parcel created at Order level (matching by tracking_number)
-         parcel: {
-            connect: { tracking_number: item.hbl },
-         },
-      }));
+      // 4) Transacción única (ultra consistente)
+      const order = await prisma.$transaction(async (tx) => {
+         // A) Crear Order primero (para obtener orderId)
+         const createdOrder = await tx.order.create({
+            data: {
+               partner_order_id,
+               customer_id: finalCustomerId!,
+               receiver_id: finalReceiverId!,
+               service_id,
+               user_id,
+               agency_id,
+               status: Status.IN_AGENCY,
+               requires_home_delivery,
+               partner_id,
+               total_in_cents,
+            },
+            select: { id: true },
+         });
 
-      const orderData: Prisma.OrderUncheckedCreateInput = {
-         partner_order_id,
-         customer_id: resolvedCustomer.id,
-         receiver_id: resolvedReceiver.id,
-         service_id,
-         user_id,
-         agency_id,
-         status: Status.IN_AGENCY,
-         requires_home_delivery,
-         partner_id,
-         // Create parcels at Order level so they get order_id automatically
-         // Events are created nested within each parcel
-         parcels: {
-            create: parcels,
-         },
-         order_items: {
-            create: orderItemsWithRelations,
-         },
-         total_in_cents: finalTotal + (total_delivery_fee_in_cents || 0),
-      };
+         const orderId = createdOrder.id;
 
-      const order = await repository.orders.create(orderData);
+         // B) Generar HBLs terminando en 001.. (por orden)
+         const forwarder = await prisma.forwarder.findUnique({
+            where: {
+               id: agency_id,
+            },
+         });
+         const provider = (forwarder?.code ?? "CTE").toUpperCase(); // fallback si quieres
 
-      // 🚀 Non-blocking receiver connection
+         const yymm = todayYYMM("America/New_York");
+
+         // C) items <= 99
+         if (items.length > 99) throw new Error("Max 99 items per order");
+
+         const hbls = items.map((_, i) => buildHBL(provider, yymm, orderId, i + 1));
+
+         // C) Crear Parcels (HOY: 1 parcel por item)
+         await tx.parcel.createMany({
+            data: items.map((item, i) => ({
+               tracking_number: hbls[i], // interno por ahora
+               description: item.description,
+               external_reference: item.external_reference || null,
+               weight: item.weight,
+               status: Status.IN_AGENCY,
+               user_id,
+               agency_id,
+               current_agency_id: agency_id,
+               service_id,
+               order_id: orderId,
+            })),
+         });
+
+         // D) Leer parcels para mapear parcel_id por tracking_number (HBL)
+         const parcels = await tx.parcel.findMany({
+            where: { tracking_number: { in: hbls } },
+            select: { id: true, tracking_number: true },
+         });
+
+         const parcelIdByTracking = new Map(parcels.map((p) => [p.tracking_number, p.id]));
+
+         // E) Crear OrderItems con parcel_id directo (sin connect por tracking)
+         await tx.orderItem.createMany({
+            data: items.map((item, i) => ({
+               hbl: hbls[i],
+               description: item.description,
+               price_in_cents: item.price_in_cents,
+               charge_fee_in_cents: item.charge_fee_in_cents,
+               delivery_fee_in_cents: item.delivery_fee_in_cents,
+               insurance_fee_in_cents: item.insurance_fee_in_cents,
+               customs_fee_in_cents: item.customs_fee_in_cents,
+               quantity: item.quantity,
+               weight: item.weight,
+               agency_id: item.agency_id,
+               service_id,
+               unit: item.unit,
+               status: Status.IN_AGENCY,
+               rate_id: item.rate_id,
+               customs_rates_id: item.customs_rates_id || null,
+               order_id: orderId,
+               parcel_id: parcelIdByTracking.get(hbls[i])!, // ✅ FK directo
+            })),
+         });
+
+         // F) Crear eventos iniciales en batch (más rápido que nested)
+         await tx.parcelEvent.createMany({
+            data: parcels.map((p) => ({
+               parcel_id: p.id,
+               event_type: "BILLED",
+               user_id,
+               status: Status.IN_AGENCY,
+            })),
+         });
+
+         // G) Retornar la orden completa (ajusta include a tu gusto)
+         return tx.order.findUnique({
+            where: { id: orderId },
+            include: { parcels: true, order_items: true },
+         });
+      });
+
+      // Post tareas no críticas (igual que tu lógica)
       repository.receivers
-         .connect(resolvedReceiver.id, resolvedCustomer.id)
+         .connect(finalReceiverId!, finalCustomerId!)
          .catch((err) => console.error("Receiver connection failed (non-critical):", err));
-      //connect customer to agency
-      repository.agencies.addCustomerToAgency(agency_id, resolvedCustomer.id);
-      //connect receiver to agency
-      repository.agencies.addReceiverToAgency(agency_id, resolvedReceiver.id);
+
+      repository.agencies.addCustomerToAgency(agency_id, finalCustomerId!);
+      repository.agencies.addReceiverToAgency(agency_id, finalReceiverId!);
+
       return order;
    },
+
    payOrder: async (order_id: number, paymentData: Prisma.PaymentCreateInput, user_id: string): Promise<any> => {
       // Validate amount
       if (!paymentData.amount_in_cents || paymentData.amount_in_cents <= 0) {
@@ -226,7 +210,7 @@ console.log("items_hbl", items_hbl);
          charge = Math.round(paymentData.amount_in_cents * PAYMENT_CONFIG.CARD_PROCESSING_FEE_RATE);
          paymentData.charge_in_cents = charge;
          paymentData.notes = `Card processing fee (${PAYMENT_CONFIG.CARD_PROCESSING_FEE_RATE * 100}%): ${formatCents(
-            charge
+            charge,
          )}`;
       }
 
@@ -239,8 +223,8 @@ console.log("items_hbl", items_hbl);
          throw new AppError(
             StatusCodes.BAD_REQUEST,
             `Payment amount (${formatCents(paymentData.amount_in_cents)}) exceeds remaining balance (${formatCents(
-               newTotalWithCharge - order_to_pay.paid_in_cents
-            )})`
+               newTotalWithCharge - order_to_pay.paid_in_cents,
+            )})`,
          );
       }
 

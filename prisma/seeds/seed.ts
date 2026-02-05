@@ -26,6 +26,7 @@ async function main(): Promise<void> {
       update: {},
       create: {
          name: "Caribe Travel Express and Services Inc",
+         code: "CTE",
          address: "10230 NW 80th Ave, Miami, FL 33016",
          contact: "F Infanzon",
          phone: "3058513004",
@@ -238,13 +239,22 @@ async function main(): Promise<void> {
       }
    }
 
-   // Recreate the unique constraints
+   // Recreate the unique constraints only if they don't exist (idempotent).
+   // PostgreSQL implements UNIQUE as an index; check pg_class (relation) since error is "relation already exists".
    console.log("   Recreating unique constraints...");
-   await prisma.$executeRawUnsafe(
-      `ALTER TABLE "Province" ADD CONSTRAINT "Province_code_key" UNIQUE (code)`
+   await prisma.$executeRawUnsafe(`
+      DO $$ BEGIN
+         IF NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relname = 'Province_code_key' AND n.nspname = 'public') THEN
+            ALTER TABLE "Province" ADD CONSTRAINT "Province_code_key" UNIQUE (code);
+         END IF;
+      END $$`
    );
-   await prisma.$executeRawUnsafe(
-      `ALTER TABLE "City" ADD CONSTRAINT "City_province_id_code_key" UNIQUE (province_id, code)`
+   await prisma.$executeRawUnsafe(`
+      DO $$ BEGIN
+         IF NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relname = 'City_province_id_code_key' AND n.nspname = 'public') THEN
+            ALTER TABLE "City" ADD CONSTRAINT "City_province_id_code_key" UNIQUE (province_id, code);
+         END IF;
+      END $$`
    );
 
    console.log(`✅ Provinces and cities created`);

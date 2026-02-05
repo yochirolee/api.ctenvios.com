@@ -2,7 +2,7 @@ import { Customer, Receiver, Province, City, Prisma, Unit } from "@prisma/client
 import prisma from "../lib/prisma.client";
 import { AppError } from "../common/app-errors";
 import repository from "../repositories";
-import { generateHBLFast } from "../utils/pdf/generate-hbl";
+import { buildHBL } from "../utils/generate-hbl";
 import { pricingService } from "./pricing.service";
 import HttpStatusCodes from "../common/https-status-codes";
 import { createReceiverSchema } from "../types/types";
@@ -188,7 +188,7 @@ export const resolvers = {
 
       throw new AppError(HttpStatusCodes.BAD_REQUEST, "Customer mobile, first_name, and last_name are required");
    },
-   resolveItemsWithHbl: async ({
+  /*  resolveItemsWithHbl: async ({
       order_items,
       service_id,
       agency_id,
@@ -198,9 +198,16 @@ export const resolvers = {
       agency_id: number;
    }): Promise<any[]> => {
       // 🚀 OPTIMIZATION: Extract unique rate IDs efficiently (single pass, no intermediate arrays)
-
+      const forwarder = await prisma.forwarder.findUnique({
+         where: {
+            id: agency_id,
+         },
+      });
+      if (!forwarder?.code) {
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Forwarder code not found");
+      }
       // 🚀 OPTIMIZATION: Parallelize HBL generation and rate fetching
-      const allHblCodes = await generateHBLFast(agency_id, service_id, order_items.length);
+      const allHblCodes = await buildHBL(forwarder?.code || "", todayYYDDD("America/New_York"), 1, order_items.length);
 
       const rates = await pricingService.getRatesByServiceIdAndAgencyId(service_id, agency_id);
 
@@ -234,5 +241,54 @@ export const resolvers = {
          };
       }
       return items_hbl;
+   }, */
+   resolveItems: async ({
+      order_items,
+      service_id,
+      agency_id,
+   }: {
+      order_items: any[];
+      service_id: number;
+      agency_id: number;
+   }): Promise<any[]> => {
+      // ⚡ Obtener rates UNA vez
+      const rates = await pricingService.getRatesByServiceIdAndAgencyId(service_id, agency_id);
+
+      // ⚡ Indexar rates por id (evita rates.find O(n²))
+      const rateById = new Map<number, any>();
+      for (const r of rates) rateById.set(r.id, r);
+
+      const items: any[] = new Array(order_items.length);
+
+      for (let i = 0; i < order_items.length; i++) {
+         const item = order_items[i];
+         const rate = rateById.get(item.rate_id);
+
+         if (!rate) {
+            throw new AppError(
+               HttpStatusCodes.NOT_FOUND,
+               `Rate with ID ${item.rate_id} not found or not exists for your agency ${agency_id}`
+            );
+         }
+
+         items[i] = {
+            external_reference: item.external_reference || null,
+            description: item.description,
+            price_in_cents: item.price_in_cents ?? rate.price_in_cents ?? 0,
+            charge_fee_in_cents: item.charge_fee_in_cents ?? 0,
+            delivery_fee_in_cents: item.delivery_fee_in_cents ?? 0,
+            rate_id: item.rate_id,
+            insurance_fee_in_cents: item.insurance_fee_in_cents ?? 0,
+            customs_fee_in_cents: item.customs_fee_in_cents ?? 0,
+            customs_rates_id: item.customs_rates_id ?? null,
+            quantity: item.quantity ?? 1,
+            weight: item.weight,
+            service_id,
+            agency_id,
+            unit: rate.unit ?? item.unit ?? Unit.PER_LB,
+         };
+      }
+
+      return items;
    },
 };
