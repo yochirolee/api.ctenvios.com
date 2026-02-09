@@ -4,7 +4,7 @@ config:
       timeout: 30
    defaults:
       headers:
-         Authorization: "Bearer 8wBhADBa7LdBO3Nnkwmi6mRqBN9IAi17"
+         Authorization: "Bearer K3MyWdp8kkImKyEKHUQkyvNACV6JPL3m"
    phases:
       # Simulate sudden traffic spikes
       - duration: 30

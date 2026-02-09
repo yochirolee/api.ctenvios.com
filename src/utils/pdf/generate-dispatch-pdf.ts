@@ -6,11 +6,7 @@ import { formatCents, toNumber } from "../utils";
 import { getPricingBetweenAgencies, clearPricingCache } from "../agency-hierarchy";
 import { calculate_row_subtotal } from "../utils";
 
-// Simple capitalize helper for single names
-function capitalize(str: string | null | undefined): string {
-   if (!str) return "";
-   return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
-}
+
 
 // Type for dispatch with details from repository
 export interface DispatchPdfDetails {
@@ -56,34 +52,34 @@ export interface DispatchPdfDetails {
       status: string;
       weight: any;
       order_id: number | null;
-      order_items: Array<{
-         id: number;
-         description: string | null;
-         weight: any;
-         unit: string;
-         price_in_cents: number;
-         insurance_fee_in_cents: number | null;
-         customs_fee_in_cents: number;
-         delivery_fee_in_cents: number | null;
-         service_id: number;
-         service: { id: number } | null;
-         rate: {
-            price_in_cents: number;
-            product: { id: number; unit: string } | null;
-            service: { id: number } | null;
-            pricing_agreement: {
-               price_in_cents: number;
-            } | null;
-         } | null;
-      }>;
       order: {
          id: number;
-         receiver: {
+         _count?: { parcels: number };
+         receiver?: {
             first_name: string;
             last_name: string;
             city: { name: string } | null;
             province: { name: string } | null;
          };
+         order_items: Array<{
+            parcel_id: number | null;
+            description: string | null;
+            weight: any;
+            unit: string;
+            price_in_cents: number;
+            insurance_fee_in_cents: number | null;
+            customs_fee_in_cents: number;
+            delivery_fee_in_cents: number | null;
+            charge_fee_in_cents?: number | null;
+            service_id: number;
+            service: { id: number } | null;
+            rate: {
+               price_in_cents: number;
+               product: { id: number; unit: string } | null;
+               service: { id: number } | null;
+               pricing_agreement: { price_in_cents: number } | null;
+            } | null;
+         }>;
       } | null;
    }>;
    inter_agency_debts: Array<{
@@ -121,6 +117,8 @@ const COLORS = {
    SUCCESS: "#16a34a",
    WARNING: "#d97706",
    DESTRUCTIVE: "#dc2626",
+   /** Background for rows where the order is split (not all parcels in this dispatch) */
+   SPLIT_ORDER_BG: "#fef3c7",
 };
 
 // Cache for logo
@@ -216,10 +214,18 @@ export async function generateDispatchPDF(dispatch: DispatchPdfDetails): Promise
    doc.font(FONTS.REGULAR).fontSize(8).fillColor(COLORS.MUTED_FOREGROUND);
    doc.text(`Fecha: ${formatDate(dispatch.created_at)}`, rightX, y + 28, { align: "right", width: 240 });
 
-   // Weight and Items stats
-   const totalWeight = toNumber(dispatch.weight).toFixed(2);
+   // Order count, weight and items stats (weight from parcels when dispatch.weight is 0)
+   const orderCount = new Set(
+      dispatch.parcels.map((p) => p.order_id ?? p.order?.id).filter((id): id is number => id != null)
+   ).size;
+   const dispatchWeight = toNumber(dispatch.weight);
+   const summedWeight =
+      dispatchWeight > 0
+         ? dispatchWeight
+         : dispatch.parcels.reduce((acc, p) => acc + toNumber(p.weight), 0);
+   const totalWeight = summedWeight.toFixed(2);
    doc.font(FONTS.SEMIBOLD).fontSize(9).fillColor(COLORS.FOREGROUND);
-   doc.text(`Weight: ${totalWeight} lbs  •  Items: ${dispatch.parcels.length}`, rightX, y + 40, {
+   doc.text(`Orders: ${orderCount}  •  Items: ${dispatch.parcels.length}  •  Weight: ${totalWeight} lbs`, rightX, y + 40, {
       align: "right",
       width: 240,
    });
@@ -261,29 +267,35 @@ export async function generateDispatchPDF(dispatch: DispatchPdfDetails): Promise
    doc.text("DETALLE DE BULTOS", leftMargin, y);
    y += 20;
 
+   // Order items for a parcel come from parcel.order.order_items (filtered by parcel_id)
+   type ParcelWithOrder = (typeof dispatch.parcels)[number];
+   const getOrderItemsForParcel = (parcel: ParcelWithOrder) =>
+      parcel.order?.order_items?.filter((it) => it.parcel_id === parcel.id) ?? [];
+
    // Pre-calculate parcel financials using pricing agreement between sender↔receiver agencies
    interface ParcelFinancials {
-      unitRateInCents: number; // The agreed rate ($/lb or fixed) - for display
+      unitRateInCents: number;
       insuranceInCents: number;
       customsInCents: number;
       chargeInCents: number;
-      subtotalInCents: number; // Calculated with calculate_row_subtotal
-      unit: string; // PER_LB or fixed
+      subtotalInCents: number;
+      unit: string;
    }
    const parcelFinancials = new Map<number, ParcelFinancials>();
    const sender_agency_id = dispatch.sender_agency.id;
    const receiver_agency_id = dispatch.receiver_agency?.id;
 
    for (const parcel of dispatch.parcels) {
+      const items = getOrderItemsForParcel(parcel);
       let totalInsuranceInCents = 0;
       let totalCustomsInCents = 0;
       let totalChargeInCents = 0;
       let totalSubtotalInCents = 0;
-      let totalPriceInCents = 0; // Sum of all prices (for fixed) or first rate (for PER_LB)
+      let totalPriceInCents = 0;
       let displayUnit = "PER_LB";
       let isFirstItem = true;
 
-      for (const item of parcel.order_items) {
+      for (const item of items) {
          // Get product_id and service_id from the rate (consistent with PricingAgreement)
          const product_id = item.rate?.product?.id;
          const service_id = item.rate?.service?.id || item.service?.id || item.service_id;
@@ -330,7 +342,7 @@ export async function generateDispatchPDF(dispatch: DispatchPdfDetails): Promise
 
          const itemInsurance = item.insurance_fee_in_cents || 0;
          const itemCustoms = item.customs_fee_in_cents || 0;
-         const itemCharge = (item as any).charge_fee_in_cents || 0;
+         const itemCharge = item.charge_fee_in_cents || 0;
 
          // Calculate subtotal using the inter-agency pricing agreement rate
          const itemSubtotal = calculate_row_subtotal(
@@ -366,26 +378,47 @@ export async function generateDispatchPDF(dispatch: DispatchPdfDetails): Promise
    const rightMargin = PAGE_WIDTH - 20;
    const columnGap = 5;
    const subtotalWidth = 55;
-   const pesoWidth = 40;
-   const precioWidth = 35;
+   const pesoWidth = 32;
+   const precioWidth = 28;
    const arancelWidth = 35;
    const cargoWidth = 35;
    const seguroWidth = 35;
+   const hblWidth = 92;
+   const orderWidth = 28;
 
-   // Position from right to left
+   // Position: Orden first, then Hbl, then Descripción
+   const orderX = leftMargin;
+   const hblX = orderX + orderWidth + columnGap;
+   const descriptionX = hblX + hblWidth + columnGap;
+
+   // Position from right to left (financial columns); Peso tight to Subtotal (more to the right)
    const subtotalX = rightMargin - subtotalWidth;
-   const pesoX = subtotalX - columnGap - pesoWidth;
+   const pesoX = subtotalX - pesoWidth;
    const precioX = pesoX - columnGap - precioWidth;
    const arancelX = precioX - columnGap - arancelWidth;
    const cargoX = arancelX - columnGap - cargoWidth;
    const seguroX = cargoX - columnGap - seguroWidth;
-   const descriptionX = 105;
    const descriptionWidth = seguroX - descriptionX - columnGap;
+
+   // How many parcels in this dispatch per order_id (for split detection)
+   const parcelsInDispatchByOrderId = new Map<number, number>();
+   for (const p of dispatch.parcels) {
+      const oid = p.order_id ?? p.order?.id ?? null;
+      if (oid != null) parcelsInDispatchByOrderId.set(oid, (parcelsInDispatchByOrderId.get(oid) ?? 0) + 1);
+   }
+   const isSplitOrder = (parcel: (typeof dispatch.parcels)[number]): boolean => {
+      const oid = parcel.order_id ?? parcel.order?.id ?? null;
+      if (oid == null) return false;
+      const total = parcel.order?._count?.parcels ?? 0;
+      const inDispatch = parcelsInDispatchByOrderId.get(oid) ?? 0;
+      return total > 0 && inDispatch < total;
+   };
 
    // Helper function to draw table headers
    const drawTableHeaders = (headerY: number): number => {
       const headers = [
-         { text: "Hbl", x: leftMargin, width: 90, align: "left" },
+         { text: "Orden", x: orderX, width: orderWidth, align: "left" },
+         { text: "Hbl", x: hblX, width: hblWidth, align: "left" },
          { text: "Descripción", x: descriptionX, width: descriptionWidth, align: "left" },
          { text: "Seguro", x: seguroX, width: seguroWidth, align: "right" },
          { text: "Cargo", x: cargoX, width: cargoWidth, align: "right" },
@@ -417,8 +450,12 @@ export async function generateDispatchPDF(dispatch: DispatchPdfDetails): Promise
    // Draw initial headers
    y = drawTableHeaders(y + 10);
 
-   // Table rows
+   // Table rows – center text vertically using measured line height
    const rowHeight = 22;
+   const rowFontSize = 8;
+   doc.font(FONTS.REGULAR).fontSize(rowFontSize);
+   // Baseline at row center so text stays inside row (PDFKit y = baseline; most height is above it)
+   const textY = (rowY: number) => rowY + rowHeight / 2;
    const bottomMargin = 60;
    for (const [index, parcel] of dispatch.parcels.entries()) {
       // Check if we need a new page
@@ -438,50 +475,59 @@ export async function generateDispatchPDF(dispatch: DispatchPdfDetails): Promise
          unit: "PER_LB",
       };
 
-      const textY = y + 2;
+      const rowTextY = textY(y);
+      const isSplit = isSplitOrder(parcel);
+
+      // Background for split orders (not all parcels of this order are in this dispatch)
+      if (isSplit) {
+         doc.rect(leftMargin, y, rightMargin - leftMargin, rowHeight).fill(COLORS.SPLIT_ORDER_BG);
+      }
+
+      // Orden (Order ID)
+      doc.font(FONTS.REGULAR).fontSize(rowFontSize).fillColor(COLORS.FOREGROUND);
+      const orderId = parcel.order_id ?? parcel.order?.id ?? "—";
+      doc.text(String(orderId), orderX, rowTextY, { width: orderWidth });
 
       // HBL
-      doc.font(FONTS.REGULAR).fontSize(8).fillColor(COLORS.FOREGROUND);
-      doc.text(parcel.tracking_number, leftMargin, textY, { width: 100 });
+      doc.text(parcel.tracking_number, hblX, rowTextY, { width: hblWidth });
 
-      // Description (from order_items)
+      // Description (trimmed) from order items for this parcel
+      const parcelItems = getOrderItemsForParcel(parcel);
       const description =
-         parcel.order_items.length > 0
-            ? parcel.order_items
+         parcelItems.length > 0
+            ? parcelItems
                  .map((item) => item.description || "")
                  .filter(Boolean)
                  .join(", ") || "N/A"
             : "N/A";
-      doc.font(FONTS.REGULAR).fontSize(8).fillColor(COLORS.FOREGROUND);
-      doc.text(description.substring(0, 35) + (description.length > 35 ? "..." : ""), descriptionX, textY, {
-         width: descriptionWidth,
-      });
+      const descTrimmed = description.length > 28 ? description.substring(0, 28) + "…" : description;
+      doc.text(descTrimmed, descriptionX, rowTextY, { width: descriptionWidth });
 
       // Seguro (Insurance)
       const insuranceColor = financials.insuranceInCents === 0 ? COLORS.MUTED_FOREGROUND : COLORS.FOREGROUND;
       doc.font(FONTS.REGULAR).fontSize(7).fillColor(insuranceColor);
-      doc.text(formatCents(financials.insuranceInCents), seguroX, textY, { width: seguroWidth, align: "right" });
+      doc.text(formatCents(financials.insuranceInCents), seguroX, rowTextY, { width: seguroWidth, align: "right" });
 
       // Cargo (Charge)
       const cargoColor = financials.chargeInCents === 0 ? COLORS.MUTED_FOREGROUND : COLORS.FOREGROUND;
       doc.fillColor(cargoColor);
-      doc.text(formatCents(financials.chargeInCents), cargoX, textY, { width: cargoWidth, align: "right" });
+      doc.text(formatCents(financials.chargeInCents), cargoX, rowTextY, { width: cargoWidth, align: "right" });
 
       // Arancel (Customs)
       const customsColor = financials.customsInCents === 0 ? COLORS.MUTED_FOREGROUND : COLORS.FOREGROUND;
       doc.fillColor(customsColor);
-      doc.text(formatCents(financials.customsInCents), arancelX, textY, { width: arancelWidth, align: "right" });
+      doc.text(formatCents(financials.customsInCents), arancelX, rowTextY, { width: arancelWidth, align: "right" });
 
       // Precio
       doc.fillColor(COLORS.FOREGROUND);
-      doc.text(formatCents(financials.unitRateInCents), precioX, textY, { width: precioWidth, align: "right" });
+      doc.text(formatCents(financials.unitRateInCents), precioX, rowTextY, { width: precioWidth, align: "right" });
 
       // Peso (Weight)
-      doc.text(`${toNumber(parcel.weight).toFixed(2)}`, pesoX, textY, { width: pesoWidth, align: "right" });
+      doc.text(`${toNumber(parcel.weight).toFixed(2)}`, pesoX, rowTextY, { width: pesoWidth, align: "right" });
 
       // Subtotal
       doc.font(FONTS.SEMIBOLD).fontSize(7).fillColor(COLORS.FOREGROUND);
-      doc.text(formatCents(financials.subtotalInCents), subtotalX, textY, { width: subtotalWidth, align: "right" });
+      doc.text(formatCents(financials.subtotalInCents), subtotalX, rowTextY, { width: subtotalWidth, align: "right" });
 
       // Row border
       doc.strokeColor(COLORS.BORDER)
@@ -505,8 +551,18 @@ export async function generateDispatchPDF(dispatch: DispatchPdfDetails): Promise
       if (financials) {
          grandSubtotalInCents += financials.subtotalInCents;
       }
-      // Sum delivery fees from order_items
-      for (const item of parcel.order_items) {
+   }
+
+   // Delivery: sum per order once (order_items.delivery_fee_in_cents). If parcel_id is set we use
+   // items for that parcel; otherwise we use all order_items for the order so delivery is not 0.
+   const deliverySummedForOrderId = new Set<number>();
+   for (const parcel of dispatch.parcels) {
+      const orderId = parcel.order_id ?? parcel.order?.id ?? null;
+      if (orderId == null || deliverySummedForOrderId.has(orderId)) continue;
+      deliverySummedForOrderId.add(orderId);
+      const items =
+         parcel.order?.order_items ?? [];
+      for (const item of items) {
          grandDeliveryInCents += item.delivery_fee_in_cents || 0;
       }
    }

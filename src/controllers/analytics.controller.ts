@@ -15,6 +15,7 @@ const isAdminUser = (role: Roles): boolean => {
 const analytics = {
    getSalesReport: async (req: any, res: Response): Promise<void> => {
       let { year, agencyId, startDate, endDate } = req.query;
+      
       const user = req.user;
       const isAdmin = isAdminUser(user.role);
 

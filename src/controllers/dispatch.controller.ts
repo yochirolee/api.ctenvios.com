@@ -52,7 +52,7 @@ export const dispatchController = {
       if (payment_status && !validPaymentStatuses.includes(payment_status as PaymentStatus)) {
          throw new AppError(
             HttpStatusCodes.BAD_REQUEST,
-            `Invalid payment_status. Valid values: ${validPaymentStatuses.join(", ")}`
+            `Invalid payment_status. Valid values: ${validPaymentStatuses.join(", ")}`,
          );
       }
 
@@ -62,7 +62,7 @@ export const dispatchController = {
          isAdmin ? undefined : user.agency_id,
          status as DispatchStatus | undefined,
          payment_status as PaymentStatus | undefined,
-         dispatch_id ? parseInt(dispatch_id) : undefined
+         dispatch_id ? parseInt(dispatch_id) : undefined,
       );
 
       res.status(200).json({ rows, total });
@@ -119,7 +119,7 @@ export const dispatchController = {
       const { parcels, total } = await repository.dispatch.readyForDispatch(
          user.agency_id,
          parseInt(page),
-         parseInt(limit)
+         parseInt(limit),
       );
 
       res.status(200).json({ rows: parcels, total });
@@ -136,7 +136,7 @@ export const dispatchController = {
          dispatchId,
          status as any,
          parseInt(page),
-         parseInt(limit)
+         parseInt(limit),
       );
 
       res.status(200).json({ rows: parcels, total });
@@ -183,7 +183,7 @@ export const dispatchController = {
       const result = await repository.dispatch.receiveParcelsWithoutDispatch(
          tracking_numbers,
          user.agency_id, // receiver_agency_id (warehouse receiving the parcels)
-         user.id
+         user.id,
       );
 
       res.status(201).json(result);
@@ -340,7 +340,7 @@ export const dispatchController = {
          if (!parentAgency) {
             throw new AppError(
                HttpStatusCodes.BAD_REQUEST,
-               "Sender agency has no parent. Please specify receiver_agency_id"
+               "Sender agency has no parent. Please specify receiver_agency_id",
             );
          }
          receiverAgencyId = parentAgency.id;
@@ -350,14 +350,14 @@ export const dispatchController = {
       if (receiverAgencyId === dispatch.sender_agency_id) {
          throw new AppError(
             HttpStatusCodes.BAD_REQUEST,
-            "An agency cannot receive dispatches from itself. Please specify a different receiver_agency_id"
+            "An agency cannot receive dispatches from itself. Please specify a different receiver_agency_id",
          );
       }
 
       const updatedDispatch = await repository.dispatch.completeDispatch(
          dispatchId,
          receiverAgencyId,
-         dispatch.sender_agency_id
+         dispatch.sender_agency_id,
       );
 
       res.status(200).json(updatedDispatch);
@@ -443,7 +443,7 @@ export const dispatchController = {
          dispatchId,
          isRoot ? null : user.agency_id!,
          user.id,
-         user.role
+         user.role,
       );
 
       res.status(200).json({ message: "Dispatch deleted successfully", dispatch: deletedDispatch });

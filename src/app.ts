@@ -20,6 +20,7 @@ const corsOptions = {
          "https://dev.ctenvios.com",
          "https://systemcaribetravel.com",
          "http://192.168.1.157",
+         "https://atlas.ctenvios.com",
       ];
 
       // Allow requests with no origin (like mobile apps, Postman, etc.)
@@ -61,7 +62,7 @@ app.use(express.json());
 app.use(
    helmet({
       crossOriginResourcePolicy: { policy: "cross-origin" },
-   })
+   }),
 );
 app.use(morgan("dev"));
 app.use(compression());

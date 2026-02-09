@@ -1,51 +1,64 @@
 import { Router } from "express";
-const router = Router();
+import { Readable } from "node:stream";
 
+const router = Router();
 const electric_url = `https://api.ctenvios.com/v1/shape`;
 
 router.get("/shape", async (req, res) => {
-   const searchParams = new URLSearchParams();
+   const qs = new URLSearchParams();
 
-   // Forward all query parameters from the request
-   Object.keys(req.query).forEach((key) => {
-      const value = req.query[key];
-      if (value !== undefined && value !== null) {
-         searchParams.set(key, String(value));
-      }
-   });
+   // Solo keys “shape” en query
+   const pass = new Set([
+      "table", "offset", "handle", "cursor", "live", "log", "columns",
+      "where", "subset__limit", "subset__offset", "subset__order_by", "subset__where", "subset__params",
+   ]);
+   for (const [k, v] of Object.entries(req.query)) {
+      if (v == null) continue;
+      if (!pass.has(k) && !k.startsWith("subset__")) continue;
+      if (Array.isArray(v)) v.forEach((x) => qs.append(k, String(x)));
+      else qs.set(k, String(v));
+   }
+   if (!req.query.offset) qs.set("offset", "-1");
 
-   // Use query params from request or default to -1 for offset
-   if (!req.query.offset) {
-      searchParams.set(`offset`, "-1");
+   // Body subset
+   const body: any = {};
+   if (typeof req.query.where === "string") body.where = req.query.where;
+
+   // binds or params -> body.params (Electric client sends "params", we also accept "binds")
+   const paramsRaw = typeof req.query.params === "string" ? req.query.params : typeof req.query.binds === "string" ? req.query.binds : undefined;
+   if (paramsRaw) {
+      const parsed = JSON.parse(paramsRaw);
+      body.params = parsed; // Electric espera { "1": 1 }
    }
 
    const url = new URL(electric_url);
-   url.search = searchParams.toString();
+   url.search = qs.toString();
 
-   const response = await fetch(url);
+   const upstream = await fetch(url, {
+      method: Object.keys(body).length ? "POST" : "GET",
+      headers: {
+         authorization: req.headers.authorization ?? "",
+         "content-type": "application/json",
+      },
+      body: Object.keys(body).length ? JSON.stringify(body) : undefined,
+   });
 
-   console.log("response headers", response);
+   res.status(upstream.status);
 
-   // Forward ALL headers from Electric service response
-   // This must be done before calling res.json() or res.send()
-   response.headers.forEach((value, key) => {
-      // Skip headers that Express manages automatically
-      const lowerKey = key.toLowerCase();
-      if (
-         lowerKey !== "content-encoding" &&
-         lowerKey !== "content-length" &&
-         lowerKey !== "transfer-encoding" &&
-         lowerKey !== "connection"
-      ) {
+   upstream.headers.forEach((value, key) => {
+      const lower = key.toLowerCase();
+      if (!["content-encoding", "content-length", "transfer-encoding", "connection"].includes(lower)) {
          res.setHeader(key, value);
       }
    });
 
-   // Forward status code
-   res.status(response.status);
+   res.setHeader(
+      "Access-Control-Expose-Headers",
+      "electric-offset,electric-handle,electric-schema,electric-cursor,next-offset",
+   );
 
-   const data = await response.json();
-   res.json(data);
+   if (!upstream.body) return res.end();
+   Readable.fromWeb(upstream.body as Parameters<typeof Readable.fromWeb>[0]).pipe(res);
 });
 
 export default router;
