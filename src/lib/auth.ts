@@ -4,7 +4,7 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import prisma from "./prisma.client";
 import { resend } from "../services/resend.service";
 
-const FRONTEND_URL = process.env.NODE_ENV === "production" ? "https://dev.ctenvios.com" : "http://localhost:5173";
+const FRONTEND_URL = "https://atlas.ctenvios.com";
 
 export const auth = betterAuth({
    baseURL: FRONTEND_URL,

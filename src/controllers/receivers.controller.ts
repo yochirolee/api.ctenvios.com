@@ -58,7 +58,7 @@ export const receivers = {
       });
    },
    create: async (req: Request, res: Response) => {
-      const { first_name, last_name, middle_name, second_last_name, mobile, ci, address, email, province_id, city_id } =
+      const { first_name, last_name, middle_name, second_last_name, mobile,phone, ci, address, email, province_id, city_id } =
          req.body;
       const new_receiver = {
          ci: ci?.trim() || null,
@@ -67,6 +67,7 @@ export const receivers = {
          last_name: capitalize(last_name.trim()),
          middle_name: middle_name ? capitalize(middle_name.trim()) : null,
          second_last_name: second_last_name ? capitalize(second_last_name.trim()) : null,
+         phone: phone?.trim() || null,
          mobile: mobile.replace(/\s+/g, ""),
          address: address?.trim() || null,
          province_id: parseInt(province_id),
