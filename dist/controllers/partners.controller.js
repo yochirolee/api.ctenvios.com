@@ -357,9 +357,10 @@ const partners = {
             labels: orderLabelsPdfUrl,
             hbls: orderHblPdfUrl,
         };
+        const { parcels } = orderResult, orderResponse = __rest(orderResult, ["parcels"]);
         res.status(200).json({
             message: "Order created successfully",
-            data: orderResult,
+            data: orderResponse,
         });
     }),
     getServices: (req, res) => __awaiter(void 0, void 0, void 0, function* () {

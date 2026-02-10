@@ -434,9 +434,11 @@ const partners = {
          hbls: orderHblPdfUrl,
       };
 
+      const { parcels, ...orderResponse } = orderResult;
+
       res.status(200).json({
          message: "Order created successfully",
-         data: orderResult,
+         data: orderResponse,
       });
    },
 
