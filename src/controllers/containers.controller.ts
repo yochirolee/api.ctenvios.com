@@ -312,7 +312,7 @@ export const containers = {
    },
 
    /**
-    * Get parcels ready to be added to container
+    * Get parcels ready to be added to container (uses unified parcels listFiltered)
     */
    getReadyForContainer: async (req: ContainerRequest, res: Response): Promise<void> => {
       const page = Number(req.query.page) || 1;
@@ -332,11 +332,28 @@ export const containers = {
          throw new AppError("Agency must be associated with a forwarder", 403);
       }
 
-      const result = await containersRepository.getReadyParcels(agency.forwarder_id, page, limit);
+      const allowedStatuses: Status[] = [
+         Status.IN_AGENCY,
+         Status.IN_PALLET,
+         Status.IN_DISPATCH,
+         Status.RECEIVED_IN_DISPATCH,
+         Status.IN_WAREHOUSE,
+      ];
+      const { rows, total } = await repository.parcels.listFiltered(
+         {
+            forwarder_id: agency.forwarder_id,
+            container_id_null: true,
+            flight_id_null: true,
+            service_type: "MARITIME",
+            status_in: allowedStatuses,
+         },
+         page,
+         limit,
+      );
 
       res.status(200).json({
-         rows: result.parcels,
-         total: result.total,
+         rows,
+         total,
          page,
          limit,
       });

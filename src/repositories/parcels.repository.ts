@@ -1,5 +1,6 @@
 import prisma from "../lib/prisma.client";
-import { Parcel, Status } from "@prisma/client";
+import { Parcel, Prisma, ServiceType, Status } from "@prisma/client";
+import { buildNameSearchFilter } from "../types/types";
 
 const listSelect = {
    id: true,
@@ -32,8 +33,13 @@ const parcels = {
    getAllPaginated: async (
       where: { status?: Status },
       page: number,
-      limit: number
-   ): Promise<{ rows: Array<Pick<Parcel, "id" | "tracking_number" | "description" | "weight" | "status" | "created_at" | "updated_at">>; total: number }> => {
+      limit: number,
+   ): Promise<{
+      rows: Array<
+         Pick<Parcel, "id" | "tracking_number" | "description" | "weight" | "status" | "created_at" | "updated_at">
+      >;
+      total: number;
+   }> => {
       const [rows, total] = await Promise.all([
          prisma.parcel.findMany({
             where,
@@ -78,11 +84,7 @@ const parcels = {
    },
 
    /** Get parcels by order ID with service (data access only) */
-   getByOrderId: async (
-      orderId: number,
-      page = 1,
-      limit = 10
-   ): Promise<{ parcels: Parcel[]; total: number }> => {
+   getByOrderId: async (orderId: number, page = 1, limit = 10): Promise<{ parcels: Parcel[]; total: number }> => {
       const [parcels, total] = await Promise.all([
          prisma.parcel.findMany({
             where: { order_id: orderId },
@@ -171,9 +173,23 @@ const parcels = {
    getInAgency: async (
       agency_id: number,
       page = 1,
-      limit = 10
+      limit = 10,
    ): Promise<{
-      rows: Array<Pick<Parcel, "id" | "external_reference" | "tracking_number" | "description" | "weight" | "agency_id" | "service_id" | "status" | "order_id" | "dispatch_id">>;
+      rows: Array<
+         Pick<
+            Parcel,
+            | "id"
+            | "external_reference"
+            | "tracking_number"
+            | "description"
+            | "weight"
+            | "agency_id"
+            | "service_id"
+            | "status"
+            | "order_id"
+            | "dispatch_id"
+         >
+      >;
       total: number;
    }> => {
       const where = { agency_id, dispatch_id: null };
@@ -201,12 +217,157 @@ const parcels = {
       return { rows, total };
    },
 
+   /**
+    * Paginated list with optional filters: status, hbl (search), order_id, agency_id,
+    * description, customer (name), receiver (name), dispatch_id_null, etc.
+    * Used by GET /parcels and by ready-for-dispatch / ready-for-container.
+    */
+   listFiltered: async (
+      filters: {
+         status?: Status;
+         status_in?: Status[];
+         hbl?: string;
+         order_id?: number;
+         agency_id?: number;
+         agency_id_in?: number[];
+         description?: string;
+         customer?: string;
+         receiver?: string;
+         dispatch_id_null?: boolean;
+         container_id_null?: boolean;
+         flight_id_null?: boolean;
+         forwarder_id?: number;
+         service_type?: string;
+      },
+      page: number,
+      limit: number,
+   ): Promise<{
+      rows: Array<{
+         id: number;
+         tracking_number: string;
+         description: string;
+         weight: Prisma.Decimal;
+         status: Status;
+         order_id: number | null;
+         external_reference: string | null;
+         agency_id: number | null;
+         agency: { id: number; name: string } | null;
+         service: { id: number; name: string } | null;
+         order: {
+            id: number;
+            customer: {
+               id: number;
+               first_name: string;
+               last_name: string;
+               middle_name: string | null;
+               second_last_name: string | null;
+               mobile: string;
+               address: string | null;
+            } | null;
+            receiver: {
+               id: number;
+               first_name: string;
+               last_name: string;
+               middle_name: string | null;
+               second_last_name: string | null;
+               mobile: string | null;
+               phone: string | null;
+               address: string;
+               province: { id: number; name: string } | null;
+               city: { id: number; name: string } | null;
+            } | null;
+         } | null;
+         updated_at: Date;
+      }>;
+      total: number;
+   }> => {
+      const where: Prisma.ParcelWhereInput = {
+         deleted_at: null,
+      };
+      if (filters.status != null) where.status = filters.status;
+      if (filters.status_in != null && filters.status_in.length > 0) where.status = { in: filters.status_in };
+      if (filters.hbl != null && filters.hbl.trim() !== "") {
+         where.tracking_number = { contains: filters.hbl.trim(), mode: "insensitive" };
+      }
+      if (filters.order_id != null) where.order_id = filters.order_id;
+      if (filters.agency_id_in != null && filters.agency_id_in.length > 0) {
+         where.agency_id = { in: filters.agency_id_in };
+      } else if (filters.agency_id != null) {
+         where.agency_id = filters.agency_id;
+      }
+      const descTrim = filters.description?.trim();
+      if (descTrim && descTrim !== "") {
+         where.description = { contains: descTrim, mode: "insensitive" };
+      }
+      const customerTrim = filters.customer?.trim();
+      const receiverTrim = filters.receiver?.trim();
+      if (customerTrim !== "" || receiverTrim !== "") {
+         const orderConditions: Prisma.OrderWhereInput[] = [];
+         if (customerTrim) {
+            const customerWords = customerTrim.split(/\s+/).filter(Boolean);
+            orderConditions.push({
+               customer: buildNameSearchFilter(customerWords) as Prisma.CustomerWhereInput,
+            });
+         }
+         if (receiverTrim) {
+            const receiverWords = receiverTrim.split(/\s+/).filter(Boolean);
+            orderConditions.push({
+               receiver: buildNameSearchFilter(receiverWords) as Prisma.ReceiverWhereInput,
+            });
+         }
+         where.order = orderConditions.length === 1 ? orderConditions[0] : { AND: orderConditions };
+      }
+      if (filters.dispatch_id_null === true) where.dispatch_id = null;
+      if (filters.container_id_null === true) where.container_id = null;
+      if (filters.flight_id_null === true) where.flight_id = null;
+      if (filters.forwarder_id != null) {
+         where.agency = { forwarder_id: filters.forwarder_id };
+      }
+      if (filters.service_type != null) {
+         where.service = { service_type: filters.service_type as unknown as ServiceType };
+      }
+
+      const select = {
+         id: true,
+         tracking_number: true,
+         description: true,
+         weight: true,
+         status: true,
+         order_id: true,
+         order: {
+            select: {
+               id: true,
+               customer: { select: { id: true, first_name: true, last_name: true, middle_name: true, second_last_name: true, mobile: true, address: true } },
+               receiver: { select: { id: true, first_name: true, last_name: true, middle_name: true, second_last_name: true, mobile: true, phone: true, address: true, province: { select: { id: true, name: true } }, city: { select: { id: true, name: true } } } },
+            },
+         },
+         external_reference: true,
+         agency_id: true,
+         agency: { select: { id: true, name: true } },
+         service: { select: { id: true, name: true } },
+         updated_at: true,
+      } as const;
+
+      const [rows, total] = await Promise.all([
+         prisma.parcel.findMany({
+            where,
+            orderBy: { updated_at: "desc" },
+            skip: (page - 1) * limit,
+            take: limit,
+            select,
+         }),
+         prisma.parcel.count({ where }),
+      ]);
+
+      return { rows, total };
+   },
+
    /** Update parcel status and create STATUS_CORRECTED event in a transaction (data access only). Returns null if parcel not found. */
    updateStatusWithEvent: async (
       hbl: string,
       status: Status,
       notes: string | null,
-      user_id: string
+      user_id: string,
    ): Promise<Parcel | null> => {
       const parcel = await prisma.parcel.findUnique({
          where: { tracking_number: hbl },

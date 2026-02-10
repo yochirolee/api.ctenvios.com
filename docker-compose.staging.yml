@@ -1,0 +1,68 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: ctenvios-postgres-staging
+    restart: unless-stopped
+    env_file:
+      - .env.staging
+    environment:
+      POSTGRES_USER: ${STAGING_POSTGRES_USER:-ctenvios}
+      POSTGRES_PASSWORD: ${STAGING_POSTGRES_PASSWORD:-change-me}
+      POSTGRES_DB: ${STAGING_POSTGRES_DB:-ctenvios_staging}
+    command: postgres -c wal_level=logical -c max_replication_slots=10 -c max_wal_senders=10
+    volumes:
+      - postgres_staging_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${STAGING_POSTGRES_USER:-ctenvios}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    ports:
+      - "${STAGING_POSTGRES_PORT:-5434}:5432"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.staging
+      target: staging
+    container_name: ctenvios-api-staging
+    restart: unless-stopped
+    env_file:
+      - .env.staging
+    environment:
+      - NODE_ENV=staging
+      - PORT=3000
+      - DATABASE_URL=postgresql://${STAGING_POSTGRES_USER:-ctenvios}:${STAGING_POSTGRES_PASSWORD:-change-me}@postgres:5432/${STAGING_POSTGRES_DB:-ctenvios_staging}?schema=public
+      - DIRECT_URL=postgresql://${STAGING_POSTGRES_USER:-ctenvios}:${STAGING_POSTGRES_PASSWORD:-change-me}@postgres:5432/${STAGING_POSTGRES_DB:-ctenvios_staging}?schema=public
+    ports:
+      - "${PORT:-3000}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 40s
+    volumes:
+      - ./assets:/app/assets:ro
+
+  electric-sql-api:
+    image: docker.io/electricsql/electric:latest
+    container_name: ctenvios-electric-staging
+    restart: unless-stopped
+    env_file:
+      - .env.staging
+    environment:
+      DATABASE_URL: postgresql://${STAGING_POSTGRES_USER:-ctenvios}:${STAGING_POSTGRES_PASSWORD:-change-me}@postgres:5432/${STAGING_POSTGRES_DB:-ctenvios_staging}
+      ELECTRIC_INSECURE: ${ELECTRIC_INSECURE:-true}
+    ports:
+      - "${STAGING_ELECTRIC_PORT:-3007}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_staging_data:

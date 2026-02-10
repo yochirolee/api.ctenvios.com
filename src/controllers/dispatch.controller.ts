@@ -1,5 +1,5 @@
 import { Response } from "express";
-import { DispatchStatus, PaymentStatus, Roles } from "@prisma/client";
+import { DispatchStatus, PaymentStatus, Roles, Status } from "@prisma/client";
 import repository from "../repositories";
 import { AppError } from "../common/app-errors";
 import HttpStatusCodes from "../common/https-status-codes";
@@ -106,7 +106,7 @@ export const dispatchController = {
    },
 
    /**
-    * Get parcels ready for dispatch in user's agency
+    * Get parcels ready for dispatch in user's agency (uses unified parcels listFiltered)
     */
    getReadyForDispatch: async (req: DispatchRequest, res: Response): Promise<void> => {
       const { page = "1", limit = "25" } = req.query;
@@ -116,13 +116,23 @@ export const dispatchController = {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must be associated with an agency");
       }
 
-      const { parcels, total } = await repository.dispatch.readyForDispatch(
-         user.agency_id,
+      const allowedStatuses: Status[] = [
+         Status.IN_AGENCY,
+         Status.IN_PALLET,
+         Status.IN_DISPATCH,
+         Status.IN_WAREHOUSE,
+      ];
+      const { rows, total } = await repository.parcels.listFiltered(
+         {
+            agency_id: user.agency_id,
+            dispatch_id_null: true,
+            status_in: allowedStatuses,
+         },
          parseInt(page),
          parseInt(limit),
       );
 
-      res.status(200).json({ rows: parcels, total });
+      res.status(200).json({ rows, total });
    },
 
    /**

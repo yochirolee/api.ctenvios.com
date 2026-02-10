@@ -23,10 +23,23 @@ const PARCEL_VIEW_ROLES: Roles[] = [...PARCEL_ADMIN_ROLES, Roles.CARRIER_OWNER, 
 
 // === Validation Schemas ===
 
-const paginationQuerySchema = z.object({
+const listQuerySchema = z.object({
    page: z.coerce.number().int().positive().optional().default(1),
    limit: z.coerce.number().int().positive().max(100).optional().default(25),
    status: z.nativeEnum(Status).optional(),
+   hbl: z.string().optional(),
+   q: z.string().optional(),
+   order_id: z.coerce.number().int().positive().optional(),
+   description: z.string().optional(),
+   customer: z.string().optional(),
+   receiver: z.string().optional(),
+   agency_id: z.coerce.number().int().positive().optional(),
+   dispatch_id_null: z.enum(["true", "false", "1", "0"]).optional(),
+   container_id_null: z.enum(["true", "false", "1", "0"]).optional(),
+   flight_id_null: z.enum(["true", "false", "1", "0"]).optional(),
+   forwarder_id: z.coerce.number().int().positive().optional(),
+   scope: z.enum(["agency", "forwarder"]).optional(),
+   ready_for: z.enum(["dispatch", "container"]).optional(),
 });
 
 const hblParamSchema = z.object({
@@ -44,14 +57,14 @@ const updateStatusSchema = z.object({
 
 // === Routes ===
 
-// GET /parcels - Get all parcels with pagination
-router.get("/", requireRoles(PARCEL_VIEW_ROLES), validate({ query: paginationQuerySchema }), parcels.getAll);
+// GET /parcels - Unified list: filter by status, search by hbl or q, filter by order_id; optional ready_for=dispatch|container
+router.get("/", requireRoles(PARCEL_VIEW_ROLES), validate({ query: listQuerySchema }), parcels.getAll);
 
-// GET /parcels/in-agency - Get parcels in user's agency (not dispatched)
+// GET /parcels/in-agency - Get parcels in user's agency (not dispatched) – kept for backward compatibility
 router.get(
    "/in-agency",
    requireRoles(PARCEL_ADMIN_ROLES),
-   validate({ query: paginationQuerySchema }),
+   validate({ query: listQuerySchema.pick({ page: true, limit: true }) }),
    parcels.getInAgency
 );
 

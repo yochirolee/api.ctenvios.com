@@ -1,7 +1,11 @@
 node_modules
 # Keep environment variables out of version control
 .env
+.env.staging
 # Docker
 Dockerfile*
 docker-compose*.yml
 .dockerignore
+!Dockerfile.staging
+!docker-compose.staging.yml
+!.env.staging.example
