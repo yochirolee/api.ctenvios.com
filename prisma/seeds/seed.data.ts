@@ -311,8 +311,8 @@ export const customsRates = [
       max_quantity: 2,
    },
    {
-      name: ` Calentador de Agua Gas`,
-      description: ` Calentador de Agua Ga`,
+      name: `Calentador de Agua Gas`,
+      description: `Calentador de Agua Gas`,
       chapter: `Electrodomesticos`,
       country_id: 1,
       fee_type: FeeType.UNIT,

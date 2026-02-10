@@ -14,6 +14,17 @@ interface ReceiverWithLocationNames extends Omit<Receiver, "province_id" | "city
    city_id?: number;
 }
 
+const normalizeSpanishText = (value: string): string =>
+   value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/ñ/gi, "n")
+      .replace(/[^\w\s]/g, " ")
+      .replace(/_/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
+
 export const resolvers = {
    /**
     * Resolves province name to province ID
@@ -21,20 +32,31 @@ export const resolvers = {
     * @returns Province ID
     */
    resolveProvinceId: async (provinceName: string): Promise<number> => {
+      const provinceNameTrimmed = provinceName.trim();
+
       const province = await prisma.province.findFirst({
          where: {
             name: {
-               equals: provinceName,
+               equals: provinceNameTrimmed,
                mode: "insensitive",
             },
          },
       });
 
-      if (!province) {
-         throw new AppError(HttpStatusCodes.NOT_FOUND, `Province '${provinceName}' not found`);
-      }
+      if (province) return province.id;
 
-      return province.id;
+      const normalizedProvinceName = normalizeSpanishText(provinceNameTrimmed);
+      const provinces = await prisma.province.findMany({
+         select: { id: true, name: true },
+      });
+
+      const normalizedMatch = provinces.find(
+         (item): boolean => normalizeSpanishText(item.name) === normalizedProvinceName
+      );
+
+      if (normalizedMatch) return normalizedMatch.id;
+
+      throw new AppError(HttpStatusCodes.NOT_FOUND, `Province '${provinceNameTrimmed}' not found`);
    },
 
    /**
@@ -44,21 +66,31 @@ export const resolvers = {
     * @returns City ID
     */
    resolveCityId: async (cityName: string, provinceId: number): Promise<number> => {
+      const cityNameTrimmed = cityName.trim();
+
       const city = await prisma.city.findFirst({
          where: {
             name: {
-               equals: cityName,
+               equals: cityNameTrimmed,
                mode: "insensitive",
             },
             province_id: provinceId,
          },
       });
 
-      if (!city) {
-         throw new AppError(HttpStatusCodes.NOT_FOUND, `City '${cityName}' not found in the specified province`);
-      }
+      if (city) return city.id;
 
-      return city.id;
+      const normalizedCityName = normalizeSpanishText(cityNameTrimmed);
+      const cities = await prisma.city.findMany({
+         where: { province_id: provinceId },
+         select: { id: true, name: true },
+      });
+
+      const normalizedMatch = cities.find((item): boolean => normalizeSpanishText(item.name) === normalizedCityName);
+
+      if (normalizedMatch) return normalizedMatch.id;
+
+      throw new AppError(HttpStatusCodes.NOT_FOUND, `City '${cityNameTrimmed}' not found in the specified province`);
    },
    resolveReceiver: async ({
       receiver_id,
