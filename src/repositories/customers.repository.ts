@@ -112,9 +112,9 @@ const customers = {
    getByMobileAndName: async (mobile: string, first_name: string, last_name: string): Promise<Customer | null> => {
       const customer = await prisma.customer.findFirst({
          where: {
-            mobile,
-            first_name,
-            last_name,
+            mobile: { equals: mobile, mode: "insensitive" },
+            first_name: { equals: first_name, mode: "insensitive" },
+            last_name: { equals: last_name, mode: "insensitive" },
          },
       });
       return customer;
