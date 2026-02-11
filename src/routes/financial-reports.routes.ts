@@ -34,9 +34,8 @@ router.get("/daily-closing", authMiddleware, requireRoles(FINANCIAL_ROLES), fina
 // Daily Sales Report (simple list)
 router.get(
    "/daily-sales",
-   authMiddleware,
-   requireRoles(FINANCIAL_ROLES),
-   financialReportsController.getDailySalesReport
+
+   financialReportsController.getDailySalesReport,
 );
 
 // Sales Report PDF - printer friendly
@@ -44,7 +43,7 @@ router.get(
    "/sales-report/pdf",
    authMiddleware,
    requireRoles(FINANCIAL_ROLES),
-   financialReportsController.getSalesReportPdf
+   financialReportsController.getSalesReportPdf,
 );
 
 // Sales Reports
@@ -55,9 +54,9 @@ router.get("/sales/user", authMiddleware, requireRoles(FINANCIAL_ROLES), financi
 // Daily breakdown for a specific month
 router.get(
    "/daily/:year/:month",
-   authMiddleware,
+
    requireRoles(FINANCIAL_ROLES),
-   financialReportsController.getDailySales
+   financialReportsController.getDailySales,
 );
 
 // Payment breakdown
@@ -65,7 +64,7 @@ router.get(
    "/payments/breakdown",
    authMiddleware,
    requireRoles(FINANCIAL_ROLES),
-   financialReportsController.getPaymentBreakdown
+   financialReportsController.getPaymentBreakdown,
 );
 
 // Customer debts
@@ -73,14 +72,14 @@ router.get(
    "/debts/customers",
    authMiddleware,
    requireRoles(FINANCIAL_ROLES),
-   financialReportsController.getCustomerDebts
+   financialReportsController.getCustomerDebts,
 );
 
 router.get(
    "/debts/customers/:customer_id",
-   authMiddleware,
+
    requireRoles(FINANCIAL_ROLES),
-   financialReportsController.getCustomerPendingOrders
+   financialReportsController.getCustomerPendingOrders,
 );
 
 // Agency summary
@@ -88,7 +87,7 @@ router.get(
    "/agency/:agency_id/summary",
    authMiddleware,
    requireRoles(FINANCIAL_ROLES),
-   financialReportsController.getAgencySummary
+   financialReportsController.getAgencySummary,
 );
 
 // Monthly comparison
@@ -96,7 +95,7 @@ router.get(
    "/comparison/monthly",
    authMiddleware,
    requireRoles(FINANCIAL_ROLES),
-   financialReportsController.getMonthlyComparison
+   financialReportsController.getMonthlyComparison,
 );
 
 export default router;

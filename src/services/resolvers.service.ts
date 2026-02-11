@@ -6,6 +6,7 @@ import { buildHBL } from "../utils/generate-hbl";
 import { pricingService } from "./pricing.service";
 import HttpStatusCodes from "../common/https-status-codes";
 import { createReceiverSchema } from "../types/types";
+import capitalize from "../utils/capitalize";
 
 interface ReceiverWithLocationNames extends Omit<Receiver, "province_id" | "city_id"> {
    province?: string;
@@ -149,12 +150,12 @@ export const resolvers = {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, JSON.stringify({ message: "Validation failed", errors }));
       }
 
-      // Create new receiver with resolved IDs
+      // Create new receiver with resolved IDs (names in title case)
       const receiverData: Prisma.ReceiverUncheckedCreateInput = {
-         first_name: receiver.first_name,
-         middle_name: receiver.middle_name || null,
-         last_name: receiver.last_name,
-         second_last_name: receiver.second_last_name || null,
+         first_name: capitalize(receiver.first_name.trim()),
+         middle_name: receiver.middle_name ? capitalize(receiver.middle_name.trim()) : null,
+         last_name: capitalize(receiver.last_name.trim()),
+         second_last_name: receiver.second_last_name ? capitalize(receiver.second_last_name.trim()) : null,
          ci: receiver.ci,
          passport: receiver.passport || null,
          email: receiver.email || null,
@@ -202,12 +203,12 @@ export const resolvers = {
             return existingCustomer as Customer;
          }
 
-         // Create new customer if not found
+         // Create new customer if not found (names in title case)
          const customerData: Prisma.CustomerCreateInput = {
-            first_name: customer.first_name,
-            middle_name: customer.middle_name || null,
-            last_name: customer.last_name,
-            second_last_name: customer.second_last_name || null,
+            first_name: capitalize(String(customer.first_name).trim()),
+            middle_name: customer.middle_name ? capitalize(String(customer.middle_name).trim()) : null,
+            last_name: capitalize(String(customer.last_name).trim()),
+            second_last_name: customer.second_last_name ? capitalize(String(customer.second_last_name).trim()) : null,
             mobile: customer.mobile,
             email: customer.email || null,
             address: customer.address || null,

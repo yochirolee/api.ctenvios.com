@@ -115,7 +115,15 @@ export const customers = {
       if (!id || isNaN(parseInt(id))) {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "Customer ID is required");
       }
-      const customer = await repository.customers.edit(parseInt(id), req.body);
+      const body = req.body as Record<string, unknown>;
+      const payload = { ...body };
+      if (typeof body.first_name === "string") payload.first_name = capitalize(body.first_name.trim());
+      if (typeof body.last_name === "string") payload.last_name = capitalize(body.last_name.trim());
+      if (typeof body.middle_name === "string") payload.middle_name = capitalize(body.middle_name.trim());
+      if (body.middle_name === null) payload.middle_name = null;
+      if (typeof body.second_last_name === "string") payload.second_last_name = capitalize(body.second_last_name.trim());
+      if (body.second_last_name === null) payload.second_last_name = null;
+      const customer = await repository.customers.edit(parseInt(id), payload);
       res.status(200).json(customer);
    }) as RequestHandler,
 };
