@@ -299,7 +299,7 @@ async function generateCleanCTEnviosLabel(
       order.customer.middle_name,
       order.customer.last_name,
       order.customer.second_last_name,
-      25 // Max length for label display
+      35 // Max length for label display (includes second_last_name)
    );
 
    doc.fontSize(8)
@@ -326,7 +326,7 @@ async function generateCleanCTEnviosLabel(
       order.receiver.middle_name,
       order.receiver.last_name,
       order.receiver.second_last_name,
-      25 // Max length for label display
+      35 // Max length for label display (includes second_last_name)
    );
 
    doc.fontSize(8)
@@ -338,7 +338,7 @@ async function generateCleanCTEnviosLabel(
    const nameUpperCase = recipientName.toUpperCase();
 
    // Use smaller font for very long names
-   const nameFontSize = nameUpperCase.length > 25 ? 8 : 10;
+   const nameFontSize = nameUpperCase.length > 35 ? 8 : 10;
 
    doc.fontSize(nameFontSize)
       .font(FONTS.BOLD)

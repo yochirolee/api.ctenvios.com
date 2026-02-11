@@ -1,21 +1,12 @@
 node_modules
-dist
-coverage
-*.log
-.DS_Store
-
 # Keep environment variables out of version control
 .env
-.env.*
 .env.staging
-!.env.staging.example
-
 # Docker
-Dockerfile*
-docker-compose*.yml
+
 .dockerignore
 !Dockerfile.staging
 !docker-compose.staging.yml
-
 .cursorrules
 .cursorignore
+
