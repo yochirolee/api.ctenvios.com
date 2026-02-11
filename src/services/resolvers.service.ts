@@ -2,7 +2,6 @@ import { Customer, Receiver, Province, City, Prisma, Unit } from "@prisma/client
 import prisma from "../lib/prisma.client";
 import { AppError } from "../common/app-errors";
 import repository from "../repositories";
-import { buildHBL } from "../utils/generate-hbl";
 import { pricingService } from "./pricing.service";
 import HttpStatusCodes from "../common/https-status-codes";
 import { createReceiverSchema } from "../types/types";
@@ -52,7 +51,7 @@ export const resolvers = {
       });
 
       const normalizedMatch = provinces.find(
-         (item): boolean => normalizeSpanishText(item.name) === normalizedProvinceName
+         (item): boolean => normalizeSpanishText(item.name) === normalizedProvinceName,
       );
 
       if (normalizedMatch) return normalizedMatch.id;
@@ -192,22 +191,24 @@ export const resolvers = {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "Customer information is required");
       }
 
-      // Check if customer exists by mobile and name
+      // Check if customer exists by mobile and name (use same normalized values as for create)
       if (customer.mobile && customer.first_name && customer.last_name) {
+         const first_name = capitalize(String(customer.first_name).trim());
+         const last_name = capitalize(String(customer.last_name).trim());
+
          const existingCustomer = await repository.customers.getByMobileAndName(
             customer.mobile,
-            customer.first_name,
-            customer.last_name
+            first_name,
+            last_name,
          );
          if (existingCustomer) {
             return existingCustomer as Customer;
          }
 
-         // Create new customer if not found (names in title case)
          const customerData: Prisma.CustomerCreateInput = {
-            first_name: capitalize(String(customer.first_name).trim()),
+            first_name,
             middle_name: customer.middle_name ? capitalize(String(customer.middle_name).trim()) : null,
-            last_name: capitalize(String(customer.last_name).trim()),
+            last_name,
             second_last_name: customer.second_last_name ? capitalize(String(customer.second_last_name).trim()) : null,
             mobile: customer.mobile,
             email: customer.email || null,
@@ -215,13 +216,25 @@ export const resolvers = {
             identity_document: customer.identity_document || null,
          };
 
-         const newCustomer = await repository.customers.create(customerData);
-         return newCustomer as Customer;
+         try {
+            const newCustomer = await repository.customers.create(customerData);
+            return newCustomer as Customer;
+         } catch (err) {
+            if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+               const byRace = await repository.customers.getByMobileAndName(
+                  customer.mobile,
+                  first_name,
+                  last_name,
+               );
+               if (byRace) return byRace as Customer;
+            }
+            throw err;
+         }
       }
 
       throw new AppError(HttpStatusCodes.BAD_REQUEST, "Customer mobile, first_name, and last_name are required");
    },
-  /*  resolveItemsWithHbl: async ({
+   /*  resolveItemsWithHbl: async ({
       order_items,
       service_id,
       agency_id,
@@ -300,7 +313,7 @@ export const resolvers = {
          if (!rate) {
             throw new AppError(
                HttpStatusCodes.NOT_FOUND,
-               `Rate with ID ${item.rate_id} not found or not exists for your agency ${agency_id}`
+               `Rate with ID ${item.rate_id} not found or not exists for your agency ${agency_id}`,
             );
          }
 
