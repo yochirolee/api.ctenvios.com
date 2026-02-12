@@ -93,7 +93,21 @@ exports.customers = {
         if (!id || isNaN(parseInt(id))) {
             throw new app_errors_1.AppError(https_status_codes_1.default.BAD_REQUEST, "Customer ID is required");
         }
-        const customer = yield repositories_1.default.customers.edit(parseInt(id), req.body);
+        const body = req.body;
+        const payload = Object.assign({}, body);
+        if (typeof body.first_name === "string")
+            payload.first_name = (0, capitalize_1.default)(body.first_name.trim());
+        if (typeof body.last_name === "string")
+            payload.last_name = (0, capitalize_1.default)(body.last_name.trim());
+        if (typeof body.middle_name === "string")
+            payload.middle_name = (0, capitalize_1.default)(body.middle_name.trim());
+        if (body.middle_name === null)
+            payload.middle_name = null;
+        if (typeof body.second_last_name === "string")
+            payload.second_last_name = (0, capitalize_1.default)(body.second_last_name.trim());
+        if (body.second_last_name === null)
+            payload.second_last_name = null;
+        const customer = yield repositories_1.default.customers.edit(parseInt(id), payload);
         res.status(200).json(customer);
     })),
 };

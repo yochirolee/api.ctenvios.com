@@ -126,6 +126,10 @@ export const customers = {
       const customer = await repository.customers.edit(parseInt(id), payload);
       res.status(200).json(customer);
    }) as RequestHandler,
+
+  
+
+   
 };
 
 export default customers;

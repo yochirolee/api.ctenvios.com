@@ -30,19 +30,19 @@ router.get("/orders", auth_middleware_1.authMiddleware, (0, auth_middleware_1.re
 // Daily Closing by User
 router.get("/daily-closing", auth_middleware_1.authMiddleware, (0, auth_middleware_1.requireRoles)(FINANCIAL_ROLES), financial_reports_controller_1.default.getDailyClosing);
 // Daily Sales Report (simple list)
-router.get("/daily-sales", auth_middleware_1.authMiddleware, (0, auth_middleware_1.requireRoles)(FINANCIAL_ROLES), financial_reports_controller_1.default.getDailySalesReport);
+router.get("/daily-sales", financial_reports_controller_1.default.getDailySalesReport);
 // Sales Report PDF - printer friendly
 router.get("/sales-report/pdf", auth_middleware_1.authMiddleware, (0, auth_middleware_1.requireRoles)(FINANCIAL_ROLES), financial_reports_controller_1.default.getSalesReportPdf);
 // Sales Reports
 router.get("/sales/agency", auth_middleware_1.authMiddleware, (0, auth_middleware_1.requireRoles)(FINANCIAL_ROLES), financial_reports_controller_1.default.getSalesByAgency);
 router.get("/sales/user", auth_middleware_1.authMiddleware, (0, auth_middleware_1.requireRoles)(FINANCIAL_ROLES), financial_reports_controller_1.default.getSalesByUser);
 // Daily breakdown for a specific month
-router.get("/daily/:year/:month", auth_middleware_1.authMiddleware, (0, auth_middleware_1.requireRoles)(FINANCIAL_ROLES), financial_reports_controller_1.default.getDailySales);
+router.get("/daily/:year/:month", (0, auth_middleware_1.requireRoles)(FINANCIAL_ROLES), financial_reports_controller_1.default.getDailySales);
 // Payment breakdown
 router.get("/payments/breakdown", auth_middleware_1.authMiddleware, (0, auth_middleware_1.requireRoles)(FINANCIAL_ROLES), financial_reports_controller_1.default.getPaymentBreakdown);
 // Customer debts
 router.get("/debts/customers", auth_middleware_1.authMiddleware, (0, auth_middleware_1.requireRoles)(FINANCIAL_ROLES), financial_reports_controller_1.default.getCustomerDebts);
-router.get("/debts/customers/:customer_id", auth_middleware_1.authMiddleware, (0, auth_middleware_1.requireRoles)(FINANCIAL_ROLES), financial_reports_controller_1.default.getCustomerPendingOrders);
+router.get("/debts/customers/:customer_id", (0, auth_middleware_1.requireRoles)(FINANCIAL_ROLES), financial_reports_controller_1.default.getCustomerPendingOrders);
 // Agency summary
 router.get("/agency/:agency_id/summary", auth_middleware_1.authMiddleware, (0, auth_middleware_1.requireRoles)(FINANCIAL_ROLES), financial_reports_controller_1.default.getAgencySummary);
 // Monthly comparison

@@ -261,7 +261,7 @@ function generateCleanCTEnviosLabel(doc, order, item, itemIndex, labelWidth, lab
         // Service section with border
         currentY += 50;
         //Sender Info
-        const senderInfo = (0, capitalize_1.formatName)(order.customer.first_name, order.customer.middle_name, order.customer.last_name, order.customer.second_last_name, 25 // Max length for label display
+        const senderInfo = (0, capitalize_1.formatName)(order.customer.first_name, order.customer.middle_name, order.customer.last_name, order.customer.second_last_name, 35 // Max length for label display (includes second_last_name)
         );
         doc.fontSize(8)
             .font(pdf_fonts_1.FONTS.REGULAR)
@@ -279,7 +279,7 @@ function generateCleanCTEnviosLabel(doc, order, item, itemIndex, labelWidth, lab
             .stroke()
             .undash();
         currentY += 10;
-        const recipientName = (0, capitalize_1.formatName)(order.receiver.first_name, order.receiver.middle_name, order.receiver.last_name, order.receiver.second_last_name, 25 // Max length for label display
+        const recipientName = (0, capitalize_1.formatName)(order.receiver.first_name, order.receiver.middle_name, order.receiver.last_name, order.receiver.second_last_name, 35 // Max length for label display (includes second_last_name)
         );
         doc.fontSize(8)
             .font(pdf_fonts_1.FONTS.REGULAR)
@@ -288,7 +288,7 @@ function generateCleanCTEnviosLabel(doc, order, item, itemIndex, labelWidth, lab
         const maxNameWidth = labelWidth - margin - 65 - 10;
         const nameUpperCase = recipientName.toUpperCase();
         // Use smaller font for very long names
-        const nameFontSize = nameUpperCase.length > 25 ? 8 : 10;
+        const nameFontSize = nameUpperCase.length > 35 ? 8 : 10;
         doc.fontSize(nameFontSize)
             .font(pdf_fonts_1.FONTS.BOLD)
             .text(nameUpperCase, margin + 35, currentY + 5, {

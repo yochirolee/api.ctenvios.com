@@ -50,6 +50,7 @@ const financial_reports_repository_1 = __importDefault(require("../repositories/
 const app_errors_1 = require("../common/app-errors");
 const https_status_codes_1 = __importDefault(require("../common/https-status-codes"));
 const client_1 = require("@prisma/client");
+const utils_1 = require("../utils/utils");
 /**
  * Financial Reports Controller
  * Following: Controller pattern, RESTful API design
@@ -254,6 +255,7 @@ exports.financialReportsController = {
                 acc.paid += a.total_paid_cents;
                 return acc;
             }, { orders: 0, billed: 0, paid: 0 });
+            console.log(todayTotals);
             const monthTotals = month.reduce((acc, a) => {
                 acc.orders += a.total_orders;
                 acc.billed += a.total_billed_cents;
@@ -324,8 +326,7 @@ exports.financialReportsController = {
             const agencyFilter = isAdmin ? (agency_id ? parseInt(agency_id) : undefined) : user.agency_id;
             const customStart = start_date ? new Date(start_date) : undefined;
             const customEnd = end_date ? new Date(end_date) : undefined;
-            const report = yield financial_reports_repository_1.default.getOrdersDetailedReport(period, agencyFilter, payment_status || undefined, customStart, customEnd, parseInt(page), Math.min(parseInt(limit), 100) // Max 100 per page
-            );
+            const report = yield financial_reports_repository_1.default.getOrdersDetailedReport(period, agencyFilter, payment_status || undefined, customStart, customEnd, parseInt(page), Math.min(parseInt(limit), 100));
             res.status(200).json(Object.assign({ period, agency_id: agencyFilter }, report));
         }
         catch (error) {
@@ -341,14 +342,15 @@ exports.financialReportsController = {
             const { date, user_id } = req.query;
             const user = req.user;
             // Default to today if no date provided
-            // Parse date as local date (YYYY-MM-DD) to avoid timezone issues
+            // Parse date as UTC date-only (YYYY-MM-DD) to avoid server timezone drift
             let reportDate;
             if (date) {
                 const [year, month, day] = String(date).split("-").map(Number);
-                reportDate = new Date(year, month - 1, day);
+                reportDate = new Date(Date.UTC(year, month - 1, day));
             }
             else {
-                reportDate = new Date();
+                const adjustedNow = (0, utils_1.getAdjustedDate)(new Date());
+                reportDate = new Date(Date.UTC(adjustedNow.getFullYear(), adjustedNow.getMonth(), adjustedNow.getDate()));
             }
             // Use user's agency (non-admins can only see their agency)
             const agencyId = user.agency_id;
@@ -356,7 +358,8 @@ exports.financialReportsController = {
                 throw new app_errors_1.AppError(https_status_codes_1.default.BAD_REQUEST, "User must belong to an agency");
             }
             const report = yield financial_reports_repository_1.default.getDailySalesReport(reportDate, agencyId, user_id || undefined);
-            res.status(200).json(report);
+            const formattedReport = Object.assign(Object.assign({}, report), { date: (0, utils_1.formatDateLocal)(reportDate), billing: Object.assign(Object.assign({}, report.billing), { orders: report.billing.orders.map((order) => (Object.assign(Object.assign({}, order), { created_at: (0, utils_1.formatDateTimeLocal)(order.created_at) }))) }), collections: Object.assign(Object.assign({}, report.collections), { payments: report.collections.payments.map((payment) => (Object.assign(Object.assign({}, payment), { order_date: (0, utils_1.formatDateTimeLocal)(payment.order_date), payment_date: (0, utils_1.formatDateTimeLocal)(payment.payment_date) }))) }) });
+            res.status(200).json(formattedReport);
         }
         catch (error) {
             next(error);

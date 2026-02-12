@@ -20,6 +20,7 @@ const repositories_1 = __importDefault(require("../repositories"));
 const pricing_service_1 = require("./pricing.service");
 const https_status_codes_1 = __importDefault(require("../common/https-status-codes"));
 const types_1 = require("../types/types");
+const capitalize_1 = __importDefault(require("../utils/capitalize"));
 const normalizeSpanishText = (value) => value
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -131,12 +132,12 @@ exports.resolvers = {
             const errors = parseResult.error.flatten().fieldErrors;
             throw new app_errors_1.AppError(https_status_codes_1.default.BAD_REQUEST, JSON.stringify({ message: "Validation failed", errors }));
         }
-        // Create new receiver with resolved IDs
+        // Create new receiver with resolved IDs (names in title case)
         const receiverData = {
-            first_name: receiver.first_name,
-            middle_name: receiver.middle_name || null,
-            last_name: receiver.last_name,
-            second_last_name: receiver.second_last_name || null,
+            first_name: (0, capitalize_1.default)(receiver.first_name.trim()),
+            middle_name: receiver.middle_name ? (0, capitalize_1.default)(receiver.middle_name.trim()) : null,
+            last_name: (0, capitalize_1.default)(receiver.last_name.trim()),
+            second_last_name: receiver.second_last_name ? (0, capitalize_1.default)(receiver.second_last_name.trim()) : null,
             ci: receiver.ci,
             passport: receiver.passport || null,
             email: receiver.email || null,
@@ -162,82 +163,93 @@ exports.resolvers = {
         if (!customer) {
             throw new app_errors_1.AppError(https_status_codes_1.default.BAD_REQUEST, "Customer information is required");
         }
-        // Check if customer exists by mobile and name
+        // Check if customer exists by mobile and name (use same normalized values as for create)
         if (customer.mobile && customer.first_name && customer.last_name) {
-            const existingCustomer = yield repositories_1.default.customers.getByMobileAndName(customer.mobile, customer.first_name, customer.last_name);
+            const first_name = (0, capitalize_1.default)(String(customer.first_name).trim());
+            const last_name = (0, capitalize_1.default)(String(customer.last_name).trim());
+            const existingCustomer = yield repositories_1.default.customers.getByMobileAndName(customer.mobile, first_name, last_name);
             if (existingCustomer) {
                 return existingCustomer;
             }
-            // Create new customer if not found
             const customerData = {
-                first_name: customer.first_name,
-                middle_name: customer.middle_name || null,
-                last_name: customer.last_name,
-                second_last_name: customer.second_last_name || null,
+                first_name,
+                middle_name: customer.middle_name ? (0, capitalize_1.default)(String(customer.middle_name).trim()) : null,
+                last_name,
+                second_last_name: customer.second_last_name ? (0, capitalize_1.default)(String(customer.second_last_name).trim()) : null,
                 mobile: customer.mobile,
                 email: customer.email || null,
                 address: customer.address || null,
                 identity_document: customer.identity_document || null,
             };
-            const newCustomer = yield repositories_1.default.customers.create(customerData);
-            return newCustomer;
+            try {
+                const newCustomer = yield repositories_1.default.customers.create(customerData);
+                return newCustomer;
+            }
+            catch (err) {
+                if (err instanceof client_1.Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+                    const byRace = yield repositories_1.default.customers.getByMobileAndName(customer.mobile, first_name, last_name);
+                    if (byRace)
+                        return byRace;
+                }
+                throw err;
+            }
         }
         throw new app_errors_1.AppError(https_status_codes_1.default.BAD_REQUEST, "Customer mobile, first_name, and last_name are required");
     }),
     /*  resolveItemsWithHbl: async ({
-        order_items,
-        service_id,
-        agency_id,
-     }: {
-        order_items: any[];
-        service_id: number;
-        agency_id: number;
-     }): Promise<any[]> => {
-        // 🚀 OPTIMIZATION: Extract unique rate IDs efficiently (single pass, no intermediate arrays)
-        const forwarder = await prisma.forwarder.findUnique({
-           where: {
-              id: agency_id,
-           },
-        });
-        if (!forwarder?.code) {
-           throw new AppError(HttpStatusCodes.NOT_FOUND, "Forwarder code not found");
-        }
-        // 🚀 OPTIMIZATION: Parallelize HBL generation and rate fetching
-        const allHblCodes = await buildHBL(forwarder?.code || "", todayYYDDD("America/New_York"), 1, order_items.length);
-  
-        const rates = await pricingService.getRatesByServiceIdAndAgencyId(service_id, agency_id);
-  
-        // Pre-allocate and populate items array
-        const items_hbl: any[] = new Array(order_items.length);
-        for (let i = 0; i < order_items.length; i++) {
-           const item = order_items[i];
-           const rate = rates.find((rate) => rate.id === item.rate_id);
-           if (!rate) {
-              throw new AppError(
-                 HttpStatusCodes.NOT_FOUND,
-                 `Rate with ID ${item.rate_id} not found or not exists for your agency ${agency_id}`
-              );
-           }
-           items_hbl[i] = {
-              hbl: allHblCodes[i],
-              external_reference: item.external_reference || null,
-              description: item.description,
-              price_in_cents: item.price_in_cents || rate?.price_in_cents || 0,
-              charge_fee_in_cents: item.charge_fee_in_cents || 0,
-              delivery_fee_in_cents: item.delivery_fee_in_cents || 0,
-              rate_id: item.rate_id,
-              insurance_fee_in_cents: item.insurance_fee_in_cents || 0,
-              customs_fee_in_cents: item.customs_fee_in_cents || 0,
-              customs_rates_id: item.customs_rates_id || null,
-              quantity: 1,
-              weight: item.weight,
-              service_id,
-              agency_id,
-              unit: rate?.unit || item.unit || Unit.PER_LB,
-           };
-        }
-        return items_hbl;
-     }, */
+       order_items,
+       service_id,
+       agency_id,
+    }: {
+       order_items: any[];
+       service_id: number;
+       agency_id: number;
+    }): Promise<any[]> => {
+       // 🚀 OPTIMIZATION: Extract unique rate IDs efficiently (single pass, no intermediate arrays)
+       const forwarder = await prisma.forwarder.findUnique({
+          where: {
+             id: agency_id,
+          },
+       });
+       if (!forwarder?.code) {
+          throw new AppError(HttpStatusCodes.NOT_FOUND, "Forwarder code not found");
+       }
+       // 🚀 OPTIMIZATION: Parallelize HBL generation and rate fetching
+       const allHblCodes = await buildHBL(forwarder?.code || "", todayYYDDD("America/New_York"), 1, order_items.length);
+ 
+       const rates = await pricingService.getRatesByServiceIdAndAgencyId(service_id, agency_id);
+ 
+       // Pre-allocate and populate items array
+       const items_hbl: any[] = new Array(order_items.length);
+       for (let i = 0; i < order_items.length; i++) {
+          const item = order_items[i];
+          const rate = rates.find((rate) => rate.id === item.rate_id);
+          if (!rate) {
+             throw new AppError(
+                HttpStatusCodes.NOT_FOUND,
+                `Rate with ID ${item.rate_id} not found or not exists for your agency ${agency_id}`
+             );
+          }
+          items_hbl[i] = {
+             hbl: allHblCodes[i],
+             external_reference: item.external_reference || null,
+             description: item.description,
+             price_in_cents: item.price_in_cents || rate?.price_in_cents || 0,
+             charge_fee_in_cents: item.charge_fee_in_cents || 0,
+             delivery_fee_in_cents: item.delivery_fee_in_cents || 0,
+             rate_id: item.rate_id,
+             insurance_fee_in_cents: item.insurance_fee_in_cents || 0,
+             customs_fee_in_cents: item.customs_fee_in_cents || 0,
+             customs_rates_id: item.customs_rates_id || null,
+             quantity: 1,
+             weight: item.weight,
+             service_id,
+             agency_id,
+             unit: rate?.unit || item.unit || Unit.PER_LB,
+          };
+       }
+       return items_hbl;
+    }, */
     resolveItems: (_a) => __awaiter(void 0, [_a], void 0, function* ({ order_items, service_id, agency_id, }) {
         var _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
         // ⚡ Obtener rates UNA vez

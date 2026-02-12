@@ -110,9 +110,9 @@ const customers = {
     getByMobileAndName: (mobile, first_name, last_name) => __awaiter(void 0, void 0, void 0, function* () {
         const customer = yield prisma_client_1.default.customer.findFirst({
             where: {
-                mobile,
-                first_name,
-                last_name,
+                mobile: { equals: mobile, mode: "insensitive" },
+                first_name: { equals: first_name, mode: "insensitive" },
+                last_name: { equals: last_name, mode: "insensitive" },
             },
         });
         return customer;

@@ -1,6 +1,6 @@
 import prisma from "../lib/prisma.client";
 import { PaymentMethod, PaymentStatus } from "@prisma/client";
-import { formatDateLocal, getAdjustedDate, getDayRangeUTC, getMonthRangeUTC, TIMEZONE_OFFSET_HOURS } from "../utils/utils";
+import { formatDateLocal, getAdjustedDate, getDayRangeUTC, getMonthRangeUTC } from "../utils/utils";
 
 /**
  * Financial Reports Repository
@@ -81,54 +81,52 @@ interface AgencyFinancialSummary {
 }
 
 /**
- * Get date range helpers (adjusted for EST timezone)
+ * Get date range helpers (UTC-based)
  */
 const getDateRange = (
    period: "today" | "week" | "month" | "year" | "custom",
    customStart?: Date,
    customEnd?: Date
 ): DateRange => {
-   const estNow = getAdjustedDate(new Date());
+   const now = new Date();
+   const utcYear = now.getUTCFullYear();
+   const utcMonth = now.getUTCMonth();
+   const utcDay = now.getUTCDate();
    let start: Date;
    let end: Date;
 
    switch (period) {
       case "today": {
-         const { start: todayStart, end: todayEnd } = getDayRangeUTC(new Date());
-         start = todayStart;
-         end = todayEnd;
+         start = new Date(Date.UTC(utcYear, utcMonth, utcDay, 0, 0, 0, 0));
+         end = new Date(Date.UTC(utcYear, utcMonth, utcDay, 23, 59, 59, 999));
          break;
       }
       case "week": {
-         const dayOfWeek = estNow.getDay();
-         const weekStart = new Date(estNow.getFullYear(), estNow.getMonth(), estNow.getDate() - dayOfWeek, 0, 0, 0, 0);
-         const weekEnd = new Date(estNow.getFullYear(), estNow.getMonth(), estNow.getDate(), 23, 59, 59, 999);
-         start = new Date(weekStart.getTime() - TIMEZONE_OFFSET_HOURS * 3600000);
-         end = new Date(weekEnd.getTime() - TIMEZONE_OFFSET_HOURS * 3600000);
+         const dayOfWeek = now.getUTCDay();
+         start = new Date(Date.UTC(utcYear, utcMonth, utcDay - dayOfWeek, 0, 0, 0, 0));
+         end = new Date(Date.UTC(utcYear, utcMonth, utcDay, 23, 59, 59, 999));
          break;
       }
       case "month": {
-         const monthStart = new Date(estNow.getFullYear(), estNow.getMonth(), 1, 0, 0, 0, 0);
-         const monthEnd = new Date(estNow.getFullYear(), estNow.getMonth(), estNow.getDate(), 23, 59, 59, 999);
-         start = new Date(monthStart.getTime() - TIMEZONE_OFFSET_HOURS * 3600000);
-         end = new Date(monthEnd.getTime() - TIMEZONE_OFFSET_HOURS * 3600000);
+         start = new Date(Date.UTC(utcYear, utcMonth, 1, 0, 0, 0, 0));
+         end = new Date(Date.UTC(utcYear, utcMonth, utcDay, 23, 59, 59, 999));
          break;
       }
       case "year": {
-         const yearStart = new Date(estNow.getFullYear(), 0, 1, 0, 0, 0, 0);
-         const yearEnd = new Date(estNow.getFullYear(), estNow.getMonth(), estNow.getDate(), 23, 59, 59, 999);
-         start = new Date(yearStart.getTime() - TIMEZONE_OFFSET_HOURS * 3600000);
-         end = new Date(yearEnd.getTime() - TIMEZONE_OFFSET_HOURS * 3600000);
+         start = new Date(Date.UTC(utcYear, 0, 1, 0, 0, 0, 0));
+         end = new Date(Date.UTC(utcYear, utcMonth, utcDay, 23, 59, 59, 999));
          break;
       }
-      case "custom":
-         start = customStart || getDayRangeUTC(new Date()).start;
-         end = customEnd || getDayRangeUTC(new Date()).end;
+      case "custom": {
+         const defaultStart = new Date(Date.UTC(utcYear, utcMonth, utcDay, 0, 0, 0, 0));
+         const defaultEnd = new Date(Date.UTC(utcYear, utcMonth, utcDay, 23, 59, 59, 999));
+         start = customStart || defaultStart;
+         end = customEnd || defaultEnd;
          break;
+      }
       default: {
-         const { start: defaultStart, end: defaultEnd } = getDayRangeUTC(new Date());
-         start = defaultStart;
-         end = defaultEnd;
+         start = new Date(Date.UTC(utcYear, utcMonth, utcDay, 0, 0, 0, 0));
+         end = new Date(Date.UTC(utcYear, utcMonth, utcDay, 23, 59, 59, 999));
       }
    }
 

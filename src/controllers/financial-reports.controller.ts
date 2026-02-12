@@ -3,6 +3,7 @@ import financialReportsRepository from "../repositories/financial-reports.reposi
 import { AppError } from "../common/app-errors";
 import HttpStatusCodes from "../common/https-status-codes";
 import { Roles } from "@prisma/client";
+import { formatDateLocal, formatDateTimeLocal, getAdjustedDate } from "../utils/utils";
 
 /**
  * Financial Reports Controller
@@ -84,7 +85,7 @@ export const financialReportsController = {
             period,
             agencyFilter,
             customStart,
-            customEnd
+            customEnd,
          );
 
          res.status(200).json({
@@ -154,7 +155,7 @@ export const financialReportsController = {
          const report = await financialReportsRepository.getDailySalesBreakdown(
             parseInt(year),
             parseInt(month),
-            agencyFilter
+            agencyFilter,
          );
 
          const totals = report.reduce(
@@ -165,9 +166,8 @@ export const financialReportsController = {
                acc.total_pending_cents += day.total_pending_cents;
                return acc;
             },
-            { total_orders: 0, total_billed_cents: 0, total_paid_cents: 0, total_pending_cents: 0 }
+            { total_orders: 0, total_billed_cents: 0, total_paid_cents: 0, total_pending_cents: 0 },
          );
-
          res.status(200).json({
             year: parseInt(year),
             month: parseInt(month),
@@ -203,7 +203,7 @@ export const financialReportsController = {
             parseInt(agency_id),
             period,
             customStart,
-            customEnd
+            customEnd,
          );
 
          res.status(200).json(report);
@@ -260,8 +260,10 @@ export const financialReportsController = {
                acc.paid += a.total_paid_cents;
                return acc;
             },
-            { orders: 0, billed: 0, paid: 0 }
+            { orders: 0, billed: 0, paid: 0 },
          );
+
+         console.log(todayTotals)
 
          const monthTotals = month.reduce(
             (acc, a) => {
@@ -271,7 +273,7 @@ export const financialReportsController = {
                acc.pending += a.total_pending_cents;
                return acc;
             },
-            { orders: 0, billed: 0, paid: 0, pending: 0 }
+            { orders: 0, billed: 0, paid: 0, pending: 0 },
          );
 
          res.status(200).json({
@@ -351,7 +353,7 @@ export const financialReportsController = {
             customStart,
             customEnd,
             parseInt(page),
-            Math.min(parseInt(limit), 100) // Max 100 per page
+            Math.min(parseInt(limit), 100), // Max 100 per page
          );
 
          res.status(200).json({
@@ -374,13 +376,14 @@ export const financialReportsController = {
          const user = req.user;
 
          // Default to today if no date provided
-         // Parse date as local date (YYYY-MM-DD) to avoid timezone issues
+         // Parse date as UTC date-only (YYYY-MM-DD) to avoid server timezone drift
          let reportDate: Date;
          if (date) {
             const [year, month, day] = String(date).split("-").map(Number);
-            reportDate = new Date(year, month - 1, day);
+            reportDate = new Date(Date.UTC(year, month - 1, day));
          } else {
-            reportDate = new Date();
+            const adjustedNow = getAdjustedDate(new Date());
+            reportDate = new Date(Date.UTC(adjustedNow.getFullYear(), adjustedNow.getMonth(), adjustedNow.getDate()));
          }
 
          // Use user's agency (non-admins can only see their agency)
@@ -393,10 +396,30 @@ export const financialReportsController = {
          const report = await financialReportsRepository.getDailySalesReport(
             reportDate,
             agencyId,
-            user_id || undefined
+            user_id || undefined,
          );
 
-         res.status(200).json(report);
+         const formattedReport = {
+            ...report,
+            date: formatDateLocal(reportDate),
+            billing: {
+               ...report.billing,
+               orders: report.billing.orders.map((order) => ({
+                  ...order,
+                  created_at: formatDateTimeLocal(order.created_at),
+               })),
+            },
+            collections: {
+               ...report.collections,
+               payments: report.collections.payments.map((payment) => ({
+                  ...payment,
+                  order_date: formatDateTimeLocal(payment.order_date),
+                  payment_date: formatDateTimeLocal(payment.payment_date),
+               })),
+            },
+         };
+
+         res.status(200).json(formattedReport);
       } catch (error) {
          next(error);
       }
