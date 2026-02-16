@@ -298,18 +298,22 @@ const analytics = {
       };
    },
    /**
-    * Packages and total weight per agency for parcels that are in agencies or dispatch-ready
-    * (Parcel Status: IN_AGENCY, IN_PALLET, IN_DISPATCH, IN_WAREHOUSE, RECEIVED_IN_DISPATCH).
+    * Packages and total weight per agency for parcels filtered by status.
+    * When statusIn is omitted, defaults to in-agencies / dispatch-ready statuses.
     */
-   getPackagesAndWeightInAgencies: async (agencyId?: number): Promise<PackagesAndWeightInAgenciesResponse> => {
-      const statusIn: Status[] = [Status.IN_AGENCY, Status.IN_PALLET, Status.IN_DISPATCH];
+   getPackagesAndWeightInAgencies: async (
+      agencyId?: number,
+      statusIn?: Status[],
+   ): Promise<PackagesAndWeightInAgenciesResponse> => {
+      const statusFilter: Status[] =
+         statusIn && statusIn.length > 0 ? statusIn : [Status.IN_AGENCY, Status.IN_PALLET, Status.IN_DISPATCH];
 
       const grouped = await prisma.parcel.groupBy({
          by: ["agency_id"],
          where: {
             deleted_at: null,
             agency_id: agencyId ?? { not: null },
-            status: { in: statusIn },
+            status: { in: statusFilter },
          },
          _count: { id: true },
          _sum: { weight: true },
