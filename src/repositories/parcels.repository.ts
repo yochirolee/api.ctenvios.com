@@ -83,6 +83,31 @@ const parcels = {
       });
    },
 
+   /** Get parcel by HBL with dispatch info for verify-parcel (which dispatch, if any) */
+   getByHblForVerify: async (hbl: string) => {
+      return await prisma.parcel.findUnique({
+         where: { tracking_number: hbl },
+         select: {
+            id: true,
+            tracking_number: true,
+            status: true,
+            weight: true,
+            description: true,
+            agency_id: true,
+            dispatch_id: true,
+            agency: { select: { id: true, name: true } },
+            dispatch: {
+               select: {
+                  id: true,
+                  status: true,
+                  sender_agency: { select: { id: true, name: true } },
+                  receiver_agency: { select: { id: true, name: true } },
+               },
+            },
+         },
+      });
+   },
+
    /** Get parcels by order ID with service (data access only) */
    getByOrderId: async (orderId: number, page = 1, limit = 10): Promise<{ parcels: Parcel[]; total: number }> => {
       const [parcels, total] = await Promise.all([
@@ -231,8 +256,6 @@ const parcels = {
          agency_id?: number;
          agency_id_in?: number[];
          description?: string;
-         customer?: string;
-         receiver?: string;
          dispatch_id_null?: boolean;
          container_id_null?: boolean;
          flight_id_null?: boolean;
@@ -299,24 +322,7 @@ const parcels = {
       if (descTrim && descTrim !== "") {
          where.description = { contains: descTrim, mode: "insensitive" };
       }
-      const customerTrim = filters.customer?.trim();
-      const receiverTrim = filters.receiver?.trim();
-      if (customerTrim !== "" || receiverTrim !== "") {
-         const orderConditions: Prisma.OrderWhereInput[] = [];
-         if (customerTrim) {
-            const customerWords = customerTrim.split(/\s+/).filter(Boolean);
-            orderConditions.push({
-               customer: buildNameSearchFilter(customerWords) as Prisma.CustomerWhereInput,
-            });
-         }
-         if (receiverTrim) {
-            const receiverWords = receiverTrim.split(/\s+/).filter(Boolean);
-            orderConditions.push({
-               receiver: buildNameSearchFilter(receiverWords) as Prisma.ReceiverWhereInput,
-            });
-         }
-         where.order = orderConditions.length === 1 ? orderConditions[0] : { AND: orderConditions };
-      }
+
       if (filters.dispatch_id_null === true) where.dispatch_id = null;
       if (filters.container_id_null === true) where.container_id = null;
       if (filters.flight_id_null === true) where.flight_id = null;
@@ -334,13 +340,7 @@ const parcels = {
          weight: true,
          status: true,
          order_id: true,
-         order: {
-            select: {
-               id: true,
-               customer: { select: { id: true, first_name: true, last_name: true, middle_name: true, second_last_name: true, mobile: true, address: true } },
-               receiver: { select: { id: true, first_name: true, last_name: true, middle_name: true, second_last_name: true, mobile: true, phone: true, address: true, province: { select: { id: true, name: true } }, city: { select: { id: true, name: true } } } },
-            },
-         },
+         
          external_reference: true,
          agency_id: true,
          agency: { select: { id: true, name: true } },
@@ -359,7 +359,7 @@ const parcels = {
          prisma.parcel.count({ where }),
       ]);
 
-      return { rows, total };
+      return { rows: rows as any, total };
    },
 
    /** Update parcel status and create STATUS_CORRECTED event in a transaction (data access only). Returns null if parcel not found. */

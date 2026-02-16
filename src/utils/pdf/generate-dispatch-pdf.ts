@@ -19,9 +19,16 @@ export interface DispatchPdfDetails {
    weight: any;
    declared_cost_in_cents: number;
    cost_in_cents: number;
-   payment_method: string;
-   payment_reference: string | null;
-   payment_date: Date | null;
+   payments?: Array<{
+      id: number;
+      amount_in_cents: number;
+      charge_in_cents: number;
+      method: string;
+      reference: string | null;
+      date: Date;
+      notes: string | null;
+      paid_by: { id: string; name: string } | null;
+   }>;
    created_at: Date;
    updated_at: Date;
    sender_agency: {
@@ -383,7 +390,7 @@ export async function generateDispatchPDF(dispatch: DispatchPdfDetails): Promise
    const arancelWidth = 35;
    const cargoWidth = 35;
    const seguroWidth = 35;
-   const hblWidth = 92;
+   const hblWidth = 85;
    const orderWidth = 28;
 
    // Position: Orden first, then Hbl, then Descripción
@@ -450,22 +457,45 @@ export async function generateDispatchPDF(dispatch: DispatchPdfDetails): Promise
    // Draw initial headers
    y = drawTableHeaders(y + 10);
 
-   // Table rows – center text vertically using measured line height
-   const rowHeight = 22;
+   // Table rows – description wraps to multiple lines; row height varies
+   const minRowHeight = 22;
+   const rowPaddingVertical = 6;
    const rowFontSize = 8;
-   doc.font(FONTS.REGULAR).fontSize(rowFontSize);
-   // Baseline at row center so text stays inside row (PDFKit y = baseline; most height is above it)
-   const textY = (rowY: number) => rowY + rowHeight / 2;
    const bottomMargin = 60;
+   doc.font(FONTS.REGULAR).fontSize(rowFontSize);
+   const rowContentY = (rowY: number) => rowY + rowPaddingVertical;
+
+   const maxDescriptionLines = 3;
+   const lineHeight = doc.currentLineHeight();
+
    for (const [index, parcel] of dispatch.parcels.entries()) {
-      // Check if we need a new page
-      if (y + rowHeight > doc.page.height - bottomMargin - 50) {
+      const parcelItems = getOrderItemsForParcel(parcel);
+      let description =
+         parcelItems.length > 0
+            ? parcelItems
+                 .map((item) => item.description || "")
+                 .filter(Boolean)
+                 .join(", ") || "N/A"
+            : "N/A";
+
+      const maxDescHeight = maxDescriptionLines * lineHeight;
+      if (doc.heightOfString(description, { width: descriptionWidth }) > maxDescHeight) {
+         let truncated = description;
+         while (truncated.length > 0 && doc.heightOfString(truncated + "…", { width: descriptionWidth }) > maxDescHeight) {
+            truncated = truncated.slice(0, -1);
+         }
+         description = truncated + "…";
+      }
+
+      const descHeight = doc.heightOfString(description, { width: descriptionWidth });
+      const actualRowHeight = Math.max(minRowHeight, Math.ceil(descHeight) + rowPaddingVertical * 2);
+
+      if (y + actualRowHeight > doc.page.height - bottomMargin - 50) {
          doc.addPage();
          y = 20;
          y = drawTableHeaders(y);
       }
 
-      // Get pre-calculated financials for this parcel
       const financials = parcelFinancials.get(parcel.id) || {
          unitRateInCents: 0,
          insuranceInCents: 0,
@@ -475,68 +505,47 @@ export async function generateDispatchPDF(dispatch: DispatchPdfDetails): Promise
          unit: "PER_LB",
       };
 
-      const rowTextY = textY(y);
+      const contentY = rowContentY(y);
       const isSplit = isSplitOrder(parcel);
 
-      // Background for split orders (not all parcels of this order are in this dispatch)
       if (isSplit) {
-         doc.rect(leftMargin, y, rightMargin - leftMargin, rowHeight).fill(COLORS.SPLIT_ORDER_BG);
+         doc.rect(leftMargin, y, rightMargin - leftMargin, actualRowHeight).fill(COLORS.SPLIT_ORDER_BG);
       }
 
-      // Orden (Order ID)
       doc.font(FONTS.REGULAR).fontSize(rowFontSize).fillColor(COLORS.FOREGROUND);
       const orderId = parcel.order_id ?? parcel.order?.id ?? "—";
-      doc.text(String(orderId), orderX, rowTextY, { width: orderWidth });
+      doc.text(String(orderId), orderX, contentY, { width: orderWidth });
 
-      // HBL
-      doc.text(parcel.tracking_number, hblX, rowTextY, { width: hblWidth });
+      doc.text(parcel.tracking_number, hblX, contentY, { width: hblWidth });
 
-      // Description (trimmed) from order items for this parcel
-      const parcelItems = getOrderItemsForParcel(parcel);
-      const description =
-         parcelItems.length > 0
-            ? parcelItems
-                 .map((item) => item.description || "")
-                 .filter(Boolean)
-                 .join(", ") || "N/A"
-            : "N/A";
-      const descTrimmed = description.length > 28 ? description.substring(0, 28) + "…" : description;
-      doc.text(descTrimmed, descriptionX, rowTextY, { width: descriptionWidth });
+      doc.text(description, descriptionX, contentY, { width: descriptionWidth });
 
-      // Seguro (Insurance)
       const insuranceColor = financials.insuranceInCents === 0 ? COLORS.MUTED_FOREGROUND : COLORS.FOREGROUND;
       doc.font(FONTS.REGULAR).fontSize(7).fillColor(insuranceColor);
-      doc.text(formatCents(financials.insuranceInCents), seguroX, rowTextY, { width: seguroWidth, align: "right" });
+      doc.text(formatCents(financials.insuranceInCents), seguroX, contentY, { width: seguroWidth, align: "right" });
 
-      // Cargo (Charge)
       const cargoColor = financials.chargeInCents === 0 ? COLORS.MUTED_FOREGROUND : COLORS.FOREGROUND;
       doc.fillColor(cargoColor);
-      doc.text(formatCents(financials.chargeInCents), cargoX, rowTextY, { width: cargoWidth, align: "right" });
+      doc.text(formatCents(financials.chargeInCents), cargoX, contentY, { width: cargoWidth, align: "right" });
 
-      // Arancel (Customs)
       const customsColor = financials.customsInCents === 0 ? COLORS.MUTED_FOREGROUND : COLORS.FOREGROUND;
       doc.fillColor(customsColor);
-      doc.text(formatCents(financials.customsInCents), arancelX, rowTextY, { width: arancelWidth, align: "right" });
+      doc.text(formatCents(financials.customsInCents), arancelX, contentY, { width: arancelWidth, align: "right" });
 
-      // Precio
       doc.fillColor(COLORS.FOREGROUND);
-      doc.text(formatCents(financials.unitRateInCents), precioX, rowTextY, { width: precioWidth, align: "right" });
+      doc.text(formatCents(financials.unitRateInCents), precioX, contentY, { width: precioWidth, align: "right" });
+      doc.text(`${toNumber(parcel.weight).toFixed(2)}`, pesoX, contentY, { width: pesoWidth, align: "right" });
 
-      // Peso (Weight)
-      doc.text(`${toNumber(parcel.weight).toFixed(2)}`, pesoX, rowTextY, { width: pesoWidth, align: "right" });
-
-      // Subtotal
       doc.font(FONTS.SEMIBOLD).fontSize(7).fillColor(COLORS.FOREGROUND);
-      doc.text(formatCents(financials.subtotalInCents), subtotalX, rowTextY, { width: subtotalWidth, align: "right" });
+      doc.text(formatCents(financials.subtotalInCents), subtotalX, contentY, { width: subtotalWidth, align: "right" });
 
-      // Row border
       doc.strokeColor(COLORS.BORDER)
          .lineWidth(0.5)
-         .moveTo(leftMargin, y + rowHeight)
-         .lineTo(rightMargin, y + rowHeight)
+         .moveTo(leftMargin, y + actualRowHeight)
+         .lineTo(rightMargin, y + actualRowHeight)
          .stroke();
 
-      y += rowHeight;
+      y += actualRowHeight;
    }
 
    y += 10;

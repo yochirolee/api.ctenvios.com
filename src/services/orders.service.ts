@@ -122,7 +122,6 @@ export const ordersService = {
                status: Status.IN_AGENCY,
                user_id,
                agency_id,
-               current_agency_id: agency_id,
                service_id,
                order_id: orderId,
             })),

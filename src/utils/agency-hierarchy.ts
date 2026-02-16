@@ -368,14 +368,14 @@ export interface HierarchicalDebtInfo {
  * - B owes A the TOTAL cost (direct)
  * 
  * @param receiver_agency_id - Agency receiving the parcels (e.g., A)
- * @param parcels - Parcels being received with current_agency_id and order_items (including all fees)
+ * @param parcels - Parcels with order_items; holder is holder_agency_id (or agency_id if not set)
  * @param dispatch_id - Dispatch ID for reference (logging)
  */
 export const generateHierarchicalDebts = async (
    receiver_agency_id: number,
    parcels: Array<{
       id: number;
-      current_agency_id: number | null;
+      holder_agency_id?: number | null;
       agency_id: number | null;
       weight: any;
       order_items: Array<{
@@ -397,7 +397,7 @@ export const generateHierarchicalDebts = async (
    const allDebts: HierarchicalDebtInfo[] = [];
    const errors: string[] = [];
 
-   // Group parcels by holder agency (current_agency_id, fallback to agency_id)
+   // Group parcels by holder agency (holder_agency_id, fallback to agency_id)
    const parcelsByHolder = new Map<
       number,
       {
@@ -409,10 +409,10 @@ export const generateHierarchicalDebts = async (
    >();
 
    for (const parcel of parcels) {
-      const holder_agency_id = parcel.current_agency_id ?? parcel.agency_id;
+      const holder_agency_id = parcel.holder_agency_id ?? parcel.agency_id;
 
       if (!holder_agency_id) {
-         errors.push(`Parcel ${parcel.id} has no current_agency_id or agency_id`);
+         errors.push(`Parcel ${parcel.id} has no holder_agency_id or agency_id`);
          continue;
       }
 
@@ -538,17 +538,17 @@ export const generateHierarchicalDebts = async (
  * - Other charges
  * 
  * Example: A receives from B (which includes parcels originally from C)
- * - Parcels with current_agency = B → B owes A the TOTAL cost of those parcels
+ * - Parcels with holder = B → B owes A the TOTAL cost of those parcels
  * 
  * @param receiver_agency_id - Agency receiving the parcels
- * @param parcels - Parcels being received with current_agency_id and order_items (including all fees)
+ * @param parcels - Parcels with order_items; holder is holder_agency_id (or agency_id if not set)
  * @param dispatch_id - Dispatch ID for reference
  */
 export const generateDispatchDebts = async (
    receiver_agency_id: number,
    parcels: Array<{
       id: number;
-      current_agency_id: number | null;
+      holder_agency_id?: number | null;
       agency_id: number | null; // Original creator agency (fallback)
       weight: any;
       order_items: Array<{
@@ -569,7 +569,7 @@ export const generateDispatchDebts = async (
 ): Promise<DispatchDebtInfo[]> => {
    const debts: DispatchDebtInfo[] = [];
    
-   // Group parcels by holder agency (current_agency_id, fallback to agency_id)
+   // Group parcels by holder agency (holder_agency_id, fallback to agency_id)
    const parcelsByHolder = new Map<number, {
       weight: number;
       parcels_count: number;
@@ -579,11 +579,10 @@ export const generateDispatchDebts = async (
    }>();
    
    for (const parcel of parcels) {
-      // Determine holder: use current_agency_id if set, otherwise fallback to agency_id
-      const holder_agency_id = parcel.current_agency_id ?? parcel.agency_id;
+      const holder_agency_id = parcel.holder_agency_id ?? parcel.agency_id;
       
       if (!holder_agency_id) {
-         console.warn(`[generateDispatchDebts] Parcel ${parcel.id} has no current_agency_id or agency_id`);
+         console.warn(`[generateDispatchDebts] Parcel ${parcel.id} has no holder_agency_id or agency_id`);
          continue;
       }
       

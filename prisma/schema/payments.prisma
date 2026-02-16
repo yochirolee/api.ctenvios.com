@@ -55,4 +55,23 @@ model InterAgencyDebt {
   @@index([debtor_agency_id, status])
 }
 
+model DispatchPayment {
+  id              Int           @id @default(autoincrement())
+  dispatch_id     Int
+  amount_in_cents Int           @default(0)
+  charge_in_cents Int           @default(0)
+  method          PaymentMethod
+  reference       String?
+  date            DateTime      @db.Timestamptz(3) @default(now())
+  notes           String?
+  created_at      DateTime      @db.Timestamptz(3) @default(now())
+  updated_at      DateTime      @db.Timestamptz(3) @updatedAt
+  paid_by_id      String?
+  dispatch        Dispatch      @relation(fields: [dispatch_id], references: [id], onDelete: Cascade)
+  paid_by         User?         @relation("dispatch_payments_paid_by", fields: [paid_by_id], references: [id], onDelete: SetNull)
+
+  @@index([dispatch_id])
+  @@index([paid_by_id])
+}
+
 

@@ -4,6 +4,7 @@ import {
    Dispatch,
    DispatchStatus,
    Parcel,
+   PaymentMethod,
    PaymentStatus,
    Prisma,
    Status,
@@ -13,7 +14,7 @@ import {
 } from "@prisma/client";
 import { AppError } from "../common/app-errors";
 import parcelsRepository from "./parcels.repository";
-import { calculateDispatchCost } from "../utils/dispatch-utils";
+import { calculateDispatchCostFromPdfLogic } from "../utils/dispatch-utils";
 import interAgencyDebtsRepository from "./inter-agency-debts.repository";
 import { determineHierarchyDebts, generateDispatchDebts, generateHierarchicalDebts } from "../utils/agency-hierarchy";
 import { updateOrderStatusFromParcel } from "../utils/order-status-calculator";
@@ -24,6 +25,8 @@ import {
    isForwarderAgencyInTx,
    getAllChildAgenciesInTx,
 } from "../utils/dispatch-validation";
+import { PAYMENT_CONFIG } from "../config/payment.config";
+import { formatCents } from "../utils/utils";
 
 // Allowed statuses for parcels to be added to dispatch
 const ALLOWED_DISPATCH_STATUSES: Status[] = [
@@ -106,6 +109,21 @@ const calculateDispatchStatus = async (
    // Keep current status for RECEIVED, DISCREPANCY, CANCELLED
    return currentStatus;
 };
+
+/**
+ * Derive holder agency: who currently has the parcel.
+ * - No dispatch → agency_id (origin). With dispatch RECEIVED/DISCREPANCY → receiver; else → sender.
+ */
+function getHolderAgencyId(parcel: {
+   agency_id: number | null;
+   dispatch_id?: number | null;
+   dispatch?: { status: DispatchStatus; sender_agency_id: number; receiver_agency_id: number | null } | null;
+}): number | null {
+   if (!parcel.dispatch_id || !parcel.dispatch) return parcel.agency_id;
+   const { status, sender_agency_id, receiver_agency_id } = parcel.dispatch;
+   if (status === DispatchStatus.RECEIVED || status === DispatchStatus.DISCREPANCY) return receiver_agency_id ?? parcel.agency_id;
+   return sender_agency_id;
+}
 
 /**
  * Recursively checks if receiver_agency_id is a descendant (child, grandchild, etc.) of sender_agency_id
@@ -250,9 +268,9 @@ const dispatch = {
       const where: Prisma.DispatchWhereInput = {
          // If dispatch_id is provided, filter by specific dispatch
          ...(dispatch_id && { id: dispatch_id }),
-         // If agency_id is provided, filter by sender or receiver agency
+         // If agency_id is provided, filter by the agency that created the dispatch (creator's agency)
          ...(agency_id && {
-            OR: [{ sender_agency_id: agency_id }, { receiver_agency_id: agency_id }],
+            created_by: { agency_id },
          }),
          // If status is provided, filter by dispatch status
          ...(status && { status }),
@@ -267,9 +285,7 @@ const dispatch = {
             id: true,
             status: true,
             payment_status: true,
-            payment_date: true,
-            payment_method: true,
-            payment_reference: true,
+            paid_in_cents: true,
             created_at: true,
             updated_at: true,
             cost_in_cents: true,
@@ -309,7 +325,7 @@ const dispatch = {
             },
          },
          orderBy: {
-            created_at: "desc",
+            updated_at: "desc",
          },
       });
       const total = await prisma.dispatch.count({ where });
@@ -318,6 +334,7 @@ const dispatch = {
    getById: async (id: number): Promise<Dispatch | null> => {
       const dispatch = await prisma.dispatch.findUnique({
          where: { id: id },
+         include: { payments: true },
       });
       return dispatch;
    },
@@ -366,6 +383,19 @@ const dispatch = {
                   creditor_agency: { select: { name: true } },
                },
             },
+            payments: {
+               orderBy: { date: "desc" },
+               select: {
+                  id: true,
+                  amount_in_cents: true,
+                  charge_in_cents: true,
+                  method: true,
+                  reference: true,
+                  date: true,
+                  notes: true,
+                  paid_by: { select: { id: true, name: true } },
+               },
+            },
          },
       });
       return dispatch;
@@ -403,6 +433,170 @@ const dispatch = {
 
       return { parcels, total };
    },
+
+   /**
+    * Get all payments for a dispatch (ordered by date desc). Same shape as order payments.
+    */
+   getPayments: async (dispatchId: number) => {
+      const payments = await prisma.dispatchPayment.findMany({
+         where: { dispatch_id: dispatchId },
+         orderBy: { date: "desc" },
+         include: {
+            paid_by: { select: { id: true, name: true } },
+         },
+      });
+      return payments;
+   },
+
+   /**
+    * Recompute dispatch payment_status from sum of payments vs cost_in_cents.
+    */
+   recomputePaymentStatus: async (dispatchId: number): Promise<PaymentStatus> => {
+      const [dispatch, sumResult] = await prisma.$transaction([
+         prisma.dispatch.findUnique({
+            where: { id: dispatchId },
+            select: { cost_in_cents: true },
+         }),
+         prisma.dispatchPayment.aggregate({
+            where: { dispatch_id: dispatchId },
+            _sum: { amount_in_cents: true },
+         }),
+      ]);
+      if (!dispatch) return PaymentStatus.PENDING;
+      const totalPaid = sumResult._sum.amount_in_cents ?? 0;
+      const cost = dispatch.cost_in_cents;
+      const status: PaymentStatus =
+         totalPaid >= cost ? PaymentStatus.PAID : totalPaid > 0 ? PaymentStatus.PARTIALLY_PAID : PaymentStatus.PENDING;
+      await prisma.dispatch.update({
+         where: { id: dispatchId },
+         data: { payment_status: status, paid_in_cents: totalPaid },
+      });
+      return status;
+   },
+
+   /**
+    * Add a payment to a dispatch. Same logic as order payments:
+    * - Only when dispatch status is RECEIVED
+    * - Already PAID dispatches cannot receive more payments
+    * - Card payments get a processing fee (charge_in_cents)
+    * - Total amount cannot exceed dispatch cost_in_cents
+    */
+   addPayment: async (
+      dispatchId: number,
+      data: {
+         amount_in_cents: number;
+         charge_in_cents?: number;
+         method: PaymentMethod;
+         reference?: string | null;
+         date?: Date | null;
+         notes?: string | null;
+      },
+      paid_by_id: string,
+   ) => {
+      if (!data.amount_in_cents || data.amount_in_cents <= 0) {
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Payment amount must be greater than 0");
+      }
+
+      return prisma.$transaction(async (tx) => {
+         const dispatch = await tx.dispatch.findUnique({
+            where: { id: dispatchId },
+            select: { status: true, cost_in_cents: true, payment_status: true },
+         });
+         if (!dispatch) {
+            throw new AppError(HttpStatusCodes.NOT_FOUND, `Dispatch with id ${dispatchId} not found`);
+         }
+         if (dispatch.status !== DispatchStatus.RECEIVED) {
+            throw new AppError(
+               HttpStatusCodes.BAD_REQUEST,
+               "Payments can only be added when the dispatch is RECEIVED. Complete reception first.",
+            );
+         }
+         if (dispatch.payment_status === PaymentStatus.PAID) {
+            throw new AppError(HttpStatusCodes.BAD_REQUEST, "Dispatch is already paid");
+         }
+
+         let charge = data.charge_in_cents ?? 0;
+         let notes = data.notes ?? null;
+         if (data.method === PaymentMethod.CREDIT_CARD || data.method === PaymentMethod.DEBIT_CARD) {
+            charge = Math.round(data.amount_in_cents * PAYMENT_CONFIG.CARD_PROCESSING_FEE_RATE);
+            notes = `Card processing fee (${PAYMENT_CONFIG.CARD_PROCESSING_FEE_RATE * 100}%): ${formatCents(charge)}`;
+         }
+
+         const currentTotal =
+            (
+               await tx.dispatchPayment.aggregate({
+                  where: { dispatch_id: dispatchId },
+                  _sum: { amount_in_cents: true },
+               })
+            )._sum.amount_in_cents ?? 0;
+         const cost = dispatch.cost_in_cents;
+         const remainingBalance = cost - currentTotal;
+         if (data.amount_in_cents > remainingBalance) {
+            throw new AppError(
+               HttpStatusCodes.BAD_REQUEST,
+               `Payment amount (${formatCents(data.amount_in_cents)}) exceeds remaining balance (${formatCents(remainingBalance)})`,
+            );
+         }
+
+         const payment = await tx.dispatchPayment.create({
+            data: {
+               dispatch_id: dispatchId,
+               amount_in_cents: data.amount_in_cents,
+               charge_in_cents: charge,
+               method: data.method,
+               reference: data.reference ?? null,
+               date: data.date ?? new Date(),
+               notes,
+               paid_by_id,
+            },
+            include: {
+               paid_by: { select: { id: true, name: true } },
+            },
+         });
+
+         const totalPaid = currentTotal + data.amount_in_cents;
+         const payment_status: PaymentStatus =
+            totalPaid >= cost
+               ? PaymentStatus.PAID
+               : totalPaid > 0
+                 ? PaymentStatus.PARTIALLY_PAID
+                 : PaymentStatus.PENDING;
+         await tx.dispatch.update({
+            where: { id: dispatchId },
+            data: { payment_status, paid_in_cents: totalPaid },
+         });
+         return payment;
+      });
+   },
+
+   /**
+    * Delete a dispatch payment and recompute dispatch payment_status.
+    */
+   deletePayment: async (dispatchId: number, paymentId: number) => {
+      const payment = await prisma.dispatchPayment.findFirst({
+         where: { id: paymentId, dispatch_id: dispatchId },
+      });
+      if (!payment) {
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Payment not found");
+      }
+      await prisma.dispatchPayment.delete({ where: { id: paymentId } });
+      const [dispatch, sumResult] = await prisma.$transaction([
+         prisma.dispatch.findUnique({ where: { id: dispatchId }, select: { cost_in_cents: true } }),
+         prisma.dispatchPayment.aggregate({
+            where: { dispatch_id: dispatchId },
+            _sum: { amount_in_cents: true },
+         }),
+      ]);
+      const totalPaid = sumResult._sum.amount_in_cents ?? 0;
+      const cost = dispatch?.cost_in_cents ?? 0;
+      const payment_status: PaymentStatus =
+         totalPaid >= cost ? PaymentStatus.PAID : totalPaid > 0 ? PaymentStatus.PARTIALLY_PAID : PaymentStatus.PENDING;
+      await prisma.dispatch.update({
+         where: { id: dispatchId },
+         data: { payment_status, paid_in_cents: totalPaid },
+      });
+   },
+
    create: async (dispatch: Prisma.DispatchUncheckedCreateInput): Promise<Dispatch> => {
       const newDispatch = await prisma.$transaction(async (tx) => {
          // Ensure status is DRAFT if not provided
@@ -905,21 +1099,28 @@ const dispatch = {
          throw new AppError(HttpStatusCodes.NOT_FOUND, `Receiver agency with id ${receiver_agency_id} not found`);
       }
 
-      // Get dispatch with all parcels
+      // Get dispatch with all parcels (order + order_items for PDF-style cost: inter-agency rate, fees, delivery)
       const dispatch = await prisma.dispatch.findUnique({
          where: { id: dispatchId },
          include: {
             parcels: {
                include: {
-                  agency: true, // Necesario para obtener agency_id
+                  agency: true,
                   order_items: {
                      include: {
                         rate: {
                            include: {
                               product: true,
+                              service: true,
                               pricing_agreement: true,
                            },
                         },
+                     },
+                  },
+                  order: {
+                     select: {
+                        id: true,
+                        order_items: { select: { delivery_fee_in_cents: true } },
                      },
                   },
                },
@@ -931,8 +1132,11 @@ const dispatch = {
          throw new AppError(HttpStatusCodes.NOT_FOUND, `Dispatch with id ${dispatchId} not found`);
       }
 
-      // Calculate declared_cost_in_cents using the utility function
-      const declared_cost_in_cents = calculateDispatchCost(dispatch);
+      const declared_cost_in_cents = await calculateDispatchCostFromPdfLogic(
+         dispatch.parcels,
+         sender_agency_id,
+         receiver_agency_id,
+      );
 
       // Determinar deudas jerárquicas
       const hierarchyDebts = await determineHierarchyDebts(
@@ -1445,7 +1649,7 @@ const dispatch = {
          // Determine the appropriate status for received parcels
          const receivedParcelStatus = receiverIsForwarder ? Status.IN_WAREHOUSE : Status.RECEIVED_IN_DISPATCH;
 
-         // 1. Fetch all parcels
+         // 1. Fetch all parcels (order for delivery in PDF-style cost)
          const parcels = await tx.parcel.findMany({
             where: {
                tracking_number: { in: tracking_numbers },
@@ -1461,6 +1665,12 @@ const dispatch = {
                            pricing_agreement: true,
                         },
                      },
+                  },
+               },
+               order: {
+                  select: {
+                     id: true,
+                     order_items: { select: { delivery_fee_in_cents: true } },
                   },
                },
             },
@@ -1486,8 +1696,7 @@ const dispatch = {
                continue;
             }
 
-            // Determine holder: current_agency_id if set, otherwise agency_id
-            const holder_agency_id = parcel.current_agency_id ?? parcel.agency_id;
+            const holder_agency_id = parcel.agency_id;
 
             if (!holder_agency_id) {
                details.push({
@@ -1543,7 +1752,12 @@ const dispatch = {
                totalWeight += Number(p.weight);
             }
 
-            // Create dispatch with RECEIVED status
+            // Create dispatch with RECEIVED status (cost = PDF logic: inter-agency rate + fees + delivery)
+            const receivedCost = await calculateDispatchCostFromPdfLogic(
+               agencyParcels,
+               sender_agency_id,
+               receiver_agency_id,
+            );
             const dispatch = await tx.dispatch.create({
                data: {
                   sender_agency_id,
@@ -1555,6 +1769,8 @@ const dispatch = {
                   received_parcels_count: agencyParcels.length,
                   declared_weight: Math.round(totalWeight * 100) / 100,
                   weight: Math.round(totalWeight * 100) / 100,
+                  cost_in_cents: receivedCost,
+                  declared_cost_in_cents: receivedCost,
                },
             });
 
@@ -1567,7 +1783,6 @@ const dispatch = {
                data: {
                   dispatch_id: dispatch.id,
                   status: receivedParcelStatus,
-                  current_agency_id: receiver_agency_id, // Update holder
                },
             });
 
@@ -1653,7 +1868,7 @@ const dispatch = {
    }> => {
       // All logic inside transaction
       const result = await prisma.$transaction(async (tx) => {
-         // 1. Get dispatch with received parcels and all pricing relations
+         // 1. Get dispatch with received parcels and all pricing relations (order for delivery in cost)
          const dispatch = await tx.dispatch.findUnique({
             where: { id: dispatchId },
             include: {
@@ -1666,9 +1881,16 @@ const dispatch = {
                            rate: {
                               include: {
                                  product: true,
+                                 service: true,
                                  pricing_agreement: true,
                               },
                            },
+                        },
+                     },
+                     order: {
+                        select: {
+                           id: true,
+                           order_items: { select: { delivery_fee_in_cents: true } },
                         },
                      },
                   },
@@ -1693,8 +1915,12 @@ const dispatch = {
             throw new AppError(HttpStatusCodes.BAD_REQUEST, `Dispatch has no receiver agency assigned`);
          }
 
-         // 2. Calculate actual cost based on received parcels
-         const actual_cost_in_cents = calculateDispatchCost(dispatch);
+         // 2. Calculate actual cost (same as dispatch PDF: inter-agency rate + fees + delivery)
+         const actual_cost_in_cents = await calculateDispatchCostFromPdfLogic(
+            dispatch.parcels,
+            dispatch.sender_agency_id,
+            dispatch.receiver_agency_id,
+         );
 
          // Count received parcels
          const received_parcels_count = dispatch.parcels.length;
@@ -1768,7 +1994,6 @@ const dispatch = {
                weight: Math.round(actualWeight * 100) / 100,
                received_parcels_count,
                status: has_discrepancy ? DispatchStatus.DISCREPANCY : DispatchStatus.RECEIVED,
-               payment_notes: discrepancy_notes,
             },
          });
 
@@ -1869,7 +2094,6 @@ const dispatch = {
             },
             include: {
                agency: true,
-               current_agency: true,
                dispatch: {
                   select: {
                      id: true,
@@ -1879,20 +2103,20 @@ const dispatch = {
                   },
                },
                order_items: {
-                  select: {
-                     weight: true,
-                     price_in_cents: true,
-                     customs_fee_in_cents: true,
-                     insurance_fee_in_cents: true,
-                     delivery_fee_in_cents: true,
-                     charge_fee_in_cents: true,
+                  include: {
                      rate: {
-                        select: {
-                           product_id: true,
-                           service_id: true,
-                           product: { select: { unit: true } },
+                        include: {
+                           product: true,
+                           service: true,
+                           pricing_agreement: true,
                         },
                      },
+                  },
+               },
+               order: {
+                  select: {
+                     id: true,
+                     order_items: { select: { delivery_fee_in_cents: true } },
                   },
                },
             },
@@ -1994,15 +2218,14 @@ const dispatch = {
                continue;
             }
 
-            // Determine holder: current_agency_id if set, otherwise agency_id (creator)
-            const holder_agency_id = parcel.current_agency_id ?? parcel.agency_id;
+            const holder_agency_id = getHolderAgencyId(parcel);
 
             if (!holder_agency_id) {
                details.push({
                   tracking_number: tn,
                   status: "skipped",
                   action: "error",
-                  reason: "Parcel has no current_agency_id or agency_id",
+                  reason: "Parcel has no agency (derive from dispatch or agency_id)",
                });
                continue;
             }
@@ -2056,9 +2279,8 @@ const dispatch = {
             // It can now be received in a NEW dispatch by the next agency in the chain.
             // Example: C→B (D1 RECEIVED), now B→A should create a new dispatch D2
             if (dispatchData.status === DispatchStatus.RECEIVED || dispatchData.status === DispatchStatus.DISCREPANCY) {
-               // Verify the current holder (current_agency_id) matches the previous receiver
-               // This ensures the parcel actually arrived at its destination before moving on
-               if (parcel.current_agency_id === dispatchData.receiver_agency_id) {
+               // Holder for RECEIVED/DISCREPANCY is the receiver; ensure parcel is at that agency before moving on
+               if (holder_agency_id === dispatchData.receiver_agency_id) {
                   // Parcel completed previous journey, treat as "without active dispatch"
                   const billingSenderId = await resolveBillingSender(holder_agency_id);
                   if (!withoutDispatch.has(billingSenderId)) {
@@ -2073,7 +2295,7 @@ const dispatch = {
                   continue;
                }
 
-               // If current_agency doesn't match dispatch receiver, something is wrong
+               // If holder doesn't match dispatch receiver, parcel not yet at destination
                details.push({
                   tracking_number: tn,
                   status: "skipped",
@@ -2219,7 +2441,6 @@ const dispatch = {
                      data: {
                         dispatch_id: dispatchId,
                         status: receivedParcelStatus,
-                        current_agency_id: receiver_agency_id, // Update holder
                      },
                   });
 
@@ -2251,10 +2472,7 @@ const dispatch = {
                // Mark existing parcels as received
                await tx.parcel.updateMany({
                   where: { id: { in: receivedParcels.map((p) => p.id) } },
-                  data: {
-                     status: receivedParcelStatus,
-                     current_agency_id: receiver_agency_id, // Update holder
-                  },
+                  data: { status: receivedParcelStatus },
                });
 
                await tx.parcelEvent.createMany({
@@ -2270,8 +2488,14 @@ const dispatch = {
                   })),
                });
 
-               // Update dispatch as RECEIVED
+               // Update dispatch as RECEIVED (cost = PDF logic: inter-agency rate + fees + delivery)
                const finalParcelCount = receivedParcels.length + dispatchSurplus.length;
+               const allParcelsForCost = [...receivedParcels, ...dispatchSurplus];
+               const cost_in_cents = await calculateDispatchCostFromPdfLogic(
+                  allParcelsForCost,
+                  dispatchData.sender_agency_id,
+                  dispatchData.receiver_agency_id ?? receiver_agency_id,
+               );
                await tx.dispatch.update({
                   where: { id: dispatchId },
                   data: {
@@ -2282,6 +2506,8 @@ const dispatch = {
                      declared_parcels_count: finalParcelCount,
                      declared_weight: Math.round(totalWeight * 100) / 100,
                      weight: Math.round(totalWeight * 100) / 100,
+                     cost_in_cents,
+                     declared_cost_in_cents: cost_in_cents,
                   },
                });
 
@@ -2323,7 +2549,13 @@ const dispatch = {
                   extractedWeight += Number(p.weight);
                }
 
-               // Create NEW reception dispatch linked to origin
+               // Create NEW reception dispatch (cost = PDF logic)
+               const extractedParcels = [...receivedParcels, ...dispatchSurplus];
+               const extractedCost = await calculateDispatchCostFromPdfLogic(
+                  extractedParcels,
+                  dispatchData.sender_agency_id,
+                  receiver_agency_id,
+               );
                const receptionDispatch = await tx.dispatch.create({
                   data: {
                      sender_agency_id: dispatchData.sender_agency_id,
@@ -2331,10 +2563,12 @@ const dispatch = {
                      created_by_id: user_id,
                      received_by_id: user_id,
                      status: DispatchStatus.RECEIVED,
-                     declared_parcels_count: receivedParcels.length + dispatchSurplus.length,
-                     received_parcels_count: receivedParcels.length + dispatchSurplus.length,
+                     declared_parcels_count: extractedParcels.length,
+                     received_parcels_count: extractedParcels.length,
                      declared_weight: Math.round(extractedWeight * 100) / 100,
                      weight: Math.round(extractedWeight * 100) / 100,
+                     cost_in_cents: extractedCost,
+                     declared_cost_in_cents: extractedCost,
                      origin_dispatch_id: dispatchId,
                   },
                });
@@ -2345,7 +2579,6 @@ const dispatch = {
                   data: {
                      dispatch_id: receptionDispatch.id,
                      status: receivedParcelStatus,
-                     current_agency_id: receiver_agency_id, // Update holder
                   },
                });
 
@@ -2369,7 +2602,6 @@ const dispatch = {
                      data: {
                         dispatch_id: receptionDispatch.id,
                         status: receivedParcelStatus,
-                        current_agency_id: receiver_agency_id, // Update holder
                      },
                   });
 
@@ -2468,6 +2700,11 @@ const dispatch = {
                totalWeight += Number(p.weight);
             }
 
+            const newDispatchCost = await calculateDispatchCostFromPdfLogic(
+               agencyParcels,
+               sender_agency_id,
+               receiver_agency_id,
+            );
             const newDispatch = await tx.dispatch.create({
                data: {
                   sender_agency_id,
@@ -2479,6 +2716,8 @@ const dispatch = {
                   received_parcels_count: agencyParcels.length,
                   declared_weight: Math.round(totalWeight * 100) / 100,
                   weight: Math.round(totalWeight * 100) / 100,
+                  cost_in_cents: newDispatchCost,
+                  declared_cost_in_cents: newDispatchCost,
                },
             });
 
@@ -2487,7 +2726,6 @@ const dispatch = {
                data: {
                   dispatch_id: newDispatch.id,
                   status: receivedParcelStatus,
-                  current_agency_id: receiver_agency_id, // Update holder
                },
             });
 
@@ -2532,6 +2770,11 @@ const dispatch = {
                (d) => d.sender_agency_id === group.receiver_agency_id,
             );
 
+            const accountingCost = await calculateDispatchCostFromPdfLogic(
+               group.parcels,
+               group.sender_agency_id,
+               group.receiver_agency_id,
+            );
             const accountingDispatch = await tx.dispatch.create({
                data: {
                   sender_agency_id: group.sender_agency_id,
@@ -2543,8 +2786,9 @@ const dispatch = {
                   received_parcels_count: group.parcels.length,
                   declared_weight: Math.round(totalWeight * 100) / 100,
                   weight: Math.round(totalWeight * 100) / 100,
+                  cost_in_cents: accountingCost,
+                  declared_cost_in_cents: accountingCost,
                   origin_dispatch_id: matchingReceptionDispatch?.dispatch_id,
-                  payment_notes: "ACCOUNTING DISPATCH - Auto generated",
                },
             });
 
@@ -2582,7 +2826,7 @@ const dispatch = {
                receiver_agency_id,
                dispatchParcels.map((p) => ({
                   id: p.id,
-                  current_agency_id: billingSenderId, // Bill sender (B)
+                  holder_agency_id: billingSenderId,
                   agency_id: p.agency_id,
                   weight: p.weight,
                   order_items: p.order_items.map((oi) => ({
@@ -2642,7 +2886,7 @@ const dispatch = {
                dispatchInfo.receiver_agency_id,
                dispatchParcels.map((p) => ({
                   id: p.id,
-                  current_agency_id: dispatchInfo.sender_agency_id, // Holder (C)
+                  holder_agency_id: dispatchInfo.sender_agency_id,
                   agency_id: p.agency_id,
                   weight: p.weight,
                   order_items: p.order_items.map((oi) => ({

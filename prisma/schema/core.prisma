@@ -22,8 +22,8 @@ model User {
   messenger_routes        DeliveryRoute[]        @relation("route_messenger")
   discounts               Discount[]
   created_dispatches      Dispatch[]             @relation("created_by")
-  paid_dispatches         Dispatch[]             @relation("paid_by")
   received_dispatches     Dispatch[]             @relation("received_by")
+  dispatch_payments       DispatchPayment[]      @relation("dispatch_payments_paid_by")
   created_flights         Flight[]               @relation("created_flights")
   flight_events           FlightEvent[]          @relation("flight_events")
   paid_debts              InterAgencyDebt[]      @relation("DebtPaidBy")
@@ -84,7 +84,6 @@ model Agency {
   order_items           OrderItem[]
   pallets               Pallet[]
   created_parcels       Parcel[]          @relation("created_parcels")
-  holding_parcels       Parcel[]          @relation("holding_parcels")
   partners              Partner[]
   products              Product[]
   shipping_rates        ShippingRate[]

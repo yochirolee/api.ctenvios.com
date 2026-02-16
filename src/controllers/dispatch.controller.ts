@@ -22,10 +22,26 @@ interface DispatchRequest {
    params: {
       id?: string;
       hbl?: string;
+      paymentId?: string;
    };
 }
 
 export const dispatchController = {
+   /**
+    * GET /dispatches/verify-parcel/:hbl - Look up parcel by HBL; returns parcel + dispatch (if any).
+    */
+   verifyParcel: async (req: DispatchRequest, res: Response): Promise<void> => {
+      const hbl = req.params.hbl;
+      if (!hbl) {
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "HBL is required");
+      }
+      const parcel = await repository.parcels.getByHblForVerify(hbl);
+      if (!parcel) {
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Parcel not found");
+      }
+      res.status(200).json(parcel);
+   },
+
    /**
     * Get all dispatches with pagination and filters
     * ROOT/ADMIN can see all, others only their agency's
@@ -116,12 +132,7 @@ export const dispatchController = {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must be associated with an agency");
       }
 
-      const allowedStatuses: Status[] = [
-         Status.IN_AGENCY,
-         Status.IN_PALLET,
-         Status.IN_DISPATCH,
-         Status.IN_WAREHOUSE,
-      ];
+      const allowedStatuses: Status[] = [Status.IN_AGENCY, Status.IN_PALLET, Status.IN_DISPATCH, Status.IN_WAREHOUSE];
       const { rows, total } = await repository.parcels.listFiltered(
          {
             agency_id: user.agency_id,
@@ -457,6 +468,41 @@ export const dispatchController = {
       );
 
       res.status(200).json({ message: "Dispatch deleted successfully", dispatch: deletedDispatch });
+   },
+
+   /**
+    * Get all payments for a dispatch
+    */
+   getPayments: async (req: DispatchRequest, res: Response): Promise<void> => {
+      const dispatchId = parseInt(req.params.id!);
+      const payments = await repository.dispatch.getPayments(dispatchId);
+      res.status(200).json(payments);
+   },
+
+   /**
+    * Add a payment to a dispatch. Only allowed when dispatch status is RECEIVED.
+    */
+   addPayment: async (req: DispatchRequest, res: Response): Promise<void> => {
+      const dispatchId = parseInt(req.params.id!);
+      const user = req.user!;
+      const { amount_in_cents, charge_in_cents, method, reference, date, notes } = req.body;
+
+      const payment = await repository.dispatch.addPayment(
+         dispatchId,
+         { amount_in_cents, charge_in_cents, method, reference, date, notes },
+         user.id,
+      );
+      res.status(201).json(payment);
+   },
+
+   /**
+    * Delete a dispatch payment
+    */
+   deletePayment: async (req: DispatchRequest, res: Response): Promise<void> => {
+      const dispatchId = parseInt(req.params.id!);
+      const paymentId = parseInt(req.params.paymentId!);
+      await repository.dispatch.deletePayment(dispatchId, paymentId);
+      res.status(200).json({ message: "Payment deleted" });
    },
 };
 
