@@ -70,7 +70,7 @@ export async function calculateDispatchCostFromPdfLogic(
          const product_id = item.rate?.product?.id;
          const service_id = item.rate?.service?.id ?? item.service_id ?? undefined;
          const unit = (item.unit ?? item.rate?.product?.unit ?? "PER_LB") as string;
-         const itemWeight = toNumber(item.weight);
+         const itemWeight = toNumber(item.weight as unknown as number);
 
          let unitRateInCents = 0;
          if (receiver_agency_id && product_id && service_id) {

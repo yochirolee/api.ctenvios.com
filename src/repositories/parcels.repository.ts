@@ -256,6 +256,8 @@ const parcels = {
          agency_id?: number;
          agency_id_in?: number[];
          description?: string;
+         customer?: string;
+         receiver?: string;
          dispatch_id_null?: boolean;
          container_id_null?: boolean;
          flight_id_null?: boolean;
@@ -321,6 +323,33 @@ const parcels = {
       const descTrim = filters.description?.trim();
       if (descTrim && descTrim !== "") {
          where.description = { contains: descTrim, mode: "insensitive" };
+      }
+
+      const customerTrim = filters.customer?.trim();
+      const receiverTrim = filters.receiver?.trim();
+      const orderConditions: Prisma.OrderWhereInput[] = [];
+      if (customerTrim && customerTrim !== "") {
+         orderConditions.push({
+            customer: {
+               OR: [
+                  { first_name: { contains: customerTrim, mode: "insensitive" } },
+                  { last_name: { contains: customerTrim, mode: "insensitive" } },
+               ],
+            },
+         });
+      }
+      if (receiverTrim && receiverTrim !== "") {
+         orderConditions.push({
+            receiver: {
+               OR: [
+                  { first_name: { contains: receiverTrim, mode: "insensitive" } },
+                  { last_name: { contains: receiverTrim, mode: "insensitive" } },
+               ],
+            },
+         });
+      }
+      if (orderConditions.length > 0) {
+         where.order = orderConditions.length === 1 ? orderConditions[0]! : { AND: orderConditions };
       }
 
       if (filters.dispatch_id_null === true) where.dispatch_id = null;
