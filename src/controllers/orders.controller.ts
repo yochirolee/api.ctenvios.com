@@ -3,7 +3,7 @@ import { services } from "../services";
 import { parseDateFlexible } from "../types/types";
 import { buildNameSearchFilter } from "../types/types";
 import { getDayRangeUTC } from "../utils/utils";
-import { PaymentStatus, Roles } from "@prisma/client";
+import { AgencyType, PaymentStatus, Roles } from "@prisma/client";
 import prisma from "../lib/prisma.client";
 import repository from "../repositories";
 import { AppError } from "../common/app-errors";
@@ -67,8 +67,13 @@ export const ordersController = {
             });
          }
 
-         // Check if user is admin (can filter by agency_id)
+         // Check if user can see all orders: admin roles or user's agency is FORWARDER
          const isAdmin = [Roles.ROOT, Roles.ADMINISTRATOR].includes(user.role);
+         let canSeeAllOrders = isAdmin;
+         if (!canSeeAllOrders && user.agency_id) {
+            const agency = await repository.agencies.getById(user.agency_id);
+            if (agency?.agency_type === AgencyType.FORWARDER) canSeeAllOrders = true;
+         }
 
          // 🔥 OPTIMIZACIÓN: Path diferente para listado simple vs búsqueda
          const hasSearch = searchTerm.length > 0;
@@ -104,13 +109,13 @@ export const ordersController = {
             }
 
             // Filtro RBAC y agency_id
-            if (isAdmin) {
-               // Admin can filter by specific agency_id if provided
+            if (canSeeAllOrders) {
+               // Admin or FORWARDER agency: can filter by specific agency_id if provided
                if (agency_id) {
                   whereClause.agency_id = parseInt(agency_id as string);
                }
             } else {
-               // Non-admin can only see their agency's orders
+               // Other agencies: only their orders
                whereClause.agency_id = user.agency_id;
             }
 
@@ -236,13 +241,13 @@ export const ordersController = {
          }
 
          // Filtro RBAC y agency_id
-         if (isAdmin) {
-            // Admin can filter by specific agency_id if provided
+         if (canSeeAllOrders) {
+            // Admin or FORWARDER agency: can filter by specific agency_id if provided
             if (agency_id) {
                filters.push({ agency_id: parseInt(agency_id as string) });
             }
          } else {
-            // Non-admin can only see their agency's orders
+            // Other agencies: only their orders
             filters.push({ agency_id: user.agency_id });
          }
 
