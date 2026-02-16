@@ -1,5 +1,5 @@
 import { Response } from "express";
-import { DispatchStatus, PaymentStatus, Roles, Status } from "@prisma/client";
+import { AgencyType, DispatchStatus, PaymentStatus, Roles, Status } from "@prisma/client";
 import repository from "../repositories";
 import { AppError } from "../common/app-errors";
 import HttpStatusCodes from "../common/https-status-codes";
@@ -50,7 +50,7 @@ export const dispatchController = {
       const { page = "1", limit = "25", status, payment_status, dispatch_id } = req.query;
       const user = req.user!;
 
-      const adminRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
+      const adminRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR, ];
       const isAdmin = adminRoles.includes(user.role);
 
       if (!isAdmin && !user.agency_id) {
@@ -72,10 +72,21 @@ export const dispatchController = {
          );
       }
 
+      // ROOT/ADMIN see all; users in a FORWARDER agency see all; others see only dispatches created by their agency
+      let agencyFilter: number | undefined = user.agency_id ?? undefined;
+      if (!isAdmin && user.agency_id) {
+         const agency = await repository.agencies.getById(user.agency_id);
+         if (agency?.agency_type === AgencyType.FORWARDER) {
+            agencyFilter = undefined;
+         }
+      } else if (isAdmin) {
+         agencyFilter = undefined;
+      }
+
       const { dispatches: rows, total } = await repository.dispatch.get(
          parseInt(page),
          parseInt(limit),
-         isAdmin ? undefined : user.agency_id,
+         agencyFilter,
          status as DispatchStatus | undefined,
          payment_status as PaymentStatus | undefined,
          dispatch_id ? parseInt(dispatch_id) : undefined,
