@@ -29,12 +29,7 @@ import { PAYMENT_CONFIG } from "../config/payment.config";
 import { formatCents } from "../utils/utils";
 
 // Allowed statuses for parcels to be added to dispatch
-const ALLOWED_DISPATCH_STATUSES: Status[] = [
-   Status.IN_AGENCY,
-   Status.IN_PALLET,
-   Status.IN_DISPATCH,
-   Status.IN_WAREHOUSE,
-];
+const ALLOWED_DISPATCH_STATUSES: Status[] = [Status.IN_AGENCY, Status.IN_PALLET, Status.IN_DISPATCH];
 
 interface DispatchParcelListItem {
    id: number;
@@ -121,7 +116,8 @@ function getHolderAgencyId(parcel: {
 }): number | null {
    if (!parcel.dispatch_id || !parcel.dispatch) return parcel.agency_id;
    const { status, sender_agency_id, receiver_agency_id } = parcel.dispatch;
-   if (status === DispatchStatus.RECEIVED || status === DispatchStatus.DISCREPANCY) return receiver_agency_id ?? parcel.agency_id;
+   if (status === DispatchStatus.RECEIVED || status === DispatchStatus.DISCREPANCY)
+      return receiver_agency_id ?? parcel.agency_id;
    return sender_agency_id;
 }
 
@@ -270,7 +266,7 @@ const dispatch = {
          ...(dispatch_id && { id: dispatch_id }),
          // If agency_id is provided, filter by the agency that created the dispatch (creator's agency)
          ...(agency_id && {
-            created_by: { agency_id },
+            OR: [{ sender_agency_id: agency_id }, { receiver_agency_id: agency_id }],
          }),
          // If status is provided, filter by dispatch status
          ...(status && { status }),

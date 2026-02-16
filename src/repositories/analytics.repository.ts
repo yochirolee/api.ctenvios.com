@@ -1,4 +1,5 @@
 import prisma from "../lib/prisma.client";
+import { Status } from "@prisma/client";
 import { format } from "date-fns";
 import { getAdjustedDate, getTodayRangeUTC } from "../utils/utils";
 
@@ -27,12 +28,23 @@ interface DailySalesByAgencyResponse {
    grandTotal: number;
 }
 
+export interface PackagesAndWeightInAgenciesResponse {
+   agencies: Array<{
+      agencyId: number;
+      agencyName: string;
+      packagesCount: number;
+      totalWeight: number;
+   }>;
+   grandTotalPackages: number;
+   grandTotalWeight: number;
+}
+
 const analytics = {
    getSalesReport: async (
       year: number,
       agencyId: number,
       startDate: Date | undefined,
-      endDate: Date | undefined
+      endDate: Date | undefined,
    ): Promise<SalesReportResponse> => {
       const agencyFilter = agencyId ? `AND "agency_id" = ${agencyId}` : "";
 
@@ -99,7 +111,7 @@ const analytics = {
       year: number,
       agencyId: number,
       startDate: Date | undefined,
-      endDate: Date | undefined
+      endDate: Date | undefined,
    ): Promise<SalesReportResponse> => {
       const agencyFilter = agencyId ? `AND "agency_id" = ${agencyId}` : "";
 
@@ -170,7 +182,7 @@ const analytics = {
       year: number,
       startDate: Date | undefined,
       endDate: Date | undefined,
-      agencyId: number | undefined
+      agencyId: number | undefined,
    ): Promise<DailySalesByAgencyResponse> => {
       const agencyFilter = agencyId ? `AND o."agency_id" = ${agencyId}` : "";
 
@@ -283,6 +295,53 @@ const analytics = {
       return {
          agencies,
          grandTotal,
+      };
+   },
+   /**
+    * Packages and total weight per agency for parcels that are in agencies or dispatch-ready
+    * (Parcel Status: IN_AGENCY, IN_PALLET, IN_DISPATCH, IN_WAREHOUSE, RECEIVED_IN_DISPATCH).
+    */
+   getPackagesAndWeightInAgencies: async (agencyId?: number): Promise<PackagesAndWeightInAgenciesResponse> => {
+      const statusIn: Status[] = [Status.IN_AGENCY, Status.IN_PALLET, Status.IN_DISPATCH];
+
+      const grouped = await prisma.parcel.groupBy({
+         by: ["agency_id"],
+         where: {
+            deleted_at: null,
+            agency_id: agencyId ?? { not: null },
+            status: { in: statusIn },
+         },
+         _count: { id: true },
+         _sum: { weight: true },
+      });
+
+      const agencyIds = grouped.map((g) => g.agency_id).filter((id): id is number => id != null);
+      const agencyMap = new Map<number, string>();
+      if (agencyIds.length > 0) {
+         const agencies = await prisma.agency.findMany({
+            where: { id: { in: agencyIds } },
+            select: { id: true, name: true },
+         });
+         agencies.forEach((a) => agencyMap.set(a.id, a.name));
+      }
+
+      const agencies = grouped
+         .filter((g) => g.agency_id != null)
+         .map((g) => ({
+            agencyId: g.agency_id!,
+            agencyName: agencyMap.get(g.agency_id!) ?? "",
+            packagesCount: g._count.id,
+            totalWeight: Number(g._sum.weight ?? 0),
+         }))
+         .sort((a, b) => b.packagesCount - a.packagesCount || b.totalWeight - a.totalWeight);
+
+      const grandTotalPackages = agencies.reduce((sum, ag) => sum + ag.packagesCount, 0);
+      const grandTotalWeight = agencies.reduce((sum, ag) => sum + ag.totalWeight, 0);
+
+      return {
+         agencies,
+         grandTotalPackages,
+         grandTotalWeight,
       };
    },
 };

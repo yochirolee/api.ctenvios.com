@@ -2,7 +2,7 @@ import { Response } from "express";
 import { repository } from "../repositories";
 import { AppError } from "../common/app-errors";
 import HttpStatusCodes from "../common/https-status-codes";
-import { Roles } from "@prisma/client";
+import { AgencyType, Roles, Status } from "@prisma/client";
 
 // Admin roles that can see all agencies
 const ADMIN_ROLES: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
@@ -122,6 +122,43 @@ const analytics = {
       const report = await repository.analytics.getTodaySalesByAgency(isAdmin ? undefined : user.agency_id);
 
       res.status(200).json(report);
+   },
+   // All packages and weight per agency. Optional ?status=IN_AGENCY or ?status=IN_AGENCY,IN_DISPATCH
+   getPackagesAndWeightInAgencies: async (req: any, res: Response): Promise<void> => {
+      const user = req.user;
+      const { status: statusQuery } = req.query;
+      const isAdmin = isAdminUser(user.role);
+      let agencyId: number | undefined = user.agency_id ?? undefined;
+      if (!isAdmin && user.agency_id) {
+         const agency = await repository.agencies.getById(user.agency_id);
+         if (agency?.agency_type === AgencyType.FORWARDER) agencyId = undefined;
+      } else if (isAdmin) {
+         agencyId = undefined;
+      }
+
+      if (!isAdmin && !user.agency_id) {
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must belong to an agency");
+      }
+
+      const validStatuses = Object.values(Status) as Status[];
+      let statusIn: Status[] | undefined;
+      if (statusQuery) {
+         const parts = (typeof statusQuery === "string" ? statusQuery : String(statusQuery[0] ?? ""))
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
+         const parsed = parts.filter((s): s is Status => validStatuses.includes(s as Status));
+         if (parts.length > 0 && parsed.length !== parts.length) {
+            throw new AppError(
+               HttpStatusCodes.BAD_REQUEST,
+               `Invalid status. Valid values: ${validStatuses.join(", ")}`,
+            );
+         }
+         if (parsed.length > 0) statusIn = parsed;
+      }
+
+      const packages = await repository.analytics.getPackagesAndWeightInAgencies(agencyId, statusIn);
+      res.status(200).json(packages);
    },
 };
 
