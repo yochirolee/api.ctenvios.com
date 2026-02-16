@@ -495,9 +495,12 @@ export async function generateDispatchPDF(dispatch: DispatchPdfDetails): Promise
          descriptionLeft = truncated + "…";
       }
       const leftHeight = descriptionLeft ? doc.heightOfString(descriptionLeft, { width: descLeftWidth }) : 0;
-      const rightHeight = descriptionRight ? doc.heightOfString(descriptionRight, { width: descRightMinWidth }) : 0;
-      const descHeight = Math.max(leftHeight, rightHeight);
-      const actualRowHeight = Math.max(minRowHeight, Math.ceil(descHeight) + rowPaddingVertical * 2);
+      const rightHeight = descriptionRight ? doc.heightOfString(descriptionRight, { width: descriptionWidth - descLeftWidth - descGap }) : 0;
+      const descHeight = Math.max(Math.ceil(leftHeight), Math.ceil(rightHeight));
+      const rowContentHeight = descHeight + rowPaddingVertical * 2;
+      const ROW_LINE_BUFFER = 8;
+      const extraWrapBuffer = descHeight > lineHeight ? Math.ceil(lineHeight) : 0;
+      const actualRowHeight = Math.max(minRowHeight, rowContentHeight + ROW_LINE_BUFFER + extraWrapBuffer);
 
       if (y + actualRowHeight > doc.page.height - bottomMargin - 50) {
          doc.addPage();
