@@ -468,33 +468,35 @@ export async function generateDispatchPDF(dispatch: DispatchPdfDetails): Promise
    const maxDescriptionLines = 3;
    const lineHeight = doc.currentLineHeight();
 
+   const descRightMinWidth = 60;
+   const descGap = 8;
+   const descLeftWidth = descriptionWidth - descRightMinWidth - descGap;
+
    for (const [index, parcel] of dispatch.parcels.entries()) {
       const parcelItems = getOrderItemsForParcel(parcel);
-      let description =
+      let descriptionLeft =
          parcelItems.length > 0
             ? parcelItems
-                 .map((item) => {
-                    const unit = item.unit || item.rate?.product?.unit || "PER_LB";
-                    const part = item.description || "";
-                    if (unit === "FIXED" && item.rate?.product?.name) {
-                       return part ? `${part} (${item.rate.product.name})` : item.rate.product.name;
-                    }
-                    return part;
-                 })
+                 .map((item) => item.description || "")
                  .filter(Boolean)
                  .join(", ") || "N/A"
             : "N/A";
+      const productNames = parcelItems
+         .filter((item) => (item.unit || item.rate?.product?.unit || "PER_LB") === "FIXED" && item.rate?.product?.name)
+         .map((item) => item.rate!.product!.name!);
+      const descriptionRight = productNames.length > 0 ? (productNames.length === 1 ? `(${productNames[0]})` : productNames.join(", ")) : "";
 
       const maxDescHeight = maxDescriptionLines * lineHeight;
-      if (doc.heightOfString(description, { width: descriptionWidth }) > maxDescHeight) {
-         let truncated = description;
-         while (truncated.length > 0 && doc.heightOfString(truncated + "…", { width: descriptionWidth }) > maxDescHeight) {
+      if (descriptionLeft && doc.heightOfString(descriptionLeft, { width: descLeftWidth }) > maxDescHeight) {
+         let truncated = descriptionLeft;
+         while (truncated.length > 0 && doc.heightOfString(truncated + "…", { width: descLeftWidth }) > maxDescHeight) {
             truncated = truncated.slice(0, -1);
          }
-         description = truncated + "…";
+         descriptionLeft = truncated + "…";
       }
-
-      const descHeight = doc.heightOfString(description, { width: descriptionWidth });
+      const leftHeight = descriptionLeft ? doc.heightOfString(descriptionLeft, { width: descLeftWidth }) : 0;
+      const rightHeight = descriptionRight ? doc.heightOfString(descriptionRight, { width: descRightMinWidth }) : 0;
+      const descHeight = Math.max(leftHeight, rightHeight);
       const actualRowHeight = Math.max(minRowHeight, Math.ceil(descHeight) + rowPaddingVertical * 2);
 
       if (y + actualRowHeight > doc.page.height - bottomMargin - 50) {
@@ -525,7 +527,13 @@ export async function generateDispatchPDF(dispatch: DispatchPdfDetails): Promise
 
       doc.text(parcel.tracking_number, hblX, contentY, { width: hblWidth });
 
-      doc.text(description, descriptionX, contentY, { width: descriptionWidth });
+      doc.text(descriptionLeft, descriptionX, contentY, { width: descLeftWidth });
+      if (descriptionRight) {
+         doc.text(descriptionRight, descriptionX + descLeftWidth + descGap, contentY, {
+            width: descriptionWidth - descLeftWidth - descGap,
+            align: "right",
+         });
+      }
 
       const insuranceColor = financials.insuranceInCents === 0 ? COLORS.MUTED_FOREGROUND : COLORS.FOREGROUND;
       doc.font(FONTS.REGULAR).fontSize(7).fillColor(insuranceColor);
