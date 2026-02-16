@@ -82,7 +82,7 @@ export interface DispatchPdfDetails {
             service: { id: number } | null;
             rate: {
                price_in_cents: number;
-               product: { id: number; unit: string } | null;
+               product: { id: number; unit: string; name?: string } | null;
                service: { id: number } | null;
                pricing_agreement: { price_in_cents: number } | null;
             } | null;
@@ -473,7 +473,14 @@ export async function generateDispatchPDF(dispatch: DispatchPdfDetails): Promise
       let description =
          parcelItems.length > 0
             ? parcelItems
-                 .map((item) => item.description || "")
+                 .map((item) => {
+                    const unit = item.unit || item.rate?.product?.unit || "PER_LB";
+                    const part = item.description || "";
+                    if (unit === "FIXED" && item.rate?.product?.name) {
+                       return part ? `${part} (${item.rate.product.name})` : item.rate.product.name;
+                    }
+                    return part;
+                 })
                  .filter(Boolean)
                  .join(", ") || "N/A"
             : "N/A";

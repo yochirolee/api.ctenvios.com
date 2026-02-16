@@ -360,7 +360,18 @@ const dispatch = {
                                  include: {
                                     product: true,
                                     service: true,
-                                    pricing_agreement: true,
+                                    pricing_agreement: {
+                                       select: {
+                                          id: true,
+                                          price_in_cents: true,
+                                          product: {
+                                             select: {
+                                                id: true,
+                                                name: true,
+                                             },
+                                          },
+                                       },
+                                    },
                                  },
                               },
                            },
@@ -394,6 +405,8 @@ const dispatch = {
             },
          },
       });
+
+      console.log(dispatch);
       return dispatch;
    },
    getParcelsInDispatch: async (
