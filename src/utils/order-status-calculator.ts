@@ -116,24 +116,76 @@ export const calculateOrderStatus = (parcelStatuses: Status[]): Status => {
    return partialStatus;
 };
 
+/** Parcel row shape used for order status and status_details */
+interface ParcelStatusRow {
+   status: Status;
+   dispatch_id: number | null;
+   container_id: number | null;
+}
+
+/**
+ * Build a human-readable order status_details string from parcels
+ * e.g. "2 in Dispatch #5, 1 in Container 22", "All in Agency"
+ */
+export const buildOrderStatusDetails = (parcels: ParcelStatusRow[]): string => {
+   if (parcels.length === 0) {
+      return "";
+   }
+
+   const groups: Map<string, number> = new Map();
+   for (const p of parcels) {
+      const key =
+         p.container_id != null
+            ? `container:${p.container_id}`
+            : p.dispatch_id != null
+              ? `dispatch:${p.dispatch_id}`
+              : "agency";
+      groups.set(key, (groups.get(key) ?? 0) + 1);
+   }
+
+   const total = parcels.length;
+   const parts: string[] = [];
+   if (groups.has("agency")) {
+      const n = groups.get("agency")!;
+      parts.push(total === 1 && n === 1 ? "In agency" : `${n} in agency`);
+   }
+   for (const [key, n] of groups) {
+      if (key.startsWith("dispatch:")) {
+         const id = key.replace("dispatch:", "");
+         parts.push(total === 1 && n === 1 ? `In Dispatch #${id}` : `${n} in Dispatch #${id}`);
+      } else if (key.startsWith("container:")) {
+         const id = key.replace("container:", "");
+         parts.push(total === 1 && n === 1 ? `In Container #${id}` : `${n} in Container #${id}`);
+      }
+   }
+
+   if (parts.length === 0) {
+      return "";
+   }
+   if (parts.length === 1 && total > 1) {
+      const one = parts[0];
+      return one.replace(/^\d+ in /i, "All in ");
+   }
+   return parts.join(", ");
+};
+
 /**
  * Update order status based on its parcels' current statuses
  * Call this function whenever a parcel status changes
  */
 export const updateOrderStatusFromParcels = async (order_id: number): Promise<Status> => {
-   // Get all parcel statuses for this order
    const parcels = await prisma.parcel.findMany({
       where: { order_id },
-      select: { status: true },
+      select: { status: true, dispatch_id: true, container_id: true },
    });
 
    const parcelStatuses = parcels.map((p) => p.status);
    const newOrderStatus = calculateOrderStatus(parcelStatuses);
+   const statusDetails = buildOrderStatusDetails(parcels);
 
-   // Update the order status
    await prisma.order.update({
       where: { id: order_id },
-      data: { status: newOrderStatus },
+      data: { status: newOrderStatus, status_details: statusDetails || null },
    });
 
    return newOrderStatus;
@@ -148,15 +200,16 @@ export const updateOrderStatusFromParcelsTx = async (
 ): Promise<Status> => {
    const parcels = await tx.parcel.findMany({
       where: { order_id },
-      select: { status: true },
+      select: { status: true, dispatch_id: true, container_id: true },
    });
 
    const parcelStatuses = parcels.map((p) => p.status);
    const newOrderStatus = calculateOrderStatus(parcelStatuses);
+   const statusDetails = buildOrderStatusDetails(parcels);
 
    await tx.order.update({
       where: { id: order_id },
-      data: { status: newOrderStatus },
+      data: { status: newOrderStatus, status_details: statusDetails || null },
    });
 
    return newOrderStatus;

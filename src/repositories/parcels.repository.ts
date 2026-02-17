@@ -1,6 +1,7 @@
 import prisma from "../lib/prisma.client";
 import { Parcel, Prisma, ServiceType, Status } from "@prisma/client";
 import { buildNameSearchFilter } from "../types/types";
+import { buildParcelStatusDetails } from "../utils/parcel-status-details";
 
 const listSelect = {
    id: true,
@@ -75,7 +76,7 @@ const parcels = {
                   },
                },
             },
-            order_items: true,
+
             container: { select: { id: true, container_name: true, container_number: true, status: true } },
             flight: { select: { id: true, awb_number: true, flight_number: true, status: true } },
             dispatch: { select: { id: true, status: true } },
@@ -152,6 +153,11 @@ const parcels = {
          select: {
             tracking_number: true,
             status: true,
+            status_details: true,
+            external_reference: true,
+            agency_id: true,
+            agency: { select: { id: true, name: true } },
+            service: { select: { id: true, name: true } },
             description: true,
             weight: true,
             created_at: true,
@@ -273,6 +279,7 @@ const parcels = {
          description: string;
          weight: Prisma.Decimal;
          status: Status;
+         status_details: string | null;
          order_id: number | null;
          external_reference: string | null;
          agency_id: number | null;
@@ -368,13 +375,44 @@ const parcels = {
          description: true,
          weight: true,
          status: true,
+         status_details: true,
          order_id: true,
-         
+         order: {
+            select: {
+               id: true,
+               customer: {
+                  select: {
+                     id: true,
+                     first_name: true,
+                     last_name: true,
+                     mobile: true,
+                  },
+               },
+               receiver: {
+                  select: {
+                     id: true,
+                     first_name: true,
+                     last_name: true,
+                     mobile: true,
+                     phone: true,
+                     address: true,
+                     province: { select: { id: true, name: true } },
+                     city: { select: { id: true, name: true } },
+                  },
+               },
+            },
+         },
          external_reference: true,
          agency_id: true,
          agency: { select: { id: true, name: true } },
          service: { select: { id: true, name: true } },
          updated_at: true,
+         user: {
+            select: {
+               id: true,
+               name: true,
+            },
+         },
       } as const;
 
       const [rows, total] = await Promise.all([
@@ -400,14 +438,30 @@ const parcels = {
    ): Promise<Parcel | null> => {
       const parcel = await prisma.parcel.findUnique({
          where: { tracking_number: hbl },
-         select: { id: true },
+         select: {
+            id: true,
+            dispatch_id: true,
+            container_id: true,
+            pallet_id: true,
+            flight_id: true,
+            current_warehouse_id: true,
+         },
       });
       if (!parcel) return null;
+
+      const statusDetails = buildParcelStatusDetails({
+         status,
+         dispatch_id: parcel.dispatch_id,
+         container_id: parcel.container_id,
+         pallet_id: parcel.pallet_id,
+         flight_id: parcel.flight_id,
+         current_warehouse_id: parcel.current_warehouse_id,
+      });
 
       return await prisma.$transaction(async (tx) => {
          const updated = await tx.parcel.update({
             where: { tracking_number: hbl },
-            data: { status },
+            data: { status, status_details: statusDetails },
          });
          await tx.parcelEvent.create({
             data: {

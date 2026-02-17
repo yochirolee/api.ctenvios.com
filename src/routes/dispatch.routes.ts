@@ -74,8 +74,15 @@ router.delete(
 // GET /dispatches/:id - Get a specific dispatch
 router.get("/:id", authMiddleware, dispatchController.getById);
 
-//Generate dispatch PDF with parcels and financials
+// Generate dispatch PDF with parcels and financials
 router.get("/:id/pdf", dispatchController.generateDispatchPdf);
+// Generate PDF receipt of all payments for a dispatch (notes, references, paid by)
+router.get(
+   "/:id/payment-receipt",
+
+   validate({ params: dispatchIdParamSchema }),
+   dispatchController.generatePaymentReceiptPdf
+);
 
 // GET /dispatches/:id/parcels - Get parcels in a specific dispatch
 router.get("/:id/parcels", authMiddleware, dispatchController.getParcelsInDispatch);

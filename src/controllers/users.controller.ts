@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { z } from "zod";
-import { Roles } from "@prisma/client";
+import { Prisma, Roles } from "@prisma/client";
 import { AppError } from "../common/app-errors";
 import HttpStatusCodes from "../common/https-status-codes";
 import prisma from "../lib/prisma.client";
@@ -83,7 +83,7 @@ const users = {
          if (!(agencyRoles as readonly Roles[]).includes(role)) {
             throw new AppError(
                HttpStatusCodes.BAD_REQUEST,
-               `Invalid role for agency user. Allowed roles: ${agencyRoles.join(", ")}`
+               `Invalid role for agency user. Allowed roles: ${agencyRoles.join(", ")}`,
             );
          }
       } else if (carrier_id) {
@@ -112,7 +112,7 @@ const users = {
          if (!(carrierRoles as readonly Roles[]).includes(role)) {
             throw new AppError(
                HttpStatusCodes.BAD_REQUEST,
-               `Invalid role for carrier user. Allowed roles: ${carrierRoles.join(", ")}`
+               `Invalid role for carrier user. Allowed roles: ${carrierRoles.join(", ")}`,
             );
          }
 
@@ -121,7 +121,7 @@ const users = {
          if (role === Roles.CARRIER_OWNER && currentUser.role !== Roles.CARRIER_OWNER && !canCreateUser) {
             throw new AppError(
                HttpStatusCodes.FORBIDDEN,
-               "Only CARRIER_OWNER or administrators can create CARRIER_OWNER users"
+               "Only CARRIER_OWNER or administrators can create CARRIER_OWNER users",
             );
          }
       }
@@ -180,6 +180,23 @@ const users = {
       res.status(201).json({
          user: createdUser,
          message: "User created successfully",
+      });
+   },
+   update: async (req: Request, res: Response): Promise<void> => {
+      const id = req.params.id as string;
+      const findUser = await prisma.user.findUnique({
+         where: { id: id as string },
+      });
+      if (!findUser) {
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "User not found");
+      }
+      const updateData = req.body;
+      await prisma.user.update({
+         where: { id },
+         data: updateData as Prisma.UserUpdateInput,
+      });
+      res.status(200).json({
+         message: "User updated successfully",
       });
    },
 };

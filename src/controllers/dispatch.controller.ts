@@ -4,6 +4,10 @@ import repository from "../repositories";
 import { AppError } from "../common/app-errors";
 import HttpStatusCodes from "../common/https-status-codes";
 import { generateDispatchPDF, DispatchPdfDetails } from "../utils/pdf/generate-dispatch-pdf";
+import {
+   generateDispatchPaymentReceiptPDF,
+   DispatchPaymentReceiptData,
+} from "../utils/pdf/generate-dispatch-payment-receipt";
 
 interface DispatchRequest {
    user?: {
@@ -17,6 +21,7 @@ interface DispatchRequest {
       status?: string;
       payment_status?: string;
       dispatch_id?: string;
+      agency_id?: string;
    };
    body: any;
    params: {
@@ -47,10 +52,10 @@ export const dispatchController = {
     * ROOT/ADMIN can see all, others only their agency's
     */
    getAll: async (req: DispatchRequest, res: Response): Promise<void> => {
-      const { page = "1", limit = "25", status, payment_status, dispatch_id } = req.query;
+      const { page = "1", limit = "25", status, payment_status, dispatch_id, agency_id: queryAgencyId } = req.query;
       const user = req.user!;
 
-      const adminRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR, ];
+      const adminRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
       const isAdmin = adminRoles.includes(user.role);
 
       if (!isAdmin && !user.agency_id) {
@@ -72,15 +77,24 @@ export const dispatchController = {
          );
       }
 
-      // ROOT/ADMIN see all; users in a FORWARDER agency see all; others see only dispatches created by their agency
-      let agencyFilter: number | undefined = user.agency_id ?? undefined;
-      if (!isAdmin && user.agency_id) {
-         const agency = await repository.agencies.getById(user.agency_id);
-         if (agency?.agency_type === AgencyType.FORWARDER) {
+      // Agency filter: use query agency_id if provided, otherwise derive from user
+      let agencyFilter: number | undefined;
+      if (queryAgencyId !== undefined && queryAgencyId !== "") {
+         const parsed = parseInt(queryAgencyId, 10);
+         if (Number.isNaN(parsed)) {
+            throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid agency_id");
+         }
+         agencyFilter = parsed;
+      } else {
+         // ROOT/ADMIN see all; users in a FORWARDER agency see all; others see only their agency
+         if (isAdmin) {
+            agencyFilter = undefined;
+         } else if (user.agency_id) {
+            const agency = await repository.agencies.getById(user.agency_id);
+            agencyFilter = agency?.agency_type === AgencyType.FORWARDER ? undefined : user.agency_id;
+         } else {
             agencyFilter = undefined;
          }
-      } else if (isAdmin) {
-         agencyFilter = undefined;
       }
 
       const { dispatches: rows, total } = await repository.dispatch.get(
@@ -128,6 +142,35 @@ export const dispatchController = {
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `inline; filename="dispatch-${dispatch.id}.pdf"`);
 
+      pdfDoc.pipe(res);
+      pdfDoc.end();
+   },
+
+   /**
+    * GET /dispatches/:id/payment-receipt - Generate PDF receipt of all payments for a dispatch (notes, references, etc.)
+    */
+   generatePaymentReceiptPdf: async (req: DispatchRequest, res: Response): Promise<void> => {
+      const dispatchId = parseInt(req.params.id!);
+      const dispatch = await repository.dispatch.getByIdWithDetails(dispatchId);
+      if (!dispatch) {
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Dispatch not found");
+      }
+      const data: DispatchPaymentReceiptData = {
+         id: dispatch.id,
+         cost_in_cents: dispatch.cost_in_cents,
+         paid_in_cents: dispatch.paid_in_cents,
+         payment_status: dispatch.payment_status,
+         created_at: dispatch.created_at,
+         sender_agency: dispatch.sender_agency,
+         receiver_agency: dispatch.receiver_agency,
+         payments: dispatch.payments,
+      };
+      const pdfDoc = await generateDispatchPaymentReceiptPDF(data);
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+         "Content-Disposition",
+         `inline; filename="dispatch-${dispatch.id}-payment-receipt.pdf"`
+      );
       pdfDoc.pipe(res);
       pdfDoc.end();
    },

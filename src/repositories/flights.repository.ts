@@ -4,6 +4,7 @@ import { Flight, FlightStatus, Parcel, ParcelEventType, Prisma, Status } from "@
 import { AppError } from "../common/app-errors";
 import { getEventTypeForFlightStatus } from "../utils/parcel-event-visibility";
 import { updateOrderStatusFromParcel, updateMultipleOrdersStatus } from "../utils/order-status-calculator";
+import { buildParcelStatusDetails } from "../utils/parcel-status-details";
 
 // Allowed statuses for parcels to be added to flight
 const ALLOWED_FLIGHT_STATUSES: Status[] = [
@@ -322,6 +323,10 @@ const flights = {
             data: {
                flight_id,
                status: Status.IN_TRANSIT, // Air cargo goes directly to IN_TRANSIT
+               status_details: buildParcelStatusDetails({
+                  status: Status.IN_TRANSIT,
+                  flight_id,
+               }),
             },
          });
 
@@ -397,6 +402,7 @@ const flights = {
             data: {
                flight_id: null,
                status: Status.IN_WAREHOUSE,
+               status_details: buildParcelStatusDetails({ status: Status.IN_WAREHOUSE }),
             },
          });
 
@@ -490,10 +496,14 @@ const flights = {
          const newParcelStatus = flightToParcelStatus[status];
 
          if (newParcelStatus && parcels.length > 0) {
+            const statusDetails = buildParcelStatusDetails({
+               status: newParcelStatus,
+               flight_id: id,
+            });
             for (const parcel of parcels) {
                await tx.parcel.update({
                   where: { id: parcel.id },
-                  data: { status: newParcelStatus },
+                  data: { status: newParcelStatus, status_details: statusDetails },
                });
 
                await tx.parcelEvent.create({

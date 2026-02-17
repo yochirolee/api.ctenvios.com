@@ -136,6 +136,7 @@ export const ordersController = {
                      paid_in_cents: true,
                      payment_status: true,
                      status: true,
+                     status_details: true,
                      customer: {
                         select: {
                            id: true,

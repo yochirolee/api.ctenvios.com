@@ -3,6 +3,7 @@ import prisma from "../lib/prisma.client";
 import { Pallet, PalletStatus, Parcel, ParcelEventType, Prisma, Status } from "@prisma/client";
 import { AppError } from "../common/app-errors";
 import { updateOrderStatusFromParcel, updateOrderStatusFromParcels } from "../utils/order-status-calculator";
+import { buildParcelStatusDetails } from "../utils/parcel-status-details";
 
 /**
  * Pallets Repository
@@ -302,6 +303,10 @@ const pallets = {
             data: {
                pallet_id,
                status: Status.IN_PALLET,
+               status_details: buildParcelStatusDetails({
+                  status: Status.IN_PALLET,
+                  pallet_id,
+               }),
             },
          });
 
@@ -399,6 +404,10 @@ const pallets = {
                data: {
                   pallet_id,
                   status: Status.IN_PALLET,
+                  status_details: buildParcelStatusDetails({
+                     status: Status.IN_PALLET,
+                     pallet_id,
+                  }),
                },
             });
 
@@ -477,6 +486,7 @@ const pallets = {
             data: {
                pallet_id: null,
                status: Status.IN_AGENCY,
+               status_details: buildParcelStatusDetails({ status: Status.IN_AGENCY }),
             },
          });
 

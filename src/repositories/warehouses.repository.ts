@@ -3,6 +3,7 @@ import prisma from "../lib/prisma.client";
 import { Parcel, ParcelEventType, Prisma, Status, Warehouse } from "@prisma/client";
 import { AppError } from "../common/app-errors";
 import { updateOrderStatusFromParcel } from "../utils/order-status-calculator";
+import { buildParcelStatusDetails } from "../utils/parcel-status-details";
 
 /**
  * Warehouses Repository
@@ -290,6 +291,10 @@ const warehouses = {
             data: {
                current_warehouse_id: warehouse_id,
                status: Status.IN_WAREHOUSE,
+               status_details: buildParcelStatusDetails({
+                  status: Status.IN_WAREHOUSE,
+                  current_warehouse_id: warehouse_id,
+               }),
             },
          });
 
@@ -362,6 +367,10 @@ const warehouses = {
             where: { tracking_number },
             data: {
                current_warehouse_id: to_warehouse_id,
+               status_details: buildParcelStatusDetails({
+                  status: Status.IN_WAREHOUSE,
+                  current_warehouse_id: to_warehouse_id,
+               }),
             },
          });
 

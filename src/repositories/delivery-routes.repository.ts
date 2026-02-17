@@ -11,6 +11,7 @@ import {
 } from "@prisma/client";
 import { AppError } from "../common/app-errors";
 import { updateOrderStatusFromParcel, updateOrderStatusFromParcels, updateMultipleOrdersStatus } from "../utils/order-status-calculator";
+import { buildParcelStatusDetails } from "../utils/parcel-status-details";
 
 /**
  * Delivery Routes Repository
@@ -508,7 +509,10 @@ const deliveryRoutes = {
 
             await tx.parcel.update({
                where: { id: assignment.parcel_id },
-               data: { status: Status.OUT_FOR_DELIVERY },
+               data: {
+                  status: Status.OUT_FOR_DELIVERY,
+                  status_details: buildParcelStatusDetails({ status: Status.OUT_FOR_DELIVERY }),
+               },
             });
 
             await tx.parcelEvent.create({
@@ -623,7 +627,10 @@ const deliveryRoutes = {
 
          await tx.parcel.update({
             where: { id: assignment.parcel_id },
-            data: { status: parcelStatus },
+            data: {
+               status: parcelStatus,
+               status_details: buildParcelStatusDetails({ status: parcelStatus }),
+            },
          });
 
          await tx.parcelEvent.create({

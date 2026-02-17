@@ -18,6 +18,7 @@ import { calculateDispatchCostFromPdfLogic } from "../utils/dispatch-utils";
 import interAgencyDebtsRepository from "./inter-agency-debts.repository";
 import { determineHierarchyDebts, generateDispatchDebts, generateHierarchicalDebts } from "../utils/agency-hierarchy";
 import { updateOrderStatusFromParcel } from "../utils/order-status-calculator";
+import { buildParcelStatusDetails } from "../utils/parcel-status-details";
 import {
    validateDispatchModifiable,
    validateParcelOwnershipInTx,
@@ -260,6 +261,7 @@ const dispatch = {
       payment_status?: PaymentStatus,
       dispatch_id?: number,
    ) => {
+
       // Build where clause with optional filters
       const where: Prisma.DispatchWhereInput = {
          // If dispatch_id is provided, filter by specific dispatch
@@ -406,7 +408,6 @@ const dispatch = {
          },
       });
 
-      console.log(dispatch);
       return dispatch;
    },
    getParcelsInDispatch: async (
@@ -685,6 +686,7 @@ const dispatch = {
                data: {
                   dispatch_id: null,
                   status: statusToRestore,
+                  status_details: buildParcelStatusDetails({ status: statusToRestore }),
                   events: {
                      create: {
                         event_type: "REMOVED_FROM_PALLET",
@@ -791,6 +793,7 @@ const dispatch = {
             data: {
                dispatch_id: dispatchId,
                status: Status.IN_DISPATCH,
+               status_details: buildParcelStatusDetails({ status: Status.IN_DISPATCH, dispatch_id: dispatchId }),
             },
          });
 
@@ -896,6 +899,7 @@ const dispatch = {
                data: {
                   dispatch_id: dispatchId,
                   status: Status.IN_DISPATCH,
+                  status_details: buildParcelStatusDetails({ status: Status.IN_DISPATCH, dispatch_id: dispatchId }),
                },
             });
             await tx.parcelEvent.create({
@@ -999,6 +1003,7 @@ const dispatch = {
             data: {
                dispatch_id: null,
                status: statusToRestore,
+               status_details: buildParcelStatusDetails({ status: statusToRestore }),
                events: {
                   create: {
                      event_type: "REMOVED_FROM_DISPATCH",
@@ -1243,6 +1248,10 @@ const dispatch = {
                where: { tracking_number },
                data: {
                   status: Status.RECEIVED_IN_DISPATCH,
+                  status_details: buildParcelStatusDetails({
+                     status: Status.RECEIVED_IN_DISPATCH,
+                     dispatch_id: dispatchId,
+                  }),
                   events: {
                      create: {
                         event_type: "RECEIVED_IN_DISPATCH",
@@ -1273,6 +1282,10 @@ const dispatch = {
             data: {
                dispatch_id: dispatchId,
                status: Status.RECEIVED_IN_DISPATCH,
+               status_details: buildParcelStatusDetails({
+                  status: Status.RECEIVED_IN_DISPATCH,
+                  dispatch_id: dispatchId,
+               }),
                events: {
                   create: {
                      event_type: "RECEIVED_IN_DISPATCH",
@@ -1523,6 +1536,10 @@ const dispatch = {
             data: {
                dispatch_id: created.id,
                status: Status.IN_DISPATCH,
+               status_details: buildParcelStatusDetails({
+                  status: Status.IN_DISPATCH,
+                  dispatch_id: created.id,
+               }),
             },
          });
 
@@ -1792,6 +1809,10 @@ const dispatch = {
                data: {
                   dispatch_id: dispatch.id,
                   status: receivedParcelStatus,
+                  status_details: buildParcelStatusDetails({
+                     status: receivedParcelStatus,
+                     dispatch_id: dispatch.id,
+                  }),
                },
             });
 
@@ -2450,6 +2471,10 @@ const dispatch = {
                      data: {
                         dispatch_id: dispatchId,
                         status: receivedParcelStatus,
+                        status_details: buildParcelStatusDetails({
+                           status: receivedParcelStatus,
+                           dispatch_id: dispatchId,
+                        }),
                      },
                   });
 
@@ -2481,7 +2506,13 @@ const dispatch = {
                // Mark existing parcels as received
                await tx.parcel.updateMany({
                   where: { id: { in: receivedParcels.map((p) => p.id) } },
-                  data: { status: receivedParcelStatus },
+                  data: {
+                     status: receivedParcelStatus,
+                     status_details: buildParcelStatusDetails({
+                        status: receivedParcelStatus,
+                        dispatch_id: dispatchId,
+                     }),
+                  },
                });
 
                await tx.parcelEvent.createMany({
@@ -2588,6 +2619,10 @@ const dispatch = {
                   data: {
                      dispatch_id: receptionDispatch.id,
                      status: receivedParcelStatus,
+                     status_details: buildParcelStatusDetails({
+                        status: receivedParcelStatus,
+                        dispatch_id: receptionDispatch.id,
+                     }),
                   },
                });
 
@@ -2611,6 +2646,10 @@ const dispatch = {
                      data: {
                         dispatch_id: receptionDispatch.id,
                         status: receivedParcelStatus,
+                        status_details: buildParcelStatusDetails({
+                           status: receivedParcelStatus,
+                           dispatch_id: receptionDispatch.id,
+                        }),
                      },
                   });
 
@@ -2735,6 +2774,10 @@ const dispatch = {
                data: {
                   dispatch_id: newDispatch.id,
                   status: receivedParcelStatus,
+                  status_details: buildParcelStatusDetails({
+                     status: receivedParcelStatus,
+                     dispatch_id: newDispatch.id,
+                  }),
                },
             });
 

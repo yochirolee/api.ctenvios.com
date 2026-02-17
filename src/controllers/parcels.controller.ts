@@ -99,6 +99,7 @@ export const parcels = {
          filters.flight_id_null = true;
          filters.service_type = "MARITIME";
          filters.status_in = ALLOWED_CONTAINER_STATUSES;
+         
       } else {
          if (q.status) filters.status = q.status as Status;
          const hbl = (q.hbl ?? q.q ?? "").trim();
@@ -129,6 +130,8 @@ export const parcels = {
       }
 
       const result = await repository.parcels.listFiltered(filters, page, limit);
+
+      console.log(result);
       res.status(200).json({ rows: result.rows, total: result.total, page, limit });
    },
 

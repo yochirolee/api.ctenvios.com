@@ -8,6 +8,7 @@ import {
    updateOrderStatusFromParcelTx,
    updateOrderStatusFromParcelsTx,
 } from "../utils/order-status-calculator";
+import { buildParcelStatusDetails } from "../utils/parcel-status-details";
 
 // Allowed statuses for parcels to be added to container
 const ALLOWED_CONTAINER_STATUSES: Status[] = [
@@ -381,6 +382,10 @@ const containers = {
             data: {
                container_id,
                status: Status.IN_CONTAINER,
+               status_details: buildParcelStatusDetails({
+                  status: Status.IN_CONTAINER,
+                  container_id,
+               }),
             },
          });
 
@@ -477,6 +482,10 @@ const containers = {
                data: {
                   container_id,
                   status: Status.IN_CONTAINER,
+                  status_details: buildParcelStatusDetails({
+                     status: Status.IN_CONTAINER,
+                     container_id,
+                  }),
                },
             });
 
@@ -589,6 +598,10 @@ const containers = {
                data: {
                   container_id,
                   status: Status.IN_CONTAINER,
+                  status_details: buildParcelStatusDetails({
+                     status: Status.IN_CONTAINER,
+                     container_id,
+                  }),
                },
             });
 
@@ -675,6 +688,7 @@ const containers = {
             data: {
                container_id: null,
                status: Status.IN_WAREHOUSE,
+               status_details: buildParcelStatusDetails({ status: Status.IN_WAREHOUSE }),
             },
          });
 
@@ -765,10 +779,14 @@ const containers = {
          const newParcelStatus = containerToParcelStatus[status];
 
          if (newParcelStatus && parcels.length > 0) {
+            const statusDetails = buildParcelStatusDetails({
+               status: newParcelStatus,
+               container_id: id,
+            });
             for (const parcel of parcels) {
                await tx.parcel.update({
                   where: { id: parcel.id },
-                  data: { status: newParcelStatus },
+                  data: { status: newParcelStatus, status_details: statusDetails },
                });
 
                await tx.parcelEvent.create({

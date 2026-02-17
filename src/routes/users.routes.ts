@@ -10,6 +10,32 @@ import { z } from "zod";
 
 const router = Router();
 
+// Schema de validación para crear usuario (acepta agency_id o carrier_id)
+const createUserSchema = z
+   .object({
+      email: z.string().email("Invalid email format"),
+      password: z.string().min(8, "Password must be at least 8 characters"),
+      name: z.string().min(1, "Name is required"),
+      phone: z.string().min(10, "Phone must be at least 10 characters").optional(),
+      role: z.nativeEnum(Roles),
+      agency_id: z.number().int().positive().optional(),
+      carrier_id: z.number().int().positive().optional(),
+   })
+   .refine((data) => !data.agency_id || !data.carrier_id, {
+      message: "Cannot specify both agency_id and carrier_id. User must belong to either an agency or a carrier.",
+   })
+   .refine((data) => data.agency_id || data.carrier_id, {
+      message: "Must specify either agency_id or carrier_id.",
+   });
+const updateUserSchema = z.object({
+   email: z.string().email("Invalid email format").optional(),
+   name: z.string().min(1, "Name is required").optional(),
+   phone: z.string().min(10, "Phone must be at least 10 characters").optional(),
+   role: z.nativeEnum(Roles).optional(),
+   agency_id: z.number().int().positive().optional(),
+   carrier_id: z.number().int().positive().optional(),
+});
+
 router.get("/", authMiddleware, async (req: any, res: Response) => {
    const user = req.user;
    //if user is root or administrator, return all users
@@ -81,7 +107,6 @@ router.get("/", authMiddleware, async (req: any, res: Response) => {
             take: parseInt(limit as string) || 25,
          });
 
-         
          res.status(200).json({ rows, total });
          return;
       }
@@ -148,24 +173,6 @@ router.get("/search", async (req, res) => {
    });
    res.status(200).json(users);
 });
-
-// Schema de validación para crear usuario (acepta agency_id o carrier_id)
-const createUserSchema = z
-   .object({
-      email: z.string().email("Invalid email format"),
-      password: z.string().min(8, "Password must be at least 8 characters"),
-      name: z.string().min(1, "Name is required"),
-      phone: z.string().min(10, "Phone must be at least 10 characters").optional(),
-      role: z.nativeEnum(Roles),
-      agency_id: z.number().int().positive().optional(),
-      carrier_id: z.number().int().positive().optional(),
-   })
-   .refine((data) => !data.agency_id || !data.carrier_id, {
-      message: "Cannot specify both agency_id and carrier_id. User must belong to either an agency or a carrier.",
-   })
-   .refine((data) => data.agency_id || data.carrier_id, {
-      message: "Must specify either agency_id or carrier_id.",
-   });
 
 /**
  * POST /api/v1/users
@@ -301,5 +308,7 @@ router.post("/sign-out", async (req, res) => {
 
    res.status(200).json(user);
 });
+
+router.post("/update", authMiddleware, validate({ body: updateUserSchema }), controllers.users.update);
 
 export default router;
