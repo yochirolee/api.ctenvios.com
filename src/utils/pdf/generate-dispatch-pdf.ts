@@ -458,8 +458,8 @@ export async function generateDispatchPDF(dispatch: DispatchPdfDetails): Promise
    y = drawTableHeaders(y + 10);
 
    // Table rows – description wraps to multiple lines; row height varies
-   const minRowHeight = 22;
-   const rowPaddingVertical = 6;
+   const minRowHeight = 20;
+   const rowPaddingVertical = 4;
    const rowFontSize = 8;
    const bottomMargin = 60;
    doc.font(FONTS.REGULAR).fontSize(rowFontSize);
@@ -467,14 +467,11 @@ export async function generateDispatchPDF(dispatch: DispatchPdfDetails): Promise
 
    const maxDescriptionLines = 3;
    const lineHeight = doc.currentLineHeight();
-
-   const descRightMinWidth = 60;
-   const descGap = 8;
-   const descLeftWidth = descriptionWidth - descRightMinWidth - descGap;
+   const lineGap = 3;
 
    for (const [index, parcel] of dispatch.parcels.entries()) {
       const parcelItems = getOrderItemsForParcel(parcel);
-      let descriptionLeft =
+      const descriptionLine =
          parcelItems.length > 0
             ? parcelItems
                  .map((item) => item.description || "")
@@ -484,23 +481,63 @@ export async function generateDispatchPDF(dispatch: DispatchPdfDetails): Promise
       const productNames = parcelItems
          .filter((item) => (item.unit || item.rate?.product?.unit || "PER_LB") === "FIXED" && item.rate?.product?.name)
          .map((item) => item.rate!.product!.name!);
-      const descriptionRight = productNames.length > 0 ? (productNames.length === 1 ? `(${productNames[0]})` : productNames.join(", ")) : "";
+      const productNameLine =
+         productNames.length > 0
+            ? productNames.length === 1
+               ? productNames[0]
+               : productNames.join(", ")
+            : "";
 
+      let descriptionTruncated = descriptionLine;
       const maxDescHeight = maxDescriptionLines * lineHeight;
-      if (descriptionLeft && doc.heightOfString(descriptionLeft, { width: descLeftWidth }) > maxDescHeight) {
-         let truncated = descriptionLeft;
-         while (truncated.length > 0 && doc.heightOfString(truncated + "…", { width: descLeftWidth }) > maxDescHeight) {
+      if (
+         descriptionTruncated &&
+         doc.heightOfString(descriptionTruncated, { width: descriptionWidth }) > maxDescHeight
+      ) {
+         let truncated = descriptionTruncated;
+         while (
+            truncated.length > 0 &&
+            doc.heightOfString(truncated + "…", { width: descriptionWidth }) > maxDescHeight
+         ) {
             truncated = truncated.slice(0, -1);
          }
-         descriptionLeft = truncated + "…";
+         descriptionTruncated = truncated + "…";
       }
-      const leftHeight = descriptionLeft ? doc.heightOfString(descriptionLeft, { width: descLeftWidth }) : 0;
-      const rightHeight = descriptionRight ? doc.heightOfString(descriptionRight, { width: descriptionWidth - descLeftWidth - descGap }) : 0;
-      const descHeight = Math.max(Math.ceil(leftHeight), Math.ceil(rightHeight));
-      const rowContentHeight = descHeight + rowPaddingVertical * 2;
-      const ROW_LINE_BUFFER = 8;
-      const extraWrapBuffer = descHeight > lineHeight ? Math.ceil(lineHeight) : 0;
-      const actualRowHeight = Math.max(minRowHeight, rowContentHeight + ROW_LINE_BUFFER + extraWrapBuffer);
+
+      doc.font(FONTS.BOLD).fontSize(rowFontSize);
+      const productNameWidth = productNameLine ? doc.widthOfString(productNameLine + " ") : 0;
+      doc.font(FONTS.REGULAR).fontSize(rowFontSize);
+      const descriptionWidthNeeded = doc.widthOfString(descriptionTruncated);
+      const fitsOneLine =
+         productNameLine &&
+         descriptionTruncated &&
+         productNameWidth + descriptionWidthNeeded <= descriptionWidth;
+
+      const productNameHeight = productNameLine
+         ? doc.heightOfString(productNameLine, { width: descriptionWidth })
+         : 0;
+      const descriptionHeight = descriptionTruncated
+         ? doc.heightOfString(descriptionTruncated, { width: descriptionWidth })
+         : 0;
+      const descHeight = fitsOneLine
+         ? lineHeight
+         : Math.ceil(productNameHeight) +
+           (productNameLine && descriptionTruncated ? lineGap : 0) +
+           Math.ceil(descriptionHeight);
+      // Single-line compact height for ALL rows that fit in one line. Use tolerance so
+      // description-only and product+description one-line rows all get the same classification.
+      const oneLineThreshold = lineHeight * 1.2;
+      const isSingleLine = descHeight <= oneLineThreshold;
+      const padding = isSingleLine ? 3 : rowPaddingVertical;
+      const rowContentHeight = descHeight + padding * 2;
+      const rowLineBuffer = isSingleLine ? 1 : 4;
+      const extraWrapBuffer = isSingleLine ? 0 : (descHeight > lineHeight ? 3 : 0);
+      const rowMin = isSingleLine ? 16 : minRowHeight;
+      // Use one fixed height for all single-line rows so they look identical
+      const SINGLE_LINE_ROW_HEIGHT = 18;
+      const actualRowHeight = isSingleLine
+         ? SINGLE_LINE_ROW_HEIGHT
+         : Math.max(rowMin, rowContentHeight + rowLineBuffer + extraWrapBuffer);
 
       if (y + actualRowHeight > doc.page.height - bottomMargin - 50) {
          doc.addPage();
@@ -517,7 +554,7 @@ export async function generateDispatchPDF(dispatch: DispatchPdfDetails): Promise
          unit: "PER_LB",
       };
 
-      const contentY = rowContentY(y);
+      const contentY = y + padding;
       const isSplit = isSplitOrder(parcel);
 
       if (isSplit) {
@@ -530,12 +567,22 @@ export async function generateDispatchPDF(dispatch: DispatchPdfDetails): Promise
 
       doc.text(parcel.tracking_number, hblX, contentY, { width: hblWidth });
 
-      doc.text(descriptionLeft, descriptionX, contentY, { width: descLeftWidth });
-      if (descriptionRight) {
-         doc.text(descriptionRight, descriptionX + descLeftWidth + descGap, contentY, {
-            width: descriptionWidth - descLeftWidth - descGap,
-            align: "right",
+      if (fitsOneLine) {
+         doc.font(FONTS.BOLD).fontSize(rowFontSize).fillColor(COLORS.FOREGROUND);
+         doc.text(productNameLine!, descriptionX, contentY, { width: descriptionWidth });
+         doc.font(FONTS.REGULAR).fontSize(rowFontSize).fillColor(COLORS.FOREGROUND);
+         doc.text(descriptionTruncated, descriptionX + productNameWidth, contentY, {
+            width: descriptionWidth - productNameWidth,
          });
+      } else {
+         let descY = contentY;
+         if (productNameLine) {
+            doc.font(FONTS.BOLD).fontSize(rowFontSize).fillColor(COLORS.FOREGROUND);
+            doc.text(productNameLine, descriptionX, descY, { width: descriptionWidth });
+            descY += productNameHeight + lineGap;
+            doc.font(FONTS.REGULAR).fontSize(rowFontSize).fillColor(COLORS.FOREGROUND);
+         }
+         doc.text(descriptionTruncated, descriptionX, descY, { width: descriptionWidth });
       }
 
       const insuranceColor = financials.insuranceInCents === 0 ? COLORS.MUTED_FOREGROUND : COLORS.FOREGROUND;

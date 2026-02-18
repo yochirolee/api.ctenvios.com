@@ -167,10 +167,7 @@ export const dispatchController = {
       };
       const pdfDoc = await generateDispatchPaymentReceiptPDF(data);
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader(
-         "Content-Disposition",
-         `inline; filename="dispatch-${dispatch.id}-payment-receipt.pdf"`
-      );
+      res.setHeader("Content-Disposition", `inline; filename="dispatch-${dispatch.id}-payment-receipt.pdf"`);
       pdfDoc.pipe(res);
       pdfDoc.end();
    },
@@ -540,7 +537,22 @@ export const dispatchController = {
       const dispatchId = parseInt(req.params.id!);
       const user = req.user!;
       const { amount_in_cents, charge_in_cents, method, reference, date, notes } = req.body;
-
+      // only allowed when dispatch status is RECEIVED, and the receiver agency is the same as the user's agency
+      const dispatch = await repository.dispatch.getById(dispatchId);
+      if (!dispatch) {
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Dispatch not found");
+      }
+      if (dispatch.status !== DispatchStatus.RECEIVED) {
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "Dispatch status must be RECEIVED");
+      }
+      if (
+         dispatch.receiver_agency_id !== user.agency_id &&
+         user.role !== Roles.ROOT &&
+         user.role !== Roles.ADMINISTRATOR &&
+         user.role !== Roles.AGENCY_SUPERVISOR
+      ) {
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "User is not authorized to add a payment to this dispatch");
+      }
       const payment = await repository.dispatch.addPayment(
          dispatchId,
          { amount_in_cents, charge_in_cents, method, reference, date, notes },
@@ -555,6 +567,20 @@ export const dispatchController = {
    deletePayment: async (req: DispatchRequest, res: Response): Promise<void> => {
       const dispatchId = parseInt(req.params.id!);
       const paymentId = parseInt(req.params.paymentId!);
+      const user = req.user!;
+      const dispatch = await repository.dispatch.getById(dispatchId);
+      if (!dispatch) {
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Dispatch not found");
+      }
+
+      if (
+         dispatch.receiver_agency_id !== user.agency_id &&
+         user.role !== Roles.ROOT &&
+         user.role !== Roles.ADMINISTRATOR &&
+         user.role !== Roles.AGENCY_SUPERVISOR
+      ) {
+         throw new AppError(HttpStatusCodes.BAD_REQUEST, "User is not authorized to delete this payment");
+      }
       await repository.dispatch.deletePayment(dispatchId, paymentId);
       res.status(200).json({ message: "Payment deleted" });
    },

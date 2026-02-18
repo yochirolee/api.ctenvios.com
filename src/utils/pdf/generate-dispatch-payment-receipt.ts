@@ -53,13 +53,13 @@ const COLORS = {
    BLACK: "#000000",
    GRAY: "#6b7280",
    BORDER: "#e5e7eb",
-   HEADER_BG: "#f3f4f6",
-   WHITE: "#ffffff",
+   MUTED_FOREGROUND: "#6b7280",
 };
 
 const PAGE_WIDTH = 612;
-const LEFT_MARGIN = 24;
-const CONTENT_WIDTH = PAGE_WIDTH - LEFT_MARGIN * 2;
+const LEFT_MARGIN = 20;
+const RIGHT_MARGIN = PAGE_WIDTH - 20;
+const CONTENT_WIDTH = RIGHT_MARGIN - LEFT_MARGIN;
 
 const logoCache = new Map<string, Buffer>();
 
@@ -112,22 +112,33 @@ export async function generateDispatchPaymentReceiptPDF(
    const lineHeight = 14;
    const tableRowHeight = 20;
 
-   // Logo
+   // Logo left; title and date right-aligned (Emitido on top, Dispatch # below)
    const logo = await getLogoBuffer();
    if (logo) {
       doc.image(logo, LEFT_MARGIN, y, { width: 48, height: 36 });
    }
 
    doc.font(FONTS.BOLD).fontSize(16).fillColor(COLORS.BLACK);
-   doc.text(`Recibo de pagos - Dispatch #${data.id}`, LEFT_MARGIN + 60, y + 8);
-
+   doc.text(`Dispatch #${data.id}`, LEFT_MARGIN, y + 6, {
+      width: CONTENT_WIDTH,
+      align: "right",
+   });
    doc.font(FONTS.REGULAR).fontSize(9).fillColor(COLORS.GRAY);
-   doc.text(
-      `Emitido: ${formatDate(new Date())}  •  Origen: ${data.sender_agency.name}  →  Destino: ${data.receiver_agency?.name ?? "—"}`,
-      LEFT_MARGIN + 60,
-      y + 28,
-      { width: CONTENT_WIDTH - 60 }
-   );
+   doc.text(`Emitido: ${formatDate(new Date())}`, LEFT_MARGIN, y + 30, {
+      width: CONTENT_WIDTH,
+      align: "right",
+   });
+   // Origen / Destino to the right of the logo, vertically centered with logo (logo height 36, center at y+18)
+   const originDestinoX = LEFT_MARGIN + (logo ? 54 : 0);
+   const originDestinoWidth = CONTENT_WIDTH - (logo ? 54 : 0);
+   const logoCenterY = y + 18;
+   const originDestinoLineHeight = 11;
+   const originDestinoStartY = logoCenterY - originDestinoLineHeight;
+   doc.font(FONTS.REGULAR).fontSize(9).fillColor(COLORS.GRAY);
+   doc.text(`Origen: ${data.sender_agency.name}`, originDestinoX, originDestinoStartY, { width: originDestinoWidth });
+   doc.text(`Destino: ${data.receiver_agency?.name ?? "—"}`, originDestinoX, originDestinoStartY + originDestinoLineHeight, {
+      width: originDestinoWidth,
+   });
 
    y += 56;
 
@@ -142,37 +153,44 @@ export async function generateDispatchPaymentReceiptPDF(
    doc.text(`Pagado: ${formatCents(data.paid_in_cents)}  •  Estado: ${data.payment_status}`, LEFT_MARGIN, y);
    y += lineHeight + 8;
 
-   // Payments table header
+   // Payments table – same look as dispatch/order; column widths sum to full content width (minus cell padding)
+   const tableContentWidth = CONTENT_WIDTH - 12; // 6px padding each side
    const colWidths = {
-      num: 22,
-      date: 70,
-      method: 88,
-      reference: 92,
-      amount: 54,
-      charge: 46,
-      notes: 112,
-      cobradoPor: 80,
+      num: 28,
+      date: 72,
+      method: 100,
+      reference: 110,
+      amount: 56,
+      charge: 48,
+      cobradoPor: tableContentWidth - (28 + 72 + 100 + 110 + 56 + 48), // rest of width
    };
 
-   doc.rect(LEFT_MARGIN, y, CONTENT_WIDTH, tableRowHeight).fill(COLORS.HEADER_BG);
-   doc.rect(LEFT_MARGIN, y, CONTENT_WIDTH, tableRowHeight).stroke(COLORS.BORDER);
+   const headerY = y + 10;
    let x = LEFT_MARGIN + 6;
-   doc.font(FONTS.SEMIBOLD).fontSize(8).fillColor(COLORS.BLACK);
-   doc.text("#", x, y + 6, { width: colWidths.num }); x += colWidths.num;
-   doc.text("Fecha", x, y + 6, { width: colWidths.date }); x += colWidths.date;
-   doc.text("Método", x, y + 6, { width: colWidths.method }); x += colWidths.method;
-   doc.text("Referencia", x, y + 6, { width: colWidths.reference }); x += colWidths.reference;
-   doc.text("Monto", x, y + 6, { width: colWidths.amount }); x += colWidths.amount;
-   doc.text("Cargo", x, y + 6, { width: colWidths.charge }); x += colWidths.charge;
-   doc.text("Notas", x, y + 6, { width: colWidths.notes }); x += colWidths.notes;
-   doc.text("Cobrado por", x, y + 6, { width: colWidths.cobradoPor });
-   y += tableRowHeight;
+   doc.font(FONTS.SEMIBOLD).fontSize(8).fillColor(COLORS.MUTED_FOREGROUND);
+   doc.text("#", x, headerY, { width: colWidths.num }); x += colWidths.num;
+   doc.text("Fecha", x, headerY, { width: colWidths.date }); x += colWidths.date;
+   doc.text("Método", x, headerY, { width: colWidths.method }); x += colWidths.method;
+   doc.text("Referencia", x, headerY, { width: colWidths.reference }); x += colWidths.reference;
+   doc.text("Monto", x, headerY, { width: colWidths.amount }); x += colWidths.amount;
+   doc.text("Cargo", x, headerY, { width: colWidths.charge }); x += colWidths.charge;
+   doc.text("Cobrado por", x, headerY, { width: colWidths.cobradoPor });
+   doc.strokeColor(COLORS.BORDER)
+      .lineWidth(1)
+      .moveTo(LEFT_MARGIN, headerY + 12)
+      .lineTo(RIGHT_MARGIN, headerY + 12)
+      .stroke();
+   y = headerY + 15;
 
    if (data.payments.length === 0) {
-      doc.rect(LEFT_MARGIN, y, CONTENT_WIDTH, tableRowHeight).stroke(COLORS.BORDER);
       doc.font(FONTS.REGULAR).fontSize(9).fillColor(COLORS.GRAY);
       doc.text("Sin pagos registrados", LEFT_MARGIN + 10, y + 6, { width: CONTENT_WIDTH - 20 });
       y += tableRowHeight;
+      doc.strokeColor(COLORS.BORDER)
+         .lineWidth(0.5)
+         .moveTo(LEFT_MARGIN, y)
+         .lineTo(RIGHT_MARGIN, y)
+         .stroke();
    } else {
       for (let i = 0; i < data.payments.length; i++) {
          const p = data.payments[i];
@@ -180,7 +198,6 @@ export async function generateDispatchPaymentReceiptPDF(
             doc.addPage();
             y = 30;
          }
-         doc.rect(LEFT_MARGIN, y, CONTENT_WIDTH, tableRowHeight).stroke(COLORS.BORDER);
          x = LEFT_MARGIN + 6;
          doc.font(FONTS.REGULAR).fontSize(8).fillColor(COLORS.BLACK);
          doc.text(String(i + 1), x, y + 6, { width: colWidths.num }); x += colWidths.num;
@@ -189,10 +206,41 @@ export async function generateDispatchPaymentReceiptPDF(
          doc.text(truncate(p.reference, 18), x, y + 6, { width: colWidths.reference }); x += colWidths.reference;
          doc.text(formatCents(p.amount_in_cents), x, y + 6, { width: colWidths.amount }); x += colWidths.amount;
          doc.text(formatCents(p.charge_in_cents), x, y + 6, { width: colWidths.charge }); x += colWidths.charge;
-         doc.text(truncate(p.notes, 26), x, y + 6, { width: colWidths.notes }); x += colWidths.notes;
          doc.text(truncate(p.paid_by?.name ?? null, 18), x, y + 6, { width: colWidths.cobradoPor });
          y += tableRowHeight;
+         doc.strokeColor(COLORS.BORDER)
+            .lineWidth(0.5)
+            .moveTo(LEFT_MARGIN, y)
+            .lineTo(RIGHT_MARGIN, y)
+            .stroke();
       }
+   }
+
+   // Notes section below the table (full notes for each payment)
+   const paymentsWithNotes = data.payments.filter((p) => p.notes && p.notes.trim() !== "");
+   if (paymentsWithNotes.length > 0) {
+      y += 10;
+      doc.font(FONTS.SEMIBOLD).fontSize(9).fillColor(COLORS.BLACK);
+      doc.text("Notas", LEFT_MARGIN, y);
+      y += lineHeight + 4;
+      doc.font(FONTS.REGULAR).fontSize(8).fillColor(COLORS.BLACK);
+      const notesWidth = CONTENT_WIDTH;
+      for (let i = 0; i < data.payments.length; i++) {
+         const p = data.payments[i];
+         const notes = (p.notes ?? "").trim();
+         if (notes === "") continue;
+         if (y > 700) {
+            doc.addPage();
+            y = 30;
+         }
+         doc.font(FONTS.SEMIBOLD).fontSize(8).fillColor(COLORS.BLACK);
+         doc.text(`#${i + 1}:`, LEFT_MARGIN, y, { width: 24 });
+         doc.font(FONTS.REGULAR).fontSize(8).fillColor(COLORS.BLACK);
+         const notesHeight = doc.heightOfString(notes, { width: notesWidth - 28 });
+         doc.text(notes, LEFT_MARGIN + 28, y, { width: notesWidth - 28 });
+         y += notesHeight + 6;
+      }
+      y += 6;
    }
 
    y += 12;

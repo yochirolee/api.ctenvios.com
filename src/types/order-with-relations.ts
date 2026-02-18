@@ -17,6 +17,9 @@ export const orderWithRelationsInclude = Prisma.validator<Prisma.OrderInclude>()
    },
    order_items: {
       orderBy: { hbl: "asc" },
+      include: {
+         rate: { include: { product: { select: { name: true, unit: true } } } },
+      },
    },
    payments: true,
    discounts: true,

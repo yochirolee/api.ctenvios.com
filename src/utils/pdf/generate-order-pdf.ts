@@ -573,44 +573,71 @@ async function generateModernTable(
    const descriptionX = 105;
    const descriptionWidth = seguroX - descriptionX - columnGap;
 
-   // Render items
+   // Render items (product name + description like dispatch PDF)
+   doc.font(FONTS.REGULAR).fontSize(9);
+   const lineHeight = doc.currentLineHeight();
+   const lineGap = 3;
+   const maxDescHeight = 33; // ~3 lines
+   const oneLineThreshold = lineHeight * 1.2;
+   const SINGLE_LINE_ROW_HEIGHT = 18;
+   const rowPadding = 4;
+   const multiLineBottomBuffer = 6;
+
    for (const item of processedItems) {
-      // Set font style for accurate height measurement
-      doc.font(FONTS.REGULAR).fontSize(9);
-
-      // Trim description if it exceeds 3 lines
-      const maxHeight = 33; // Based on font size 9pt, ~11pt per line = 33pt for 3 lines
-
+      const unit = item.unit || item.rate?.product?.unit || "PER_LB";
+      const productNameLine =
+         unit === "FIXED" && item.rate?.product?.name ? item.rate.product.name : "";
       let description = item.description;
       let descriptionHeight = doc.heightOfString(description, { width: descriptionWidth });
 
-      // If description exceeds 3 lines, trim it
-      if (descriptionHeight > maxHeight) {
+      if (descriptionHeight > maxDescHeight) {
          const words = description.split(" ");
          let trimmedDesc = "";
-
          for (let i = 0; i < words.length; i++) {
             const testDesc = trimmedDesc + (trimmedDesc ? " " : "") + words[i];
-            const testHeight = doc.heightOfString(testDesc + "...", { width: descriptionWidth });
-
-            if (testHeight > maxHeight) {
-               break;
-            }
+            if (doc.heightOfString(testDesc + "...", { width: descriptionWidth }) > maxDescHeight) break;
             trimmedDesc = testDesc;
          }
-
          description = trimmedDesc + "...";
          descriptionHeight = doc.heightOfString(description, { width: descriptionWidth });
       }
 
-      const rowHeight = Math.max(20, descriptionHeight + 12);
+      doc.font(FONTS.BOLD).fontSize(9);
+      const productNameWidth = productNameLine ? doc.widthOfString(productNameLine + " ") : 0;
+      doc.font(FONTS.REGULAR).fontSize(9);
+      const descriptionWidthNeeded = doc.widthOfString(description);
+      const fitsOneLine =
+         !!productNameLine &&
+         productNameWidth + descriptionWidthNeeded <= descriptionWidth;
 
-      // Check page break
+      const productNameHeight = productNameLine
+         ? doc.heightOfString(productNameLine, { width: descriptionWidth })
+         : 0;
+      const descHeight = fitsOneLine
+         ? lineHeight
+         : Math.ceil(productNameHeight) +
+           (productNameLine ? lineGap : 0) +
+           Math.ceil(descriptionHeight);
+      const isSingleLine = descHeight <= oneLineThreshold;
+      const rowHeight = isSingleLine
+         ? SINGLE_LINE_ROW_HEIGHT
+         : Math.max(20, descHeight + rowPadding * 2 + multiLineBottomBuffer + (descHeight > lineHeight ? 3 : 0));
+
       if (currentY + rowHeight > LAYOUT.PAGE_HEIGHT - LAYOUT.BOTTOM_MARGIN) {
-         currentY = await addNewPageWithHeader(true); // Include headers for item continuation
+         currentY = await addNewPageWithHeader(true);
       }
 
-      renderModernTableRow(doc, { ...item, description }, currentY, rowHeight, textStyle);
+      const contentY = currentY + (isSingleLine ? 3 : rowPadding);
+      renderModernTableRow(doc, {
+         ...item,
+         description,
+         productNameLine: productNameLine || undefined,
+         fitsOneLine: !!fitsOneLine,
+         productNameWidth,
+         productNameHeight: productNameLine ? Math.ceil(productNameHeight) : 0,
+         contentY,
+         rowHeight,
+      }, currentY, rowHeight, textStyle);
       currentY += rowHeight;
    }
 
@@ -686,7 +713,8 @@ function renderModernTableRow(
    rowHeight: number,
    textStyle: TextStyler
 ) {
-   const verticalCenter = currentY + rowHeight / 2.5 - 3;
+   const contentY = item.contentY ?? currentY + rowHeight / 2.5 - 3;
+   const verticalCenter = contentY;
 
    // Calculate positions from right edge (same as headers)
    const rightMargin = LAYOUT.PAGE_WIDTH - 20;
@@ -709,12 +737,21 @@ function renderModernTableRow(
    const descriptionWidth = seguroX - descriptionX - columnGap;
 
    // HBL (monospace style)
-   textStyle.style(FONTS.REGULAR, 8, COLORS.FOREGROUND).text(item.hbl, 20, verticalCenter, { width: 100 });
+   textStyle.style(FONTS.REGULAR, 8, COLORS.FOREGROUND).text(item.hbl, 20, contentY, { width: 100 });
 
-   // Description
-   textStyle
-      .style(FONTS.REGULAR, 8, COLORS.FOREGROUND)
-      .text(item.description, descriptionX, verticalCenter, { width: descriptionWidth });
+   // Description: product name (bold) on top when present, then description (like dispatch PDF)
+   if (item.fitsOneLine && item.productNameLine) {
+      textStyle.style(FONTS.BOLD, 8, COLORS.FOREGROUND).text(item.productNameLine, descriptionX, contentY, { width: descriptionWidth });
+      textStyle.style(FONTS.REGULAR, 8, COLORS.FOREGROUND).text(item.description, descriptionX + item.productNameWidth, contentY, {
+         width: descriptionWidth - item.productNameWidth,
+      });
+   } else if (item.productNameLine) {
+      const gap = 3;
+      textStyle.style(FONTS.BOLD, 8, COLORS.FOREGROUND).text(item.productNameLine, descriptionX, contentY, { width: descriptionWidth });
+      textStyle.style(FONTS.REGULAR, 8, COLORS.FOREGROUND).text(item.description, descriptionX, contentY + (item.productNameHeight || 0) + gap, { width: descriptionWidth });
+   } else {
+      textStyle.style(FONTS.REGULAR, 8, COLORS.FOREGROUND).text(item.description, descriptionX, contentY, { width: descriptionWidth });
+   }
 
    // Seguro
    const insuranceColor = (item.insurance_fee_in_cents || 0) === 0 ? COLORS.MUTED_FOREGROUND : COLORS.FOREGROUND;

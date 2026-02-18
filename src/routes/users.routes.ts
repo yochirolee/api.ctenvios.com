@@ -223,6 +223,7 @@ router.post("/sign-in/email", async (req, res) => {
       return res.status(400).json({ message: "Email and password are required" });
    }
 
+  
    // signInEmail returns { token, user } when successful
    const response = await auth.api.signInEmail({
       body: { email, password },
