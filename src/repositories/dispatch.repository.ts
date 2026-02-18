@@ -261,7 +261,6 @@ const dispatch = {
       payment_status?: PaymentStatus,
       dispatch_id?: number,
    ) => {
-
       // Build where clause with optional filters
       const where: Prisma.DispatchWhereInput = {
          // If dispatch_id is provided, filter by specific dispatch
@@ -323,7 +322,7 @@ const dispatch = {
             },
          },
          orderBy: {
-            updated_at: "desc",
+            created_at: "desc",
          },
       });
       const total = await prisma.dispatch.count({ where });
