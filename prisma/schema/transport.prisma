@@ -2,6 +2,8 @@ model Container {
   id                  Int                    @id @default(autoincrement())
   container_number    String                 @unique
   bl_number           String?
+  booking_number      String?
+  cat_number          String?
   seal_number         String?
   container_type      ContainerType          @default(DRY_40FT)
   status              ContainerStatus        @default(PENDING)
@@ -11,15 +13,15 @@ model Container {
   destination_port    String
   max_weight_kg       Decimal?
   current_weight_kg   Decimal?               @default(0.00)
-  estimated_departure DateTime? @db.Timestamptz(3)
-  estimated_arrival   DateTime? @db.Timestamptz(3)
-  actual_departure    DateTime? @db.Timestamptz(3)
-  actual_arrival      DateTime? @db.Timestamptz(3)
+  estimated_departure DateTime?              @db.Timestamptz(3)
+  estimated_arrival   DateTime?              @db.Timestamptz(3)
+  actual_departure    DateTime?              @db.Timestamptz(3)
+  actual_arrival      DateTime?              @db.Timestamptz(3)
   notes               String?
   forwarder_id        Int
   provider_id         Int
-  created_at          DateTime @db.Timestamptz(3)               @default(now())
-  updated_at          DateTime @db.Timestamptz(3)               @updatedAt
+  created_at          DateTime               @default(now()) @db.Timestamptz(3)
+  updated_at          DateTime               @updatedAt @db.Timestamptz(3)
   created_by_id       String
   container_name      String
   created_by          User                   @relation("created_containers", fields: [created_by_id], references: [id])
@@ -44,7 +46,7 @@ model ContainerEvent {
   status        ContainerStatus
   location      String?
   description   String?
-  created_at    DateTime @db.Timestamptz(3)        @default(now())
+  created_at    DateTime        @default(now()) @db.Timestamptz(3)
   created_by_id String?
   container     Container       @relation(fields: [container_id], references: [id], onDelete: Cascade)
   created_by    User?           @relation("container_events", fields: [created_by_id], references: [id])
@@ -60,17 +62,17 @@ model Flight {
   airline             String?
   origin_airport      String
   destination_airport String
-  estimated_departure DateTime? @db.Timestamptz(3)
-  estimated_arrival   DateTime? @db.Timestamptz(3)
-  actual_departure    DateTime? @db.Timestamptz(3)
-  actual_arrival      DateTime? @db.Timestamptz(3)
+  estimated_departure DateTime?              @db.Timestamptz(3)
+  estimated_arrival   DateTime?              @db.Timestamptz(3)
+  actual_departure    DateTime?              @db.Timestamptz(3)
+  actual_arrival      DateTime?              @db.Timestamptz(3)
   total_weight_kg     Decimal?               @default(0.00)
   total_pieces        Int?                   @default(0)
   notes               String?
   forwarder_id        Int
   provider_id         Int
-  created_at          DateTime @db.Timestamptz(3)               @default(now())
-  updated_at          DateTime @db.Timestamptz(3)               @updatedAt
+  created_at          DateTime               @default(now()) @db.Timestamptz(3)
+  updated_at          DateTime               @updatedAt @db.Timestamptz(3)
   created_by_id       String
   created_by          User                   @relation("created_flights", fields: [created_by_id], references: [id])
   forwarder           Forwarder              @relation(fields: [forwarder_id], references: [id])
@@ -94,7 +96,7 @@ model FlightEvent {
   status        FlightStatus
   location      String?
   description   String?
-  created_at    DateTime @db.Timestamptz(3)     @default(now())
+  created_at    DateTime     @default(now()) @db.Timestamptz(3)
   created_by_id String?
   created_by    User?        @relation("flight_events", fields: [created_by_id], references: [id])
   flight        Flight       @relation(fields: [flight_id], references: [id], onDelete: Cascade)

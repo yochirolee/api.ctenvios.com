@@ -678,6 +678,7 @@ const dispatch = {
             // Get previous status from ParcelEvent history
             const previousStatus = await parcelsRepository.getPreviousStatus(parcel.id);
             const statusToRestore = previousStatus || Status.IN_AGENCY;
+            const statusDetails = buildParcelStatusDetails({ status: statusToRestore });
 
             // Update parcel: remove from dispatch and restore previous status
             await tx.parcel.update({
@@ -685,12 +686,13 @@ const dispatch = {
                data: {
                   dispatch_id: null,
                   status: statusToRestore,
-                  status_details: buildParcelStatusDetails({ status: statusToRestore }),
+                  status_details: statusDetails,
                   events: {
                      create: {
                         event_type: "REMOVED_FROM_PALLET",
                         user_id: user_id,
                         status: statusToRestore,
+                        status_details: statusDetails,
                      },
                   },
                },
@@ -786,13 +788,14 @@ const dispatch = {
             );
          }
 
+         const statusDetails = buildParcelStatusDetails({ status: Status.IN_DISPATCH, dispatch_id: dispatchId });
          // 7. Update parcel status and connect to dispatch
          await tx.parcel.update({
             where: { id: parcel.id },
             data: {
                dispatch_id: dispatchId,
                status: Status.IN_DISPATCH,
-               status_details: buildParcelStatusDetails({ status: Status.IN_DISPATCH, dispatch_id: dispatchId }),
+               status_details: statusDetails,
             },
          });
 
@@ -805,6 +808,7 @@ const dispatch = {
                location_id: parcel.current_location_id || null,
                status: Status.IN_DISPATCH,
                dispatch_id: dispatchId,
+               status_details: statusDetails,
             },
          });
 
@@ -893,12 +897,13 @@ const dispatch = {
                continue; // already in this dispatch
             }
 
+            const statusDetails = buildParcelStatusDetails({ status: Status.IN_DISPATCH, dispatch_id: dispatchId });
             await tx.parcel.update({
                where: { id: parcel.id },
                data: {
                   dispatch_id: dispatchId,
                   status: Status.IN_DISPATCH,
-                  status_details: buildParcelStatusDetails({ status: Status.IN_DISPATCH, dispatch_id: dispatchId }),
+                  status_details: statusDetails,
                },
             });
             await tx.parcelEvent.create({
@@ -909,6 +914,7 @@ const dispatch = {
                   location_id: parcel.current_location_id || null,
                   status: Status.IN_DISPATCH,
                   dispatch_id: dispatchId,
+                  status_details: statusDetails,
                   notes: `Added to dispatch (batch from order #${order_id})`,
                },
             });
@@ -996,18 +1002,20 @@ const dispatch = {
             }
          }
 
+         const statusDetails = buildParcelStatusDetails({ status: statusToRestore });
          // 4. Update parcel: remove from dispatch and restore previous status
          const updated = await tx.parcel.update({
             where: { tracking_number: hbl },
             data: {
                dispatch_id: null,
                status: statusToRestore,
-               status_details: buildParcelStatusDetails({ status: statusToRestore }),
+               status_details: statusDetails,
                events: {
                   create: {
                      event_type: "REMOVED_FROM_DISPATCH",
                      user_id: user_id,
                      status: statusToRestore,
+                     status_details: statusDetails,
                      notes: `Removed from dispatch ${dispatchId}, restored to ${statusToRestore}`,
                   },
                },
@@ -1242,21 +1250,23 @@ const dispatch = {
          let wasAdded = false;
 
          if (isInThisDispatch) {
+            const statusDetails = buildParcelStatusDetails({
+               status: Status.RECEIVED_IN_DISPATCH,
+               dispatch_id: dispatchId,
+            });
             // Parcel is in this dispatch, just mark as received
             const updated = await tx.parcel.update({
                where: { tracking_number },
                data: {
                   status: Status.RECEIVED_IN_DISPATCH,
-                  status_details: buildParcelStatusDetails({
-                     status: Status.RECEIVED_IN_DISPATCH,
-                     dispatch_id: dispatchId,
-                  }),
+                  status_details: statusDetails,
                   events: {
                      create: {
                         event_type: "RECEIVED_IN_DISPATCH",
                         user_id: user_id,
                         status: Status.RECEIVED_IN_DISPATCH,
                         dispatch_id: dispatchId,
+                        status_details: statusDetails,
                      },
                   },
                },
@@ -1276,21 +1286,23 @@ const dispatch = {
 
          // Parcel not in any dispatch, add to this dispatch and mark as received
          wasAdded = true;
+         const statusDetails = buildParcelStatusDetails({
+            status: Status.RECEIVED_IN_DISPATCH,
+            dispatch_id: dispatchId,
+         });
          const updated = await tx.parcel.update({
             where: { tracking_number },
             data: {
                dispatch_id: dispatchId,
                status: Status.RECEIVED_IN_DISPATCH,
-               status_details: buildParcelStatusDetails({
-                  status: Status.RECEIVED_IN_DISPATCH,
-                  dispatch_id: dispatchId,
-               }),
+               status_details: statusDetails,
                events: {
                   create: {
                      event_type: "RECEIVED_IN_DISPATCH",
                      user_id: user_id,
                      status: Status.RECEIVED_IN_DISPATCH,
                      dispatch_id: dispatchId,
+                     status_details: statusDetails,
                      notes: "Added during reception (not in original dispatch)",
                   },
                },
@@ -1578,6 +1590,10 @@ const dispatch = {
 
             // Create events only for actually added parcels
             if (actuallyAdded.length > 0) {
+               const statusDetails = buildParcelStatusDetails({
+                  status: Status.IN_DISPATCH,
+                  dispatch_id: created.id,
+               });
                await tx.parcelEvent.createMany({
                   data: actuallyAdded.map((p) => ({
                      parcel_id: p.id,
@@ -1587,6 +1603,7 @@ const dispatch = {
                      location_id: p.current_location_id || null,
                      status: Status.IN_DISPATCH,
                      dispatch_id: created.id,
+                     status_details: statusDetails,
                   })),
                });
             }
@@ -1599,6 +1616,10 @@ const dispatch = {
          }
 
          // 7. Create events for all parcels (happy path)
+         const statusDetails = buildParcelStatusDetails({
+            status: Status.IN_DISPATCH,
+            dispatch_id: created.id,
+         });
          await tx.parcelEvent.createMany({
             data: toAdd.map((p) => ({
                parcel_id: p.id,
@@ -1608,6 +1629,7 @@ const dispatch = {
                location_id: p.current_location_id || null,
                status: Status.IN_DISPATCH,
                dispatch_id: created.id,
+               status_details: statusDetails,
             })),
          });
 
@@ -1816,6 +1838,10 @@ const dispatch = {
             });
 
             // Create parcel events
+            const statusDetails = buildParcelStatusDetails({
+               status: receivedParcelStatus,
+               dispatch_id: dispatch.id,
+            });
             await tx.parcelEvent.createMany({
                data: agencyParcels.map((p) => ({
                   parcel_id: p.id,
@@ -1827,6 +1853,7 @@ const dispatch = {
                   location_id: p.current_location_id || null,
                   status: receivedParcelStatus,
                   dispatch_id: dispatch.id,
+                  status_details: statusDetails,
                })),
             });
 
@@ -2477,6 +2504,10 @@ const dispatch = {
                      },
                   });
 
+                  const statusDetails = buildParcelStatusDetails({
+                     status: receivedParcelStatus,
+                     dispatch_id: dispatchId,
+                  });
                   await tx.parcelEvent.createMany({
                      data: dispatchSurplus.map((p) => ({
                         parcel_id: p.id,
@@ -2487,6 +2518,7 @@ const dispatch = {
                         user_id,
                         status: receivedParcelStatus,
                         dispatch_id: dispatchId,
+                        status_details: statusDetails,
                      })),
                   });
 
@@ -2514,6 +2546,10 @@ const dispatch = {
                   },
                });
 
+               const statusDetails = buildParcelStatusDetails({
+                  status: receivedParcelStatus,
+                  dispatch_id: dispatchId,
+               });
                await tx.parcelEvent.createMany({
                   data: receivedParcels.map((p) => ({
                      parcel_id: p.id,
@@ -2524,6 +2560,7 @@ const dispatch = {
                      user_id,
                      status: receivedParcelStatus,
                      dispatch_id: dispatchId,
+                     status_details: statusDetails,
                   })),
                });
 
@@ -2625,6 +2662,10 @@ const dispatch = {
                   },
                });
 
+               const statusDetails = buildParcelStatusDetails({
+                  status: receivedParcelStatus,
+                  dispatch_id: receptionDispatch.id,
+               });
                await tx.parcelEvent.createMany({
                   data: receivedParcels.map((p) => ({
                      parcel_id: p.id,
@@ -2635,6 +2676,7 @@ const dispatch = {
                      user_id,
                      status: receivedParcelStatus,
                      dispatch_id: receptionDispatch.id,
+                     status_details: statusDetails,
                   })),
                });
 
@@ -2652,6 +2694,10 @@ const dispatch = {
                      },
                   });
 
+                  const statusDetailsSurplus = buildParcelStatusDetails({
+                     status: receivedParcelStatus,
+                     dispatch_id: receptionDispatch.id,
+                  });
                   await tx.parcelEvent.createMany({
                      data: dispatchSurplus.map((p) => ({
                         parcel_id: p.id,
@@ -2662,6 +2708,7 @@ const dispatch = {
                         user_id,
                         status: receivedParcelStatus,
                         dispatch_id: receptionDispatch.id,
+                        status_details: statusDetailsSurplus,
                      })),
                   });
 
@@ -2780,6 +2827,10 @@ const dispatch = {
                },
             });
 
+            const statusDetails = buildParcelStatusDetails({
+               status: receivedParcelStatus,
+               dispatch_id: newDispatch.id,
+            });
             await tx.parcelEvent.createMany({
                data: agencyParcels.map((p) => ({
                   parcel_id: p.id,
@@ -2790,6 +2841,7 @@ const dispatch = {
                   user_id,
                   status: receivedParcelStatus,
                   dispatch_id: newDispatch.id,
+                  status_details: statusDetails,
                })),
             });
 

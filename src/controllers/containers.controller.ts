@@ -145,6 +145,8 @@ export const containers = {
       const user = req.user;
       const body = req.body as Record<string, unknown>;
 
+      console.log("updateing container", body);
+
       const updateData = {
          ...body,
          estimated_departure: body.estimated_departure ? new Date(body.estimated_departure as string) : undefined,
@@ -290,14 +292,17 @@ export const containers = {
     */
    updateStatus: async (req: ContainerRequest, res: Response): Promise<void> => {
       const { id } = req.params;
-      const { status, location, description } = req.body as {
+      const { status, seal_number, booking_number, cat_number, location, description } = req.body as {
          status: ContainerStatus;
          location?: string;
          description?: string;
+         seal_number?: string;
+         booking_number?: string;
+         cat_number?: string;
       };
       const user = req.user;
 
-      const container = await containersRepository.updateStatus(Number(id), status, user!.id, location, description);
+      const container = await containersRepository.updateStatus(Number(id), status, user!.id, location, description, seal_number, booking_number, cat_number);
 
       res.status(200).json(container);
    },

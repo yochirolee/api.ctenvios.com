@@ -469,6 +469,7 @@ const parcels = {
                event_type: "STATUS_CORRECTED",
                user_id,
                status,
+               status_details: statusDetails,
                notes,
             },
          });

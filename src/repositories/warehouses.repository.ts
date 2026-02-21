@@ -285,16 +285,17 @@ const warehouses = {
 
       const previousWarehouseId = parcel.current_warehouse_id;
 
+      const statusDetails = buildParcelStatusDetails({
+         status: Status.IN_WAREHOUSE,
+         current_warehouse_id: warehouse_id,
+      });
       const updatedParcel = await prisma.$transaction(async (tx) => {
          const updated = await tx.parcel.update({
             where: { tracking_number },
             data: {
                current_warehouse_id: warehouse_id,
                status: Status.IN_WAREHOUSE,
-               status_details: buildParcelStatusDetails({
-                  status: Status.IN_WAREHOUSE,
-                  current_warehouse_id: warehouse_id,
-               }),
+               status_details: statusDetails,
             },
          });
 
@@ -308,6 +309,7 @@ const warehouses = {
                user_id,
                status: Status.IN_WAREHOUSE,
                warehouse_id,
+               status_details: statusDetails,
                notes: previousWarehouseId
                   ? `Transferred from warehouse ${previousWarehouseId} to ${warehouse.name}`
                   : `Received at ${warehouse.name}`,
@@ -362,15 +364,16 @@ const warehouses = {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "Cannot transfer to inactive warehouse");
       }
 
+      const statusDetails = buildParcelStatusDetails({
+         status: Status.IN_WAREHOUSE,
+         current_warehouse_id: to_warehouse_id,
+      });
       const updatedParcel = await prisma.$transaction(async (tx) => {
          const updated = await tx.parcel.update({
             where: { tracking_number },
             data: {
                current_warehouse_id: to_warehouse_id,
-               status_details: buildParcelStatusDetails({
-                  status: Status.IN_WAREHOUSE,
-                  current_warehouse_id: to_warehouse_id,
-               }),
+               status_details: statusDetails,
             },
          });
 
@@ -382,6 +385,7 @@ const warehouses = {
                user_id,
                status: Status.IN_WAREHOUSE,
                warehouse_id: to_warehouse_id,
+               status_details: statusDetails,
                notes: `Transferred from ${fromWarehouse.name} to ${toWarehouse.name}`,
             },
          });

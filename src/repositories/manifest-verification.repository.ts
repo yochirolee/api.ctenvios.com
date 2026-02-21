@@ -10,6 +10,7 @@ import {
    VerificationStatus,
 } from "@prisma/client";
 import { AppError } from "../common/app-errors";
+import { buildParcelStatusDetails } from "../utils/parcel-status-details";
 
 /**
  * Manifest Verification Repository
@@ -263,6 +264,11 @@ const manifestVerification = {
 
       return await prisma.$transaction(async (tx) => {
          if (isExpected) {
+            const statusDetails = buildParcelStatusDetails({
+               status: Status.AT_PORT_OF_ENTRY,
+               container_id: verification.container_id ?? undefined,
+               flight_id: verification.flight_id ?? undefined,
+            });
             // Parcel is expected - mark as received
             await tx.parcelEvent.create({
                data: {
@@ -272,6 +278,7 @@ const manifestVerification = {
                   status: Status.AT_PORT_OF_ENTRY,
                   container_id: verification.container_id,
                   flight_id: verification.flight_id,
+                  status_details: statusDetails,
                   notes: `Scanned at verification #${verification_id}`,
                },
             });
@@ -303,12 +310,20 @@ const manifestVerification = {
             });
 
             if (parcel) {
+               const statusDetails = buildParcelStatusDetails({
+                  status: parcel.status,
+                  dispatch_id: parcel.dispatch_id ?? undefined,
+                  container_id: parcel.container_id ?? undefined,
+                  flight_id: parcel.flight_id ?? undefined,
+                  current_warehouse_id: parcel.current_warehouse_id ?? undefined,
+               });
                await tx.parcelEvent.create({
                   data: {
                      parcel_id: parcel.id,
                      event_type: ParcelEventType.DISCREPANCY_FOUND,
                      user_id,
                      status: parcel.status,
+                     status_details: statusDetails,
                      notes: `Found as EXTRA at verification #${verification_id} - not in manifest`,
                   },
                });
@@ -375,6 +390,11 @@ const manifestVerification = {
                },
             });
 
+            const statusDetails = buildParcelStatusDetails({
+               status: Status.AT_PORT_OF_ENTRY,
+               container_id: verification.container_id ?? undefined,
+               flight_id: verification.flight_id ?? undefined,
+            });
             await tx.parcelEvent.create({
                data: {
                   parcel_id: parcel.id,
@@ -383,6 +403,7 @@ const manifestVerification = {
                   status: Status.AT_PORT_OF_ENTRY,
                   container_id: verification.container_id,
                   flight_id: verification.flight_id,
+                  status_details: statusDetails,
                   notes: `Marked as MISSING at verification #${verification_id}`,
                },
             });
@@ -455,6 +476,13 @@ const manifestVerification = {
             },
          });
 
+         const statusDetails = buildParcelStatusDetails({
+            status: parcel.status,
+            dispatch_id: parcel.dispatch_id ?? undefined,
+            container_id: parcel.container_id ?? verification.container_id ?? undefined,
+            flight_id: parcel.flight_id ?? verification.flight_id ?? undefined,
+            current_warehouse_id: parcel.current_warehouse_id ?? undefined,
+         });
          await tx.parcelEvent.create({
             data: {
                parcel_id: parcel.id,
@@ -463,6 +491,7 @@ const manifestVerification = {
                status: parcel.status,
                container_id: verification.container_id,
                flight_id: verification.flight_id,
+               status_details: statusDetails,
                notes: notes || `Reported as DAMAGED at verification #${verification_id}`,
             },
          });
@@ -504,12 +533,14 @@ const manifestVerification = {
          });
 
          if (discrepancy.parcel_id) {
+            const statusDetails = buildParcelStatusDetails({ status: Status.AT_PORT_OF_ENTRY });
             await tx.parcelEvent.create({
                data: {
                   parcel_id: discrepancy.parcel_id,
                   event_type: ParcelEventType.DISCREPANCY_RESOLVED,
                   user_id,
                   status: Status.AT_PORT_OF_ENTRY,
+                  status_details: statusDetails,
                   notes: `Discrepancy resolved: ${resolution}`,
                },
             });

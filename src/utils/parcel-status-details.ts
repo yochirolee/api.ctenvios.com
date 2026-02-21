@@ -9,6 +9,7 @@ export interface ParcelStatusDetailsParams {
    status: Status;
    dispatch_id?: number | null;
    container_id?: number | null;
+   container_name?: string | null;
    pallet_id?: number | null;
    flight_id?: number | null;
    current_warehouse_id?: number | null;
@@ -23,13 +24,14 @@ export const buildParcelStatusDetails = (params: ParcelStatusDetailsParams): str
       status,
       dispatch_id,
       container_id,
+      container_name,
       pallet_id,
       flight_id,
       current_warehouse_id,
    } = params;
 
    if (container_id != null) {
-      return `In Container #${container_id}`;
+      return container_name ? `In Container ${container_name}` : `In Container #${container_id}`;
    }
    if (flight_id != null) {
       return `In Flight #${flight_id}`;

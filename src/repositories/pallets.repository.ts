@@ -297,16 +297,17 @@ const pallets = {
       }
 
       const updatedParcel = await prisma.$transaction(async (tx) => {
+         const statusDetails = buildParcelStatusDetails({
+            status: Status.IN_PALLET,
+            pallet_id,
+         });
          // Update parcel
          const updated = await tx.parcel.update({
             where: { tracking_number },
             data: {
                pallet_id,
                status: Status.IN_PALLET,
-               status_details: buildParcelStatusDetails({
-                  status: Status.IN_PALLET,
-                  pallet_id,
-               }),
+               status_details: statusDetails,
             },
          });
 
@@ -318,6 +319,7 @@ const pallets = {
                user_id,
                status: Status.IN_PALLET,
                pallet_id,
+               status_details: statusDetails,
                notes: `Added to pallet ${pallet.pallet_number}`,
             },
          });
@@ -399,15 +401,16 @@ const pallets = {
                continue;
             }
 
+            const statusDetails = buildParcelStatusDetails({
+               status: Status.IN_PALLET,
+               pallet_id,
+            });
             const updated = await tx.parcel.update({
                where: { id: parcel.id },
                data: {
                   pallet_id,
                   status: Status.IN_PALLET,
-                  status_details: buildParcelStatusDetails({
-                     status: Status.IN_PALLET,
-                     pallet_id,
-                  }),
+                  status_details: statusDetails,
                },
             });
 
@@ -418,6 +421,7 @@ const pallets = {
                   user_id,
                   status: Status.IN_PALLET,
                   pallet_id,
+                  status_details: statusDetails,
                   notes: `Added to pallet ${pallet.pallet_number} (batch from order #${order_id})`,
                },
             });
@@ -479,6 +483,7 @@ const pallets = {
          );
       }
 
+      const statusDetails = buildParcelStatusDetails({ status: Status.IN_AGENCY });
       const updatedParcel = await prisma.$transaction(async (tx) => {
          // Update parcel
          const updated = await tx.parcel.update({
@@ -486,7 +491,7 @@ const pallets = {
             data: {
                pallet_id: null,
                status: Status.IN_AGENCY,
-               status_details: buildParcelStatusDetails({ status: Status.IN_AGENCY }),
+               status_details: statusDetails,
             },
          });
 
@@ -497,6 +502,7 @@ const pallets = {
                event_type: ParcelEventType.REMOVED_FROM_PALLET,
                user_id,
                status: Status.IN_AGENCY,
+               status_details: statusDetails,
                pallet_id, // Keep reference to which pallet it was removed from
                notes: `Removed from pallet ${pallet.pallet_number}`,
             },

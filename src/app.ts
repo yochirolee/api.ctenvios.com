@@ -69,7 +69,7 @@ app.use(compression());
 app.use(express.urlencoded({ extended: true }));
 
 // HTTP Logger - logs all requests to database
-app.use(httpLoggerMiddleware);
+//app.use(httpLoggerMiddleware);
 
 // Health check endpoint
 app.get("/health", (req, res) => {

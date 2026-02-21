@@ -219,6 +219,8 @@ router.post("/sign-up/email", authMiddleware, async (req, res) => {
 router.post("/sign-in/email", async (req, res) => {
    const { email, password } = req.body;
 
+   console.log(email, password, "email, password");
+
    if (!email || !password) {
       return res.status(400).json({ message: "Email and password are required" });
    }

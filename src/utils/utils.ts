@@ -1,4 +1,3 @@
-
 export function formatPhoneNumber(phoneNumber: string): string {
    return phoneNumber.replace(/^(\+535|535)?/, "");
 }
@@ -9,21 +8,24 @@ export function isValidCubanCI(ci: string): boolean {
    const year = parseInt(ci.slice(0, 2), 10);
    const month = parseInt(ci.slice(2, 4), 10);
    const day = parseInt(ci.slice(4, 6), 10);
-   const fullYear = year >= 30 ? 1900 + year : 2000 + year;
+
+   // Infer century based on current year to support people born in 19xx and 20xx
+   const currentYY = new Date().getFullYear() % 100;
+   const fullYear = year > currentYY ? 1900 + year : 2000 + year;
 
    if (month < 1 || month > 12 || day < 1 || day > 31) return false;
 
-   // Validar fecha
    const date = new Date(fullYear, month - 1, day);
    const isValidDate = date.getFullYear() === fullYear && date.getMonth() === month - 1 && date.getDate() === day;
 
    if (!isValidDate) return false;
 
-   // Si es antes de 2014 no se exige digito de control
+   // If born before 2014, don't enforce control digit
    if (fullYear < 2014) return true;
 
    const weights = [1, 2, 1, 2, 1, 2, 1, 2, 1, 2];
    let sum = 0;
+
    for (let i = 0; i < 10; i++) {
       const digit = parseInt(ci[i], 10);
       const product = digit * weights[i];
@@ -83,17 +85,17 @@ export const calculate_row_subtotal = (
    customs_fee_in_cents: number,
    charge_fee_in_cents: number,
    insurance_fee_in_cents: number,
-   unit: string
+   unit: string,
 ): number => {
    const safePriceInCents = price_in_cents || 0;
-   const safeWeight =toNumber(weight) || 0;
+   const safeWeight = toNumber(weight) || 0;
    const safeCustomsFeeInCents = customs_fee_in_cents || 0;
    const safeChargeFeeInCents = charge_fee_in_cents || 0;
    const safeInsuranceFeeInCents = insurance_fee_in_cents || 0;
 
    if (unit === "PER_LB") {
       return Math.ceil(
-         safePriceInCents * safeWeight + safeCustomsFeeInCents + safeChargeFeeInCents + safeInsuranceFeeInCents
+         safePriceInCents * safeWeight + safeCustomsFeeInCents + safeChargeFeeInCents + safeInsuranceFeeInCents,
       );
    }
    return Math.ceil(safePriceInCents + safeCustomsFeeInCents);
@@ -108,7 +110,7 @@ export function calculateOrderTotal(items: any[]): number {
          item.customs_fee_in_cents || 0,
          item.charge_fee_in_cents || 0,
          item.insurance_fee_in_cents || 0,
-         item.unit || "PER_LB"
+         item.unit || "PER_LB",
       );
       return total + itemSubtotal;
    }, 0);

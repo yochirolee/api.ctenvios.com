@@ -7,6 +7,7 @@ import prisma from "../lib/prisma.client";
 import StatusCodes from "../common/https-status-codes";
 import { AppError } from "../common/app-errors";
 import { buildHBL, todayYYMM } from "../utils/generate-hbl";
+import { buildParcelStatusDetails } from "../utils/parcel-status-details";
 
 interface OrderCreateInput {
    partner_id?: number;
@@ -159,12 +160,14 @@ export const ordersService = {
          });
 
          // F) Crear eventos iniciales en batch (más rápido que nested)
+         const statusDetails = buildParcelStatusDetails({ status: Status.IN_AGENCY });
          await tx.parcelEvent.createMany({
             data: parcels.map((p) => ({
                parcel_id: p.id,
                event_type: "BILLED",
                user_id,
                status: Status.IN_AGENCY,
+               status_details: statusDetails,
             })),
          });
 

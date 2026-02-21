@@ -363,8 +363,9 @@ const containers = {
 
          const container = await tx.container.findUnique({
             where: { id: container_id },
-            select: { id: true, status: true, container_number: true },
+            select: { id: true, status: true, container_number: true, container_name: true },
          });
+         const containerName = container?.container_name ?? null;
 
          if (!container) {
             throw new AppError(HttpStatusCodes.NOT_FOUND, `Container with id ${container_id} not found`);
@@ -377,15 +378,17 @@ const containers = {
             );
          }
 
+         const statusDetails = buildParcelStatusDetails({
+            status: Status.IN_CONTAINER,
+            container_id,
+            container_name: containerName,
+         });
          const updated = await tx.parcel.update({
             where: { tracking_number },
             data: {
                container_id,
                status: Status.IN_CONTAINER,
-               status_details: buildParcelStatusDetails({
-                  status: Status.IN_CONTAINER,
-                  container_id,
-               }),
+               status_details: statusDetails,
             },
          });
 
@@ -396,6 +399,7 @@ const containers = {
                user_id,
                status: Status.IN_CONTAINER,
                container_id,
+               status_details: statusDetails,
                notes: `Added to container ${container.container_number}`,
             },
          });
@@ -476,16 +480,18 @@ const containers = {
                continue;
             }
 
+            const statusDetails = buildParcelStatusDetails({
+               status: Status.IN_CONTAINER,
+               container_id,
+               container_name: container.container_name,
+            });
             // Update parcel
             const updated = await tx.parcel.update({
                where: { id: parcel.id },
                data: {
                   container_id,
                   status: Status.IN_CONTAINER,
-                  status_details: buildParcelStatusDetails({
-                     status: Status.IN_CONTAINER,
-                     container_id,
-                  }),
+                  status_details: statusDetails,
                },
             });
 
@@ -497,6 +503,7 @@ const containers = {
                   user_id,
                   status: Status.IN_CONTAINER,
                   container_id,
+                  status_details: statusDetails,
                   notes: `Added to container ${container.container_number} (batch from order #${order_id})`,
                },
             });
@@ -592,16 +599,18 @@ const containers = {
                continue;
             }
 
+            const statusDetails = buildParcelStatusDetails({
+               status: Status.IN_CONTAINER,
+               container_id,
+               container_name: container.container_name,
+            });
             // Update parcel
             const updated = await tx.parcel.update({
                where: { id: parcel.id },
                data: {
                   container_id,
                   status: Status.IN_CONTAINER,
-                  status_details: buildParcelStatusDetails({
-                     status: Status.IN_CONTAINER,
-                     container_id,
-                  }),
+                  status_details: statusDetails,
                },
             });
 
@@ -613,6 +622,7 @@ const containers = {
                   user_id,
                   status: Status.IN_CONTAINER,
                   container_id,
+                  status_details: statusDetails,
                   notes: `Added to container ${container.container_number} (batch from dispatch #${dispatch_id})`,
                },
             });
@@ -681,6 +691,7 @@ const containers = {
          );
       }
 
+      const statusDetails = buildParcelStatusDetails({ status: Status.IN_WAREHOUSE });
       const updatedParcel = await prisma.$transaction(async (tx) => {
          // Update parcel
          const updated = await tx.parcel.update({
@@ -688,7 +699,7 @@ const containers = {
             data: {
                container_id: null,
                status: Status.IN_WAREHOUSE,
-               status_details: buildParcelStatusDetails({ status: Status.IN_WAREHOUSE }),
+               status_details: statusDetails,
             },
          });
 
@@ -699,6 +710,7 @@ const containers = {
                event_type: ParcelEventType.REMOVED_FROM_CONTAINER,
                user_id,
                status: Status.IN_WAREHOUSE,
+               status_details: statusDetails,
                container_id, // Keep reference to which container it was removed from
                notes: `Removed from container ${container.container_number}`,
             },
@@ -731,6 +743,9 @@ const containers = {
       user_id: string,
       location?: string,
       description?: string,
+      seal_number?: string,
+      booking_number?: string,
+      cat_number?: string,
    ): Promise<Container> => {
       const container = await prisma.container.findUnique({ where: { id } });
 
@@ -746,6 +761,9 @@ const containers = {
                status,
                ...(status === ContainerStatus.DEPARTED && { actual_departure: new Date() }),
                ...(status === ContainerStatus.AT_PORT && { actual_arrival: new Date() }),
+               ...(seal_number && { seal_number }),
+               ...(booking_number && { booking_number }),
+               ...(cat_number && { cat_number }),
             },
          });
 
@@ -782,6 +800,7 @@ const containers = {
             const statusDetails = buildParcelStatusDetails({
                status: newParcelStatus,
                container_id: id,
+               container_name: container.container_name,
             });
             for (const parcel of parcels) {
                await tx.parcel.update({
@@ -796,6 +815,7 @@ const containers = {
                      user_id,
                      status: newParcelStatus,
                      container_id: id,
+                     status_details: statusDetails,
                      notes: `Container ${container.container_number} - ${status}${location ? ` at ${location}` : ""}`,
                   },
                });

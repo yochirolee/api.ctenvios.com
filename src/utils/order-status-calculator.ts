@@ -121,6 +121,7 @@ interface ParcelStatusRow {
    status: Status;
    dispatch_id: number | null;
    container_id: number | null;
+   container?: { container_name: string } | null;
 }
 
 /**
@@ -132,7 +133,8 @@ export const buildOrderStatusDetails = (parcels: ParcelStatusRow[]): string => {
       return "";
    }
 
-   const groups: Map<string, number> = new Map();
+   type GroupInfo = number | { n: number; container_name?: string };
+   const groups: Map<string, GroupInfo> = new Map();
    for (const p of parcels) {
       const key =
          p.container_id != null
@@ -140,22 +142,35 @@ export const buildOrderStatusDetails = (parcels: ParcelStatusRow[]): string => {
             : p.dispatch_id != null
               ? `dispatch:${p.dispatch_id}`
               : "agency";
-      groups.set(key, (groups.get(key) ?? 0) + 1);
+      if (key.startsWith("container:")) {
+         const existing = groups.get(key);
+         const prevN = typeof existing === "object" ? existing.n : 0;
+         const container_name = p.container?.container_name ?? (typeof existing === "object" ? existing.container_name : undefined);
+         groups.set(key, { n: prevN + 1, container_name });
+      } else {
+         const prev = groups.get(key);
+         const prevN = typeof prev === "object" ? prev.n : (prev ?? 0);
+         groups.set(key, prevN + 1);
+      }
    }
 
    const total = parcels.length;
    const parts: string[] = [];
    if (groups.has("agency")) {
-      const n = groups.get("agency")!;
+      const val = groups.get("agency")!;
+      const n = typeof val === "object" ? val.n : val;
       parts.push(total === 1 && n === 1 ? "In agency" : `${n} in agency`);
    }
-   for (const [key, n] of groups) {
+   for (const [key, val] of groups) {
+      const n = typeof val === "object" ? val.n : val;
       if (key.startsWith("dispatch:")) {
          const id = key.replace("dispatch:", "");
          parts.push(total === 1 && n === 1 ? `In Dispatch #${id}` : `${n} in Dispatch #${id}`);
       } else if (key.startsWith("container:")) {
          const id = key.replace("container:", "");
-         parts.push(total === 1 && n === 1 ? `In Container #${id}` : `${n} in Container #${id}`);
+         const containerName = typeof val === "object" ? val.container_name : undefined;
+         const label = containerName ? `Container ${containerName}` : `Container #${id}`;
+         parts.push(total === 1 && n === 1 ? `In ${label}` : `${n} in ${label}`);
       }
    }
 
@@ -176,7 +191,12 @@ export const buildOrderStatusDetails = (parcels: ParcelStatusRow[]): string => {
 export const updateOrderStatusFromParcels = async (order_id: number): Promise<Status> => {
    const parcels = await prisma.parcel.findMany({
       where: { order_id },
-      select: { status: true, dispatch_id: true, container_id: true },
+      select: {
+         status: true,
+         dispatch_id: true,
+         container_id: true,
+         container: { select: { container_name: true } },
+      },
    });
 
    const parcelStatuses = parcels.map((p) => p.status);
@@ -200,7 +220,12 @@ export const updateOrderStatusFromParcelsTx = async (
 ): Promise<Status> => {
    const parcels = await tx.parcel.findMany({
       where: { order_id },
-      select: { status: true, dispatch_id: true, container_id: true },
+      select: {
+         status: true,
+         dispatch_id: true,
+         container_id: true,
+         container: { select: { container_name: true } },
+      },
    });
 
    const parcelStatuses = parcels.map((p) => p.status);

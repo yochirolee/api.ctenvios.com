@@ -329,6 +329,14 @@ const deliveryRoutes = {
          );
       }
 
+      const statusDetails = buildParcelStatusDetails({
+         status: parcel.status,
+         dispatch_id: parcel.dispatch_id,
+         container_id: parcel.container_id,
+         pallet_id: parcel.pallet_id,
+         flight_id: parcel.flight_id,
+         current_warehouse_id: parcel.current_warehouse_id,
+      });
       const assignment = await prisma.$transaction(async (tx) => {
          const created = await tx.deliveryAssignment.create({
             data: {
@@ -343,6 +351,7 @@ const deliveryRoutes = {
                event_type: ParcelEventType.ASSIGNED_TO_ROUTE,
                user_id,
                status: parcel.status,
+               status_details: statusDetails,
                notes: `Assigned to route ${route.route_number}`,
             },
          });
@@ -378,6 +387,7 @@ const deliveryRoutes = {
          throw new AppError(HttpStatusCodes.NOT_FOUND, `Parcel is not in this route`);
       }
 
+      const statusDetails = buildParcelStatusDetails({ status: Status.IN_WAREHOUSE });
       await prisma.$transaction(async (tx) => {
          await tx.deliveryAssignment.delete({
             where: { id: assignment.id },
@@ -389,6 +399,7 @@ const deliveryRoutes = {
                event_type: ParcelEventType.NOTE_ADDED,
                user_id,
                status: Status.IN_WAREHOUSE,
+               status_details: statusDetails,
                notes: `Removed from route ${route.route_number}`,
             },
          });
@@ -507,11 +518,12 @@ const deliveryRoutes = {
                data: { status: DeliveryStatus.OUT_FOR_DELIVERY },
             });
 
+            const statusDetails = buildParcelStatusDetails({ status: Status.OUT_FOR_DELIVERY });
             await tx.parcel.update({
                where: { id: assignment.parcel_id },
                data: {
                   status: Status.OUT_FOR_DELIVERY,
-                  status_details: buildParcelStatusDetails({ status: Status.OUT_FOR_DELIVERY }),
+                  status_details: statusDetails,
                },
             });
 
@@ -521,6 +533,7 @@ const deliveryRoutes = {
                   event_type: ParcelEventType.OUT_FOR_DELIVERY,
                   user_id,
                   status: Status.OUT_FOR_DELIVERY,
+                  status_details: statusDetails,
                   notes: `Route ${route.route_number} started`,
                },
             });
@@ -625,11 +638,12 @@ const deliveryRoutes = {
             },
          });
 
+         const statusDetails = buildParcelStatusDetails({ status: parcelStatus });
          await tx.parcel.update({
             where: { id: assignment.parcel_id },
             data: {
                status: parcelStatus,
-               status_details: buildParcelStatusDetails({ status: parcelStatus }),
+               status_details: statusDetails,
             },
          });
 
@@ -639,6 +653,7 @@ const deliveryRoutes = {
                event_type: success ? ParcelEventType.DELIVERED : ParcelEventType.DELIVERY_FAILED,
                user_id,
                status: parcelStatus,
+               status_details: statusDetails,
                notes: data.notes || (success ? "Delivered successfully" : "Delivery failed"),
             },
          });
@@ -697,6 +712,7 @@ const deliveryRoutes = {
          );
       }
 
+      const statusDetails = buildParcelStatusDetails({ status: Status.OUT_FOR_DELIVERY });
       const updated = await prisma.$transaction(async (tx) => {
          const result = await tx.deliveryAssignment.update({
             where: { id: assignment_id },
@@ -712,6 +728,7 @@ const deliveryRoutes = {
                event_type: ParcelEventType.DELIVERY_RESCHEDULED,
                user_id,
                status: Status.OUT_FOR_DELIVERY,
+               status_details: statusDetails,
                notes: notes || "Delivery rescheduled",
             },
          });

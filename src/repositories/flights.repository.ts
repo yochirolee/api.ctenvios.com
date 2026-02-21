@@ -316,6 +316,10 @@ const flights = {
          );
       }
 
+      const statusDetails = buildParcelStatusDetails({
+         status: Status.IN_TRANSIT,
+         flight_id,
+      });
       const updatedParcel = await prisma.$transaction(async (tx) => {
          // Update parcel
          const updated = await tx.parcel.update({
@@ -323,10 +327,7 @@ const flights = {
             data: {
                flight_id,
                status: Status.IN_TRANSIT, // Air cargo goes directly to IN_TRANSIT
-               status_details: buildParcelStatusDetails({
-                  status: Status.IN_TRANSIT,
-                  flight_id,
-               }),
+               status_details: statusDetails,
             },
          });
 
@@ -338,6 +339,7 @@ const flights = {
                user_id,
                status: Status.IN_TRANSIT,
                flight_id,
+               status_details: statusDetails,
                notes: `Added to flight ${flight.awb_number}`,
             },
          });
@@ -395,6 +397,7 @@ const flights = {
          );
       }
 
+      const statusDetails = buildParcelStatusDetails({ status: Status.IN_WAREHOUSE });
       const updatedParcel = await prisma.$transaction(async (tx) => {
          // Update parcel
          const updated = await tx.parcel.update({
@@ -402,7 +405,7 @@ const flights = {
             data: {
                flight_id: null,
                status: Status.IN_WAREHOUSE,
-               status_details: buildParcelStatusDetails({ status: Status.IN_WAREHOUSE }),
+               status_details: statusDetails,
             },
          });
 
@@ -414,6 +417,7 @@ const flights = {
                user_id,
                status: Status.IN_WAREHOUSE,
                flight_id, // Keep reference to which flight it was removed from
+               status_details: statusDetails,
                notes: `Removed from flight ${flight.awb_number}`,
             },
          });
@@ -513,6 +517,7 @@ const flights = {
                      user_id,
                      status: newParcelStatus,
                      flight_id: id,
+                     status_details: statusDetails,
                      notes: `Flight ${flight.awb_number} - ${status}${location ? ` at ${location}` : ""}`,
                   },
                });
