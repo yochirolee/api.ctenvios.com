@@ -202,13 +202,9 @@ export const pallets = {
    getReadyForPallet: async (req: PalletRequest, res: Response): Promise<void> => {
       const page = Number(req.query.page) || 1;
       const limit = Number(req.query.limit) || 20;
-      const user = req.user!;
+      
 
-      if (!user.agency_id) {
-         throw new AppError("User must belong to an agency", 403);
-      }
-
-      const result = await palletsRepository.getReadyParcels(user.agency_id, page, limit);
+      const result = await palletsRepository.getParcelsForPallet( page, limit);
 
       res.status(200).json({
          rows: result.parcels,

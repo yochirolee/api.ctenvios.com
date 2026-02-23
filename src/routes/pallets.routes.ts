@@ -118,8 +118,6 @@ router.post(
    pallets.addParcel
 );
 
-// DELETE /pallets/:id/parcels/:trackingNumber - Remove parcel from pallet
-router.delete("/:id/parcels/remove-parcel/:trackingNumber", requireRoles(PALLET_ADMIN_ROLES), pallets.removeParcel);
 
 // Backward-compatible alias (some clients call without "/parcels")
 // DELETE /pallets/:id/remove-parcel/:trackingNumber

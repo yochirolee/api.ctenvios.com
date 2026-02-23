@@ -10,6 +10,14 @@ const convertLbsToKg = (lbs: number): number => {
    return Math.round(lbs * LBS_TO_KG * 100) / 100; // Round to 2 decimal places
 };
 
+const buildFullName = (...parts: Array<string | null | undefined>): string => {
+   const fullName = parts
+      .map((part) => part?.trim())
+      .filter((part): part is string => Boolean(part))
+      .join(" ");
+   return fullName || "N/A";
+};
+
 // Interface for each row in the manifest (one per OrderItem/HBL)
 interface ManifestItem {
    hbl_number: string; // OrderItem HBL
@@ -50,7 +58,7 @@ interface ManifestHeader {
  * - One row per OrderItem
  */
 export const getContainerManifestData = async (
-   containerId: number
+   containerId: number,
 ): Promise<{ header: ManifestHeader; items: ManifestItem[] }> => {
    const container = await prisma.container.findUnique({
       where: { id: containerId },
@@ -64,7 +72,9 @@ export const getContainerManifestData = async (
                      customer: {
                         select: {
                            first_name: true,
+                           middle_name: true,
                            last_name: true,
+                           second_last_name: true,
                            mobile: true,
                            email: true,
                         },
@@ -72,7 +82,9 @@ export const getContainerManifestData = async (
                      receiver: {
                         select: {
                            first_name: true,
+                           middle_name: true,
                            last_name: true,
+                           second_last_name: true,
                            address: true,
                            phone: true,
                            mobile: true,
@@ -117,12 +129,12 @@ export const getContainerManifestData = async (
       origin_agency: container.parcels[0]?.order?.agency?.name || "N/A",
       country: "USA",
       consignee: container.provider?.name || "N/A",
-      container_number: container.container_number,
+      container_number: container.container_name,
       date: container.created_at.toISOString().split("T")[0],
       hbls_count: totalItems, // Total OrderItems (HBLs)
       total_packages: totalParcels, // Total Parcels (bultos/cajas)
-      bl_number: container.bl_number || "",
-      manifest_number: `MAN-${container.id}`,
+      bl_number: container.container_number || "",
+      manifest_number: `${container.container_number}`,
       total_weight_kg: convertLbsToKg(totalWeightLbs),
    };
 
@@ -130,8 +142,8 @@ export const getContainerManifestData = async (
    const travelDate = container.estimated_departure
       ? container.estimated_departure.toISOString().split("T")[0]
       : container.actual_departure
-      ? container.actual_departure.toISOString().split("T")[0]
-      : "";
+        ? container.actual_departure.toISOString().split("T")[0]
+        : "";
 
    const items: ManifestItem[] = container.parcels.flatMap((parcel) => {
       const order = parcel.order;
@@ -148,8 +160,18 @@ export const getContainerManifestData = async (
             packages: item.quantity || 1,
             weight_kg: convertLbsToKg(Number(item.weight) || 0),
             volume_m3: Number(item.volume) || 0.3,
-            sender_name: customer ? `${customer.first_name} ${customer.last_name}` : "N/A",
-            receiver_name: receiver ? `${receiver.first_name} ${receiver.last_name}` : "N/A",
+            sender_name: buildFullName(
+               customer?.first_name,
+               customer?.middle_name,
+               customer?.last_name,
+               customer?.second_last_name,
+            ),
+            receiver_name: buildFullName(
+               receiver?.first_name,
+               receiver?.middle_name,
+               receiver?.last_name,
+               receiver?.second_last_name,
+            ),
             address: receiver?.address || "N/A",
             municipality: receiver?.city?.name || "N/A",
             province: receiver?.province?.name || "N/A",
@@ -170,8 +192,18 @@ export const getContainerManifestData = async (
             packages: 1,
             weight_kg: convertLbsToKg(Number(parcel.weight) || 0),
             volume_m3: 0.3,
-            sender_name: customer ? `${customer.first_name} ${customer.last_name}` : "N/A",
-            receiver_name: receiver ? `${receiver.first_name} ${receiver.last_name}` : "N/A",
+            sender_name: buildFullName(
+               customer?.first_name,
+               customer?.middle_name,
+               customer?.last_name,
+               customer?.second_last_name,
+            ),
+            receiver_name: buildFullName(
+               receiver?.first_name,
+               receiver?.middle_name,
+               receiver?.last_name,
+               receiver?.second_last_name,
+            ),
             address: receiver?.address || "N/A",
             municipality: receiver?.city?.name || "N/A",
             province: receiver?.province?.name || "N/A",

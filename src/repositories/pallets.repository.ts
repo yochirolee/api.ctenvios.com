@@ -51,7 +51,7 @@ const pallets = {
       page: number,
       limit: number,
       agency_id?: number,
-      status?: PalletStatus
+      status?: PalletStatus,
    ): Promise<{ pallets: Pallet[]; total: number }> => {
       const where: Prisma.PalletWhereInput = {};
 
@@ -202,14 +202,14 @@ const pallets = {
       if (pallet._count.parcels > 0) {
          throw new AppError(
             HttpStatusCodes.BAD_REQUEST,
-            "Cannot delete pallet with parcels. Remove all parcels first."
+            "Cannot delete pallet with parcels. Remove all parcels first.",
          );
       }
 
       if (pallet.status !== PalletStatus.OPEN) {
          throw new AppError(
             HttpStatusCodes.BAD_REQUEST,
-            `Cannot delete pallet with status ${pallet.status}. Only OPEN pallets can be deleted.`
+            `Cannot delete pallet with status ${pallet.status}. Only OPEN pallets can be deleted.`,
          );
       }
 
@@ -223,7 +223,7 @@ const pallets = {
    getParcels: async (
       pallet_id: number,
       page: number = 1,
-      limit: number = 20
+      limit: number = 20,
    ): Promise<{ parcels: Parcel[]; total: number }> => {
       const [parcels, total] = await Promise.all([
          prisma.parcel.findMany({
@@ -257,21 +257,21 @@ const pallets = {
       if (parcel.deleted_at) {
          throw new AppError(
             HttpStatusCodes.BAD_REQUEST,
-            `Cannot add parcel ${tracking_number} - its order has been deleted`
+            `Cannot add parcel ${tracking_number} - its order has been deleted`,
          );
       }
 
       if (parcel.pallet_id) {
          throw new AppError(
             HttpStatusCodes.CONFLICT,
-            `Parcel ${tracking_number} is already in pallet ${parcel.pallet_id}`
+            `Parcel ${tracking_number} is already in pallet ${parcel.pallet_id}`,
          );
       }
 
       if (!isValidStatusForPallet(parcel.status)) {
          throw new AppError(
             HttpStatusCodes.BAD_REQUEST,
-            `Parcel with status ${parcel.status} cannot be added to pallet. Parcel must be IN_AGENCY.`
+            `Parcel with status ${parcel.status} cannot be added to pallet. Parcel must be IN_AGENCY.`,
          );
       }
 
@@ -284,15 +284,7 @@ const pallets = {
       if (pallet.status !== PalletStatus.OPEN) {
          throw new AppError(
             HttpStatusCodes.BAD_REQUEST,
-            `Cannot add parcels to pallet with status ${pallet.status}. Pallet must be OPEN.`
-         );
-      }
-
-      // Verify parcel belongs to same agency as pallet
-      if (parcel.agency_id !== pallet.agency_id) {
-         throw new AppError(
-            HttpStatusCodes.BAD_REQUEST,
-            `Parcel belongs to a different agency. Cannot add to this pallet.`
+            `Cannot add parcels to pallet with status ${pallet.status}. Pallet must be OPEN.`,
          );
       }
 
@@ -320,7 +312,7 @@ const pallets = {
                status: Status.IN_PALLET,
                pallet_id,
                status_details: statusDetails,
-               notes: `Added to pallet ${pallet.pallet_number}`,
+               notes: `In Pallet ${pallet.pallet_number}`,
             },
          });
 
@@ -352,7 +344,7 @@ const pallets = {
    addParcelsByOrderId: async (
       pallet_id: number,
       order_id: number,
-      user_id: string
+      user_id: string,
    ): Promise<{ added: number; skipped: number; parcels: Parcel[] }> => {
       const pallet = await prisma.pallet.findUnique({ where: { id: pallet_id } });
 
@@ -363,7 +355,7 @@ const pallets = {
       if (pallet.status !== PalletStatus.OPEN) {
          throw new AppError(
             HttpStatusCodes.BAD_REQUEST,
-            `Cannot add parcels to pallet with status ${pallet.status}. Pallet must be OPEN.`
+            `Cannot add parcels to pallet with status ${pallet.status}. Pallet must be OPEN.`,
          );
       }
 
@@ -479,7 +471,7 @@ const pallets = {
       if (pallet.status !== PalletStatus.OPEN) {
          throw new AppError(
             HttpStatusCodes.BAD_REQUEST,
-            `Cannot remove parcels from pallet with status ${pallet.status}. Pallet must be OPEN.`
+            `Cannot remove parcels from pallet with status ${pallet.status}. Pallet must be OPEN.`,
          );
       }
 
@@ -576,7 +568,7 @@ const pallets = {
       if (pallet.status !== PalletStatus.SEALED) {
          throw new AppError(
             HttpStatusCodes.BAD_REQUEST,
-            `Cannot unseal pallet with status ${pallet.status}. Pallet must be SEALED.`
+            `Cannot unseal pallet with status ${pallet.status}. Pallet must be SEALED.`,
          );
       }
 
@@ -599,18 +591,11 @@ const pallets = {
    /**
     * Get parcels ready to be added to pallet (by agency)
     */
-   getReadyParcels: async (
-      agency_id: number,
-      page: number = 1,
-      limit: number = 20
-   ): Promise<{ parcels: Parcel[]; total: number }> => {
+   getParcelsForPallet: async (page: number = 1, limit: number = 20): Promise<{ parcels: Parcel[]; total: number }> => {
       const where: Prisma.ParcelWhereInput = {
-         pallet_id: null,
-         dispatch_id: null,
-         container_id: null,
-         flight_id: null,
-         agency_id,
-         status: Status.IN_AGENCY,
+         status: {
+            in: [Status.IN_AGENCY, Status.IN_DISPATCH],
+         },
       };
 
       const [parcels, total] = await Promise.all([
@@ -633,6 +618,8 @@ const pallets = {
          }),
          prisma.parcel.count({ where }),
       ]);
+
+      console.log(parcels, "parcels");
 
       return { parcels, total };
    },

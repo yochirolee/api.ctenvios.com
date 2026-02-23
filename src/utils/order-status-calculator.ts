@@ -119,6 +119,7 @@ export const calculateOrderStatus = (parcelStatuses: Status[]): Status => {
 /** Parcel row shape used for order status and status_details */
 interface ParcelStatusRow {
    status: Status;
+   pallet_id: number | null;
    dispatch_id: number | null;
    container_id: number | null;
    container?: { container_name: string } | null;
@@ -141,11 +142,14 @@ export const buildOrderStatusDetails = (parcels: ParcelStatusRow[]): string => {
             ? `container:${p.container_id}`
             : p.dispatch_id != null
               ? `dispatch:${p.dispatch_id}`
-              : "agency";
+              : p.pallet_id != null
+                ? `pallet:${p.pallet_id}`
+                : "agency";
       if (key.startsWith("container:")) {
          const existing = groups.get(key);
          const prevN = typeof existing === "object" ? existing.n : 0;
-         const container_name = p.container?.container_name ?? (typeof existing === "object" ? existing.container_name : undefined);
+         const container_name =
+            p.container?.container_name ?? (typeof existing === "object" ? existing.container_name : undefined);
          groups.set(key, { n: prevN + 1, container_name });
       } else {
          const prev = groups.get(key);
@@ -171,6 +175,10 @@ export const buildOrderStatusDetails = (parcels: ParcelStatusRow[]): string => {
          const containerName = typeof val === "object" ? val.container_name : undefined;
          const label = containerName ? `Container ${containerName}` : `Container #${id}`;
          parts.push(total === 1 && n === 1 ? `In ${label}` : `${n} in ${label}`);
+      } else if (key.startsWith("pallet:")) {
+         const id = key.replace("pallet:", "");
+         const label = `Pallet #${id}`;
+         parts.push(total === 1 && n === 1 ? `In ${label}` : `${n} in ${label}`);
       }
    }
 
@@ -193,6 +201,7 @@ export const updateOrderStatusFromParcels = async (order_id: number): Promise<St
       where: { order_id },
       select: {
          status: true,
+         pallet_id: true,
          dispatch_id: true,
          container_id: true,
          container: { select: { container_name: true } },
@@ -222,6 +231,7 @@ export const updateOrderStatusFromParcelsTx = async (
       where: { order_id },
       select: {
          status: true,
+         pallet_id: true,
          dispatch_id: true,
          container_id: true,
          container: { select: { container_name: true } },

@@ -379,8 +379,10 @@ export const containers = {
          select: { container_number: true, container_name: true },
       });
 
+      const datePart = new Date().toISOString().split("T")[0];
+      const safeContainerName = container?.container_name?.trim().replace(/\s+/g, "_");
       const filename = container
-         ? `Manifiesto_${container.container_number}_${new Date().toISOString().split("T")[0]}.xlsx`
+         ? `Manifiesto_${safeContainerName || container.container_number}_${datePart}.xlsx`
          : `Manifiesto_${containerId}.xlsx`;
 
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
