@@ -1,5 +1,6 @@
 import prisma from "../lib/prisma.client";
 import { DebtStatus } from "@prisma/client";
+import { calculate_row_subtotal, toNumber } from "./utils";
 
 /**
  * Cache for pricing agreements to avoid repeated DB queries
@@ -548,9 +549,16 @@ export const generateDispatchDebts = async (
    receiver_agency_id: number,
    parcels: Array<{
       id: number;
+      order_id?: number | null;
       holder_agency_id?: number | null;
       agency_id: number | null; // Original creator agency (fallback)
       weight: any;
+      order?: {
+         id?: number;
+         order_items?: Array<{
+            delivery_fee_in_cents?: number | null;
+         }>;
+      } | null;
       order_items: Array<{
          weight: any;
          price_in_cents?: number | null;
@@ -573,9 +581,8 @@ export const generateDispatchDebts = async (
    const parcelsByHolder = new Map<number, {
       weight: number;
       parcels_count: number;
-      total_cost_in_cents: number; // Total including all fees
-      product_id: number | null;
-      service_id: number | null;
+      total_cost_in_cents: number; // Calculated using holder->receiver agreement
+      delivery_applied_order_ids: Set<number>;
    }>();
    
    for (const parcel of parcels) {
@@ -593,43 +600,70 @@ export const generateDispatchDebts = async (
       
       const parcelWeight = Number(parcel.weight);
       
-      // Calculate TOTAL cost from order_items (price + customs + insurance + delivery + charges)
+      // Calculate parcel subtotal using holder->receiver pricing agreement per item.
       let parcelTotalCost = 0;
-      let product_id: number | null = null;
-      let service_id: number | null = null;
       
       for (const item of parcel.order_items) {
-         // Add transport price
-         parcelTotalCost += item.price_in_cents || 0;
-         // Add customs fee (aduanal)
-         parcelTotalCost += item.customs_fee_in_cents || 0;
-         // Add insurance fee (seguro)
-         parcelTotalCost += item.insurance_fee_in_cents || 0;
-         // Add delivery fee
-         parcelTotalCost += item.delivery_fee_in_cents || 0;
-         // Add other charges
-         parcelTotalCost += item.charge_fee_in_cents || 0;
-         
-         if (item.rate && !product_id) {
-            product_id = item.rate.product_id;
-            service_id = item.rate.service_id;
+         const itemWeight = toNumber(item.weight);
+         const product_id = item.rate?.product_id;
+         const service_id = item.rate?.service_id;
+         const unit = item.rate?.product?.unit || "PER_LB";
+
+         // Pricing by agreement for this specific leg: holder -> receiver.
+         let unitRateInCents = 0;
+         if (product_id && service_id) {
+            const agreementRate = await getPricingBetweenAgencies(
+               receiver_agency_id,
+               holder_agency_id,
+               product_id,
+               service_id
+            );
+            if (agreementRate !== null) {
+               unitRateInCents = agreementRate;
+            } else {
+               console.warn(
+                  `[generateDispatchDebts] Missing pricing agreement for holder=${holder_agency_id} receiver=${receiver_agency_id} ` +
+                  `product=${product_id} service=${service_id} in dispatch ${dispatch_id}. Falling back to item price.`,
+               );
+            }
          }
+
+         if (unitRateInCents === 0) {
+            unitRateInCents = item.price_in_cents || 0;
+         }
+
+         parcelTotalCost += calculate_row_subtotal(
+            unitRateInCents,
+            itemWeight,
+            item.customs_fee_in_cents || 0,
+            item.charge_fee_in_cents || 0,
+            item.insurance_fee_in_cents || 0,
+            unit,
+         );
       }
       
       const current = parcelsByHolder.get(holder_agency_id) || {
          weight: 0,
          parcels_count: 0,
          total_cost_in_cents: 0,
-         product_id: null,
-         service_id: null,
+         delivery_applied_order_ids: new Set<number>(),
       };
+
+      const orderId = parcel.order_id ?? parcel.order?.id ?? null;
+      let parcelDeliveryCost = 0;
+      if (orderId !== null && !current.delivery_applied_order_ids.has(orderId)) {
+         current.delivery_applied_order_ids.add(orderId);
+         const orderItems = parcel.order?.order_items ?? [];
+         for (const orderItem of orderItems) {
+            parcelDeliveryCost += orderItem.delivery_fee_in_cents || 0;
+         }
+      }
       
       parcelsByHolder.set(holder_agency_id, {
          weight: current.weight + parcelWeight,
          parcels_count: current.parcels_count + 1,
-         total_cost_in_cents: current.total_cost_in_cents + parcelTotalCost,
-         product_id: product_id || current.product_id,
-         service_id: service_id || current.service_id,
+         total_cost_in_cents: current.total_cost_in_cents + parcelTotalCost + parcelDeliveryCost,
+         delivery_applied_order_ids: current.delivery_applied_order_ids,
       });
    }
    

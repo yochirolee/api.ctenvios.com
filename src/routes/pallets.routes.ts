@@ -4,6 +4,7 @@ import { PalletStatus, Roles } from "@prisma/client";
 import pallets from "../controllers/pallets.controller";
 import { requireRoles } from "../middlewares/auth.middleware";
 import { validate } from "../middlewares/validate.middleware";
+import { authMiddleware } from "../middlewares/auth.middleware";
 
 /**
  * Pallets Routes
@@ -27,9 +28,6 @@ const PALLET_VIEW_ROLES: Roles[] = [...PALLET_ADMIN_ROLES, Roles.AGENCY_SALES];
 
 // === Validation Schemas ===
 
-const createPalletSchema = z.object({
-   notes: z.string().optional(),
-});
 
 const updatePalletSchema = z.object({
    notes: z.string().optional(),
@@ -56,73 +54,100 @@ const paginationQuerySchema = z.object({
 // === Routes ===
 
 // GET /pallets - Get all pallets
-router.get("/", requireRoles(PALLET_VIEW_ROLES), validate({ query: paginationQuerySchema }), pallets.getAll);
+router.get(
+   "/",
+   authMiddleware,
+   requireRoles(PALLET_VIEW_ROLES),
+   validate({ query: paginationQuerySchema }),
+   pallets.getAll,
+);
 
 // GET /pallets/ready-for-pallet - Get parcels ready to be added to pallet
 router.get(
    "/ready-for-pallet",
+   authMiddleware,
    requireRoles(PALLET_ADMIN_ROLES),
    validate({ query: paginationQuerySchema }),
-   pallets.getReadyForPallet
+   pallets.getReadyForPallet,
 );
 
 // GET /pallets/by-number/:palletNumber - Get pallet by pallet number
-router.get("/by-number/:palletNumber", requireRoles(PALLET_VIEW_ROLES), pallets.getByPalletNumber);
+router.get("/by-number/:palletNumber", authMiddleware, requireRoles(PALLET_VIEW_ROLES), pallets.getByPalletNumber);
 
 // GET /pallets/:id - Get pallet by ID
-router.get("/:id", requireRoles(PALLET_VIEW_ROLES), validate({ params: idParamSchema }), pallets.getById);
+router.get(
+   "/:id",
+   authMiddleware,
+   requireRoles(PALLET_VIEW_ROLES),
+   validate({ params: idParamSchema }),
+   pallets.getById,
+);
+
+// GET /pallets/:id/label-pdf - Generate pallet label PDF (4x6)
+router.get("/:id/label-pdf", validate({ params: idParamSchema }), pallets.generateLabelPdf);
 
 // POST /pallets - Create a new pallet
-router.post("/", requireRoles(PALLET_ADMIN_ROLES), pallets.create);
+router.post("/", authMiddleware, requireRoles(PALLET_ADMIN_ROLES), pallets.create);
 
 // PUT /pallets/:id - Update pallet
 router.put(
    "/:id",
+   authMiddleware,
    requireRoles(PALLET_ADMIN_ROLES),
    validate({ params: idParamSchema, body: updatePalletSchema }),
-   pallets.update
+   pallets.update,
 );
 
 // DELETE /pallets/:id - Delete pallet
-router.delete("/:id", requireRoles(PALLET_ADMIN_ROLES), validate({ params: idParamSchema }), pallets.delete);
+router.delete(
+   "/:id",
+   authMiddleware,
+   requireRoles(PALLET_ADMIN_ROLES),
+   validate({ params: idParamSchema }),
+   pallets.delete,
+);
 
 // GET /pallets/:id/parcels - Get parcels in pallet
 router.get(
    "/:id/parcels",
+   authMiddleware,
    requireRoles(PALLET_VIEW_ROLES),
    validate({ params: idParamSchema, query: paginationQuerySchema }),
-   pallets.getParcels
+   pallets.getParcels,
 );
 
 // POST /pallets/:id/parcels - Add parcel to pallet (canonical)
 router.post(
    "/:id/parcels",
+   authMiddleware,
    requireRoles(PALLET_ADMIN_ROLES),
    validate({ params: idParamSchema, body: addParcelSchema }),
-   pallets.addParcel
+   pallets.addParcel,
 );
 
 // POST /pallets/:id/parcels/by-order - Add all parcels from an order to pallet
 router.post(
    "/:id/parcels/by-order",
+   authMiddleware,
    requireRoles(PALLET_ADMIN_ROLES),
    validate({ params: idParamSchema, body: addParcelsByOrderSchema }),
-   pallets.addParcelsByOrderId
+   pallets.addParcelsByOrderId,
 );
 
 // POST /pallets/:id/add-parcel - Backward-compatible alias
 router.post(
    "/:id/add-parcel",
+   authMiddleware,
    requireRoles(PALLET_ADMIN_ROLES),
    validate({ params: idParamSchema, body: addParcelSchema }),
-   pallets.addParcel
+   pallets.addParcel,
 );
-
 
 // Backward-compatible alias (some clients call without "/parcels")
 // DELETE /pallets/:id/remove-parcel/:trackingNumber
 router.delete(
    "/:id/remove-parcel/:trackingNumber",
+   authMiddleware,
    requireRoles(PALLET_ADMIN_ROLES),
    validate({
       params: z.object({
@@ -130,13 +155,25 @@ router.delete(
          trackingNumber: z.string().min(1, "Tracking number is required"),
       }),
    }),
-   pallets.removeParcel
+   pallets.removeParcel,
 );
 
 // POST /pallets/:id/seal - Seal pallet
-router.post("/:id/seal", requireRoles(PALLET_ADMIN_ROLES), validate({ params: idParamSchema }), pallets.seal);
+router.post(
+   "/:id/seal",
+   authMiddleware,
+   requireRoles(PALLET_ADMIN_ROLES),
+   validate({ params: idParamSchema }),
+   pallets.seal,
+);
 
 // POST /pallets/:id/unseal - Unseal pallet
-router.post("/:id/unseal", requireRoles(PALLET_ADMIN_ROLES), validate({ params: idParamSchema }), pallets.unseal);
+router.post(
+   "/:id/unseal",
+   authMiddleware,
+   requireRoles(PALLET_ADMIN_ROLES),
+   validate({ params: idParamSchema }),
+   pallets.unseal,
+);
 
 export default router;

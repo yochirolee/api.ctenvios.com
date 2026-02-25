@@ -30,7 +30,13 @@ import { PAYMENT_CONFIG } from "../config/payment.config";
 import { formatCents } from "../utils/utils";
 
 // Allowed statuses for parcels to be added to dispatch
-const ALLOWED_DISPATCH_STATUSES: Status[] = [Status.IN_AGENCY, Status.IN_PALLET, Status.IN_DISPATCH];
+const ALLOWED_DISPATCH_STATUSES: Status[] = [
+   Status.IN_AGENCY,
+   Status.IN_PALLET,
+   Status.IN_DISPATCH,
+   Status.RECEIVED_IN_DISPATCH,
+   Status.IN_WAREHOUSE,
+];
 
 interface DispatchParcelListItem {
    id: number;
@@ -274,6 +280,8 @@ const dispatch = {
          // If payment_status is provided, filter by payment status
          ...(payment_status && { payment_status }),
       };
+
+      console.log(where, "where");
       const dispatches = await prisma.dispatch.findMany({
          where,
          skip: (page - 1) * limit,
@@ -404,8 +412,66 @@ const dispatch = {
                   paid_by: { select: { id: true, name: true } },
                },
             },
+            parcel_events: {
+               where: {
+                  dispatch_id: id,
+               },
+               orderBy: {
+                  created_at: "asc",
+               },
+               select: {
+                  parcel: {
+                     include: {
+                        order: {
+                           include: {
+                              receiver: { include: { city: true, province: true } },
+                              order_items: {
+                                 include: {
+                                    service: true,
+                                    rate: {
+                                       include: {
+                                          product: true,
+                                          service: true,
+                                          pricing_agreement: {
+                                             select: {
+                                                id: true,
+                                                price_in_cents: true,
+                                                product: {
+                                                   select: {
+                                                      id: true,
+                                                      name: true,
+                                                   },
+                                                },
+                                             },
+                                          },
+                                       },
+                                    },
+                                 },
+                              },
+                              _count: { select: { parcels: true } },
+                           },
+                        },
+                     },
+                  },
+               },
+            },
          },
       });
+
+      // Historical fallback for PDF: if parcels were moved to another dispatch later,
+      // rebuild this dispatch parcel list from parcel_events linked to this dispatch.
+      if (dispatch && dispatch.parcels.length === 0 && dispatch.parcel_events.length > 0) {
+         const parcelsFromEvents = new Map<number, (typeof dispatch.parcels)[number]>();
+         for (const event of dispatch.parcel_events) {
+            if (!event.parcel) {
+               continue;
+            }
+            if (!parcelsFromEvents.has(event.parcel.id)) {
+               parcelsFromEvents.set(event.parcel.id, event.parcel as (typeof dispatch.parcels)[number]);
+            }
+         }
+         dispatch.parcels = Array.from(parcelsFromEvents.values());
+      }
 
       return dispatch;
    },
@@ -746,6 +812,21 @@ const dispatch = {
          // 3. Fetch parcel with fresh data inside transaction
          const parcel = await tx.parcel.findUnique({
             where: { tracking_number },
+            select: {
+               id: true,
+               tracking_number: true,
+               deleted_at: true,
+               agency_id: true,
+               status: true,
+               dispatch_id: true,
+               weight: true,
+               current_location_id: true,
+               dispatch: {
+                  select: {
+                     status: true,
+                  },
+               },
+            },
          });
 
          if (!parcel) {
@@ -781,7 +862,13 @@ const dispatch = {
          }
 
          // 6. Check if parcel is already in a dispatch (with fresh data - prevents race condition)
-         if (parcel.dispatch_id) {
+         if (
+            parcel.dispatch_id &&
+            parcel.dispatch_id !== dispatchId &&
+            (!parcel.dispatch ||
+               (parcel.dispatch.status !== DispatchStatus.RECEIVED &&
+                  parcel.dispatch.status !== DispatchStatus.DISCREPANCY))
+         ) {
             throw new AppError(
                HttpStatusCodes.CONFLICT,
                `Parcel ${parcel.tracking_number} is already in dispatch ${parcel.dispatch_id}`,
@@ -866,40 +953,67 @@ const dispatch = {
          validateDispatchModifiable(currentDispatch.status, userRole);
 
          for (const parcel of parcels) {
-            if (parcel.deleted_at) {
+            const parcelFresh = await tx.parcel.findUnique({
+               where: { id: parcel.id },
+               select: {
+                  id: true,
+                  tracking_number: true,
+                  deleted_at: true,
+                  agency_id: true,
+                  status: true,
+                  dispatch_id: true,
+                  weight: true,
+                  current_location_id: true,
+                  dispatch: {
+                     select: {
+                        status: true,
+                     },
+                  },
+               },
+            });
+            if (!parcelFresh) {
+               throw new AppError(HttpStatusCodes.NOT_FOUND, `Parcel ${parcel.id} not found`);
+            }
+
+            if (parcelFresh.deleted_at) {
                throw new AppError(
                   HttpStatusCodes.BAD_REQUEST,
-                  `Cannot add parcel ${parcel.tracking_number} - its order has been deleted`,
+                  `Cannot add parcel ${parcelFresh.tracking_number} - its order has been deleted`,
                );
             }
-            const isOwned = await validateParcelOwnershipInTx(tx, parcel.agency_id, currentDispatch.sender_agency_id);
+            const isOwned = await validateParcelOwnershipInTx(tx, parcelFresh.agency_id, currentDispatch.sender_agency_id);
             if (!isOwned) {
                throw new AppError(
                   HttpStatusCodes.FORBIDDEN,
-                  `Parcel ${parcel.tracking_number} does not belong to agency ${currentDispatch.sender_agency_id} or its child agencies. Parcel agency: ${parcel.agency_id}.`,
+                  `Parcel ${parcelFresh.tracking_number} does not belong to agency ${currentDispatch.sender_agency_id} or its child agencies. Parcel agency: ${parcelFresh.agency_id}.`,
                );
             }
-            if (!isValidStatusForDispatch(parcel.status)) {
+            if (!isValidStatusForDispatch(parcelFresh.status)) {
                throw new AppError(
                   HttpStatusCodes.BAD_REQUEST,
-                  `Parcel ${parcel.tracking_number} has status ${
-                     parcel.status
+                  `Parcel ${parcelFresh.tracking_number} has status ${
+                     parcelFresh.status
                   }. Allowed: ${ALLOWED_DISPATCH_STATUSES.join(", ")}`,
                );
             }
-            if (parcel.dispatch_id && parcel.dispatch_id !== dispatchId) {
-               throw new AppError(
-                  HttpStatusCodes.CONFLICT,
-                  `Parcel ${parcel.tracking_number} is already in dispatch ${parcel.dispatch_id}`,
-               );
+            if (
+               parcelFresh.dispatch_id &&
+               parcelFresh.dispatch_id !== dispatchId &&
+               (!parcelFresh.dispatch ||
+                  (parcelFresh.dispatch.status !== DispatchStatus.RECEIVED &&
+                     parcelFresh.dispatch.status !== DispatchStatus.DISCREPANCY))
+            ) {
+               // Batch mode: skip parcels currently assigned to another active dispatch
+               // and continue processing the rest.
+               continue;
             }
-            if (parcel.dispatch_id === dispatchId) {
+            if (parcelFresh.dispatch_id === dispatchId) {
                continue; // already in this dispatch
             }
 
             const statusDetails = buildParcelStatusDetails({ status: Status.IN_DISPATCH, dispatch_id: dispatchId });
             await tx.parcel.update({
-               where: { id: parcel.id },
+               where: { id: parcelFresh.id },
                data: {
                   dispatch_id: dispatchId,
                   status: Status.IN_DISPATCH,
@@ -908,20 +1022,20 @@ const dispatch = {
             });
             await tx.parcelEvent.create({
                data: {
-                  parcel_id: parcel.id,
+                  parcel_id: parcelFresh.id,
                   event_type: "ADDED_TO_DISPATCH",
                   user_id,
-                  location_id: parcel.current_location_id || null,
+                  location_id: parcelFresh.current_location_id || null,
                   status: Status.IN_DISPATCH,
                   dispatch_id: dispatchId,
                   status_details: statusDetails,
                   notes: `Added to dispatch (batch from order #${order_id})`,
                },
             });
-            totalWeight += Number(parcel.weight);
+            totalWeight += Number(parcelFresh.weight);
             addedParcels.push(
                await tx.parcel.findUniqueOrThrow({
-                  where: { id: parcel.id },
+                  where: { id: parcelFresh.id },
                   include: { dispatch: true },
                }),
             );
@@ -1098,11 +1212,10 @@ const dispatch = {
       return { parcels, total };
    },
    /**
-    * Complete dispatch - Assign receiver agency and calculate all financials
-    * This is the ONLY method that handles financial logic (pricing calculations)
-    * addItem and removeItem only handle tracking operations (no pricing)
+    * Finalize dispatch creation - assign receiver and declared pricing.
+    * Debt creation is intentionally deferred to reception/smartReceive.
     */
-   completeDispatch: async (
+   finalizeDispatchCreation: async (
       dispatchId: number,
       receiver_agency_id: number,
       sender_agency_id: number,
@@ -1115,6 +1228,8 @@ const dispatch = {
             parent_agency_id: true,
          },
       });
+
+      console.log(dispatchId, receiver_agency_id, sender_agency_id, "dispatchId, receiver_agency_id, sender_agency_id");
 
       if (!receiverAgency) {
          throw new AppError(HttpStatusCodes.NOT_FOUND, `Receiver agency with id ${receiver_agency_id} not found`);
@@ -1149,6 +1264,9 @@ const dispatch = {
          },
       });
 
+
+      console.log(dispatch, "dispatch");
+
       if (!dispatch) {
          throw new AppError(HttpStatusCodes.NOT_FOUND, `Dispatch with id ${dispatchId} not found`);
       }
@@ -1157,14 +1275,6 @@ const dispatch = {
          dispatch.parcels,
          sender_agency_id,
          receiver_agency_id,
-      );
-
-      // Determinar deudas jerárquicas
-      const hierarchyDebts = await determineHierarchyDebts(
-         sender_agency_id,
-         receiver_agency_id,
-         dispatch.parcels,
-         dispatchId,
       );
 
       // Usar transacción para asegurar consistencia
@@ -1178,22 +1288,6 @@ const dispatch = {
                status: DispatchStatus.DISPATCHED,
             },
          });
-
-         // Crear registros de deuda usando el cliente de transacción
-         if (hierarchyDebts.length > 0) {
-            await tx.interAgencyDebt.createMany({
-               data: hierarchyDebts.map((debtInfo) => ({
-                  debtor_agency_id: debtInfo.debtor_agency_id,
-                  creditor_agency_id: debtInfo.creditor_agency_id,
-                  dispatch_id: dispatchId,
-                  amount_in_cents: debtInfo.amount_in_cents,
-                  original_sender_agency_id: debtInfo.original_sender_agency_id,
-                  relationship: debtInfo.relationship,
-                  status: DebtStatus.PENDING,
-                  notes: `Deuda generada por despacho ${dispatchId}. Relación: ${debtInfo.relationship}`,
-               })),
-            });
-         }
 
          return updated;
       });
@@ -1693,8 +1787,9 @@ const dispatch = {
          const receiverIsForwarder = await isForwarderAgencyInTx(tx, receiver_agency_id);
          const receiverChildAgencies = await getAllChildAgenciesInTx(tx, receiver_agency_id);
 
-         // Determine the appropriate status for received parcels
-         const receivedParcelStatus = receiverIsForwarder ? Status.IN_WAREHOUSE : Status.RECEIVED_IN_DISPATCH;
+         // Intermediary receptions keep parcels in dispatch flow.
+         // Only forwarder receptions move parcels to warehouse.
+         const receivedParcelStatus = receiverIsForwarder ? Status.IN_WAREHOUSE : Status.IN_DISPATCH;
 
          // 1. Fetch all parcels (order for delivery in PDF-style cost)
          const parcels = await tx.parcel.findMany({
@@ -2187,10 +2282,9 @@ const dispatch = {
          // Get all child agencies of receiver (for reception validation)
          const receiverChildAgencies = await getAllChildAgenciesInTx(tx, receiver_agency_id);
 
-         // Determine the appropriate status for received parcels
-         // FORWARDER receives → IN_WAREHOUSE
-         // Regular agency receives → RECEIVED_IN_DISPATCH
-         const receivedParcelStatus = receiverIsForwarder ? Status.IN_WAREHOUSE : Status.RECEIVED_IN_DISPATCH;
+         // Intermediary receptions keep parcels in dispatch flow.
+         // Only forwarder receptions move parcels to warehouse.
+         const receivedParcelStatus = receiverIsForwarder ? Status.IN_WAREHOUSE : Status.IN_DISPATCH;
 
          // Group 1: Parcels without dispatch - group by billing sender (potential surplus)
          const withoutDispatch = new Map<number, typeof parcels>();
@@ -2201,6 +2295,7 @@ const dispatch = {
                sender_agency_id: number;
                receiver_agency_id: number;
                parcels: typeof parcels;
+               origin_dispatch_ids: number[];
             }
          >();
          // Cache to resolve billing sender for holder agencies
@@ -2227,6 +2322,7 @@ const dispatch = {
             senderAgencyId: number,
             receiverAgencyId: number,
             parcelsToAdd: typeof parcels,
+            originDispatchId?: number,
          ): void => {
             if (senderAgencyId === receiverAgencyId || parcelsToAdd.length === 0) {
                return;
@@ -2237,9 +2333,14 @@ const dispatch = {
                   sender_agency_id: senderAgencyId,
                   receiver_agency_id: receiverAgencyId,
                   parcels: [],
+                  origin_dispatch_ids: [],
                });
             }
-            accountingGroups.get(accountingKey)!.parcels.push(...parcelsToAdd);
+            const group = accountingGroups.get(accountingKey)!;
+            group.parcels.push(...parcelsToAdd);
+            if (originDispatchId && !group.origin_dispatch_ids.includes(originDispatchId)) {
+               group.origin_dispatch_ids.push(originDispatchId);
+            }
          };
 
          // Helper to validate if receiver can receive from holder
@@ -2370,7 +2471,9 @@ const dispatch = {
                dispatchData.status === DispatchStatus.RECEIVING ||
                dispatchData.status === DispatchStatus.PARTIAL_RECEIVED
             ) {
-               // Validate receiver matches (for DISPATCHED/RECEIVING/PARTIAL_RECEIVED)
+               // Validate receiver assignment (for DISPATCHED/RECEIVING/PARTIAL_RECEIVED)
+               // Allow pass-through reception when assigned receiver is a descendant
+               // of the scanning receiver (e.g., dispatch assigned to B but scanned by A).
                if (
                   (dispatchData.status === DispatchStatus.DISPATCHED ||
                      dispatchData.status === DispatchStatus.RECEIVING ||
@@ -2378,6 +2481,17 @@ const dispatch = {
                   dispatchData.receiver_agency_id &&
                   dispatchData.receiver_agency_id !== receiver_agency_id
                ) {
+                  let canReceiveAsAncestor = false;
+                  if (receiverIsForwarder) {
+                     canReceiveAsAncestor = true;
+                  } else {
+                     const assignedReceiverHierarchy = await getAgencyParentHierarchy(dispatchData.receiver_agency_id);
+                     canReceiveAsAncestor = assignedReceiverHierarchy.includes(receiver_agency_id);
+                  }
+
+                  if (canReceiveAsAncestor) {
+                     // Continue: this receiver can process the dispatch as an ancestor/forwarder.
+                  } else {
                   details.push({
                      tracking_number: tn,
                      status: "skipped",
@@ -2386,6 +2500,7 @@ const dispatch = {
                      reason: `Dispatch ${dispatchData.id} is assigned to agency ${dispatchData.receiver_agency_id}, not ${receiver_agency_id}`,
                   });
                   continue;
+                  }
                }
 
                if (!inDispatch.has(dispatchData.id)) {
@@ -2609,7 +2724,7 @@ const dispatch = {
                receptionDispatchParcels.set(dispatchId, dispatchParcels);
                receptionDispatchBillingSender.set(dispatchId, billingSenderId);
                if (billingSenderId !== dispatchData.sender_agency_id) {
-                  addToAccountingGroups(dispatchData.sender_agency_id, billingSenderId, dispatchParcels);
+                  addToAccountingGroups(dispatchData.sender_agency_id, billingSenderId, dispatchParcels, dispatchId);
                }
             }
             // CASE B: Receiving PARTIAL parcels from dispatch → Extract to new dispatch
@@ -2779,7 +2894,12 @@ const dispatch = {
                receptionDispatchParcels.set(receptionDispatch.id, dispatchParcels);
                receptionDispatchBillingSender.set(receptionDispatch.id, billingSenderId);
                if (billingSenderId !== dispatchData.sender_agency_id) {
-                  addToAccountingGroups(dispatchData.sender_agency_id, billingSenderId, dispatchParcels);
+                  addToAccountingGroups(
+                     dispatchData.sender_agency_id,
+                     billingSenderId,
+                     dispatchParcels,
+                     receptionDispatch.id,
+                  );
                }
             }
 
@@ -2872,6 +2992,7 @@ const dispatch = {
             const matchingReceptionDispatch = receptionDispatches.find(
                (d) => d.sender_agency_id === group.receiver_agency_id,
             );
+            const linkedOriginDispatchId = group.origin_dispatch_ids[0] ?? matchingReceptionDispatch?.dispatch_id;
 
             const accountingCost = await calculateDispatchCostFromPdfLogic(
                group.parcels,
@@ -2891,7 +3012,7 @@ const dispatch = {
                   weight: Math.round(totalWeight * 100) / 100,
                   cost_in_cents: accountingCost,
                   declared_cost_in_cents: accountingCost,
-                  origin_dispatch_id: matchingReceptionDispatch?.dispatch_id,
+                  origin_dispatch_id: linkedOriginDispatchId,
                },
             });
 
@@ -2901,7 +3022,7 @@ const dispatch = {
                receiver_agency_id: group.receiver_agency_id,
                parcels_count: group.parcels.length,
                status: "RECEIVED",
-               origin_dispatch_id: matchingReceptionDispatch?.dispatch_id,
+               origin_dispatch_id: linkedOriginDispatchId,
             });
             accountingDispatchParcels.set(accountingDispatch.id, [...group.parcels]);
          }
@@ -2917,6 +3038,26 @@ const dispatch = {
             dispatch_id: number;
          }> = [];
 
+         // Prevent duplicated debts when smartReceive processes an existing dispatch
+         // that already has pending debts created at dispatch finalization time.
+         const dispatchIdsForDebtRefresh = [
+            ...receptionDispatchParcels.keys(),
+            ...accountingDispatchParcels.keys(),
+         ];
+         if (dispatchIdsForDebtRefresh.length > 0) {
+            await tx.interAgencyDebt.updateMany({
+               where: {
+                  dispatch_id: { in: dispatchIdsForDebtRefresh },
+                  status: DebtStatus.PENDING,
+               },
+               data: {
+                  status: DebtStatus.CANCELLED,
+                  notes:
+                     "Cancelled by smartReceive debt refresh: recalculating debts from received parcels.",
+               },
+            });
+         }
+
          // Debts for reception dispatches (B -> A)
          for (const [dispatchId, dispatchParcels] of receptionDispatchParcels) {
             const dispatchInfo = receptionDispatches.find((d) => d.dispatch_id === dispatchId);
@@ -2929,9 +3070,11 @@ const dispatch = {
                receiver_agency_id,
                dispatchParcels.map((p) => ({
                   id: p.id,
+                  order_id: p.order_id,
                   holder_agency_id: billingSenderId,
                   agency_id: p.agency_id,
                   weight: p.weight,
+                  order: p.order,
                   order_items: p.order_items.map((oi) => ({
                      weight: oi.weight,
                      price_in_cents: oi.price_in_cents,
@@ -2989,9 +3132,11 @@ const dispatch = {
                dispatchInfo.receiver_agency_id,
                dispatchParcels.map((p) => ({
                   id: p.id,
+                  order_id: p.order_id,
                   holder_agency_id: dispatchInfo.sender_agency_id,
                   agency_id: p.agency_id,
                   weight: p.weight,
+                  order: p.order,
                   order_items: p.order_items.map((oi) => ({
                      weight: oi.weight,
                      price_in_cents: oi.price_in_cents,

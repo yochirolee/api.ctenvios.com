@@ -1,5 +1,5 @@
 import { Response } from "express";
-import { AgencyType, DispatchStatus, PaymentStatus, Roles, Status } from "@prisma/client";
+import { Dispatch, DispatchStatus, PaymentStatus, Roles, Status } from "@prisma/client";
 import repository from "../repositories";
 import { AppError } from "../common/app-errors";
 import HttpStatusCodes from "../common/https-status-codes";
@@ -31,6 +31,24 @@ interface DispatchRequest {
    };
 }
 
+const isAdminRole = (role: Roles): boolean => role === Roles.ROOT;
+
+const assertDirectDispatchVisibility = (
+   user: NonNullable<DispatchRequest["user"]>,
+   dispatch: Pick<Dispatch, "sender_agency_id" | "receiver_agency_id">,
+): void => {
+   if (isAdminRole(user.role)) {
+      return;
+   }
+   if (!user.agency_id) {
+      throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must be associated with an agency");
+   }
+   const canView = dispatch.sender_agency_id === user.agency_id || dispatch.receiver_agency_id === user.agency_id;
+   if (!canView) {
+      throw new AppError(HttpStatusCodes.FORBIDDEN, "You are not authorized to view this dispatch");
+   }
+};
+
 export const dispatchController = {
    /**
     * GET /dispatches/verify-parcel/:hbl - Look up parcel by HBL; returns parcel + dispatch (if any).
@@ -55,8 +73,7 @@ export const dispatchController = {
       const { page = "1", limit = "25", status, payment_status, dispatch_id, agency_id: queryAgencyId } = req.query;
       const user = req.user!;
 
-      const adminRoles: Roles[] = [Roles.ROOT, Roles.ADMINISTRATOR];
-      const isAdmin = adminRoles.includes(user.role);
+      const isAdmin = isAdminRole(user.role);
 
       if (!isAdmin && !user.agency_id) {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must be associated with an agency");
@@ -77,21 +94,23 @@ export const dispatchController = {
          );
       }
 
-      // Agency filter: use query agency_id if provided, otherwise derive from user
+      // Agency filter: direct-by-default visibility
       let agencyFilter: number | undefined;
       if (queryAgencyId !== undefined && queryAgencyId !== "") {
          const parsed = parseInt(queryAgencyId, 10);
          if (Number.isNaN(parsed)) {
             throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid agency_id");
          }
+         if (!isAdmin && parsed !== user.agency_id) {
+            throw new AppError(HttpStatusCodes.FORBIDDEN, "You can only query dispatches for your own agency");
+         }
          agencyFilter = parsed;
       } else {
-         // ROOT/ADMIN see all; users in a FORWARDER agency see all; others see only their agency
+         // ROOT/ADMIN see all; all other users see only their own agency
          if (isAdmin) {
             agencyFilter = undefined;
          } else if (user.agency_id) {
-            const agency = await repository.agencies.getById(user.agency_id);
-            agencyFilter = agency?.agency_type === AgencyType.FORWARDER ? undefined : user.agency_id;
+            agencyFilter = user.agency_id;
          } else {
             agencyFilter = undefined;
          }
@@ -114,12 +133,15 @@ export const dispatchController = {
     */
    getById: async (req: DispatchRequest, res: Response): Promise<void> => {
       const dispatchId = parseInt(req.params.id!);
+      const user = req.user!;
 
       const dispatch = await repository.dispatch.getById(dispatchId);
 
       if (!dispatch) {
          throw new AppError(HttpStatusCodes.NOT_FOUND, "Dispatch not found");
       }
+
+      assertDirectDispatchVisibility(user, dispatch);
 
       res.status(200).json(dispatch);
    },
@@ -129,7 +151,13 @@ export const dispatchController = {
     */
    generateDispatchPdf: async (req: DispatchRequest, res: Response): Promise<void> => {
       const dispatchId = parseInt(req.params.id!);
+      const user = req.user!;
 
+      const dispatchForAccess = await repository.dispatch.getById(dispatchId);
+      if (!dispatchForAccess) {
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Dispatch not found");
+      }
+  
       const dispatch = await repository.dispatch.getByIdWithDetails(dispatchId);
 
       if (!dispatch) {
@@ -151,6 +179,14 @@ export const dispatchController = {
     */
    generatePaymentReceiptPdf: async (req: DispatchRequest, res: Response): Promise<void> => {
       const dispatchId = parseInt(req.params.id!);
+      const user = req.user!;
+
+      const dispatchForAccess = await repository.dispatch.getById(dispatchId);
+      if (!dispatchForAccess) {
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Dispatch not found");
+      }
+      assertDirectDispatchVisibility(user, dispatchForAccess);
+
       const dispatch = await repository.dispatch.getByIdWithDetails(dispatchId);
       if (!dispatch) {
          throw new AppError(HttpStatusCodes.NOT_FOUND, "Dispatch not found");
@@ -183,13 +219,8 @@ export const dispatchController = {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must be associated with an agency");
       }
 
-      const allowedStatuses: Status[] = [Status.IN_AGENCY, Status.IN_PALLET, Status.IN_DISPATCH, Status.IN_WAREHOUSE];
-      const { rows, total } = await repository.parcels.listFiltered(
-         {
-            agency_id: user.agency_id,
-            dispatch_id_null: true,
-            status_in: allowedStatuses,
-         },
+      const { rows, total } = await repository.parcels.getReadyForDispatchByAgency(
+         user.agency_id,
          parseInt(page),
          parseInt(limit),
       );
@@ -203,6 +234,13 @@ export const dispatchController = {
    getParcelsInDispatch: async (req: DispatchRequest, res: Response): Promise<void> => {
       const dispatchId = parseInt(req.params.id!);
       const { page = "1", limit = "25", status } = req.query;
+      const user = req.user!;
+
+      const dispatch = await repository.dispatch.getById(dispatchId);
+      if (!dispatch) {
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Dispatch not found");
+      }
+      assertDirectDispatchVisibility(user, dispatch);
 
       const { parcels, total } = await repository.dispatch.getParcelsInDispatch(
          dispatchId,
@@ -426,7 +464,7 @@ export const dispatchController = {
          );
       }
 
-      const updatedDispatch = await repository.dispatch.completeDispatch(
+      const updatedDispatch = await repository.dispatch.finalizeDispatchCreation(
          dispatchId,
          receiverAgencyId,
          dispatch.sender_agency_id,
@@ -526,6 +564,12 @@ export const dispatchController = {
     */
    getPayments: async (req: DispatchRequest, res: Response): Promise<void> => {
       const dispatchId = parseInt(req.params.id!);
+      const user = req.user!;
+      const dispatch = await repository.dispatch.getById(dispatchId);
+      if (!dispatch) {
+         throw new AppError(HttpStatusCodes.NOT_FOUND, "Dispatch not found");
+      }
+      assertDirectDispatchVisibility(user, dispatch);
       const payments = await repository.dispatch.getPayments(dispatchId);
       res.status(200).json(payments);
    },

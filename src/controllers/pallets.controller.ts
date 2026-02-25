@@ -2,6 +2,7 @@ import { Response } from "express";
 import { PalletStatus } from "@prisma/client";
 import palletsRepository from "../repositories/pallets.repository";
 import AppError from "../utils/app.error";
+import { generatePalletLabelPdf } from "../utils/lib-pdf/pallets-pdf";
 
 /**
  * Pallets Controller
@@ -212,6 +213,36 @@ export const pallets = {
          page,
          limit,
       });
+   },
+
+   /**
+    * Generate pallet label PDF (4x6 inches)
+    */
+   generateLabelPdf: async (req: PalletRequest, res: Response): Promise<void> => {
+      const { id } = req.params;
+      const pallet = await palletsRepository.getById(id!);
+
+      if (!pallet) {
+         throw new AppError("Pallet not found", 404);
+      }
+
+      const parcelsCount =
+         (pallet as unknown as { _count?: { parcels?: number } })._count?.parcels ?? pallet.parcels_count ?? 0;
+      const totalWeightLbs = Number(pallet.total_weight_kg || 0);
+
+      const pdfBuffer = await generatePalletLabelPdf({
+         pallet_id: pallet.id,
+         parcels_count: parcelsCount,
+         created_at: pallet.created_at,
+         total_weight_lbs: totalWeightLbs,
+         agency_name: (pallet as unknown as { agency?: { name?: string } }).agency?.name || "N/A",
+         created_by_name: (pallet as unknown as { created_by?: { name?: string } }).created_by?.name || "N/A",
+      });
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `inline; filename="pallet-${pallet.id}-label.pdf"`);
+      res.setHeader("Content-Length", pdfBuffer.length);
+      res.send(pdfBuffer);
    },
 };
 

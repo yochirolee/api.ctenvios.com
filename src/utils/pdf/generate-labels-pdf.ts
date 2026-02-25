@@ -113,7 +113,7 @@ async function generateCleanCTEnviosLabel(
    item: OrderItem,
    itemIndex: number,
    labelWidth: number,
-   labelHeight: number
+   labelHeight: number,
 ) {
    const margin = 10;
    let currentY = 2;
@@ -127,8 +127,8 @@ async function generateCleanCTEnviosLabel(
       order.service.service_type === ServiceType.AIR
          ? "A"
          : order.service.service_type === ServiceType.MARITIME
-         ? "M"
-         : "M";
+           ? "M"
+           : "M";
 
    // Draw border around the letter - aligned left with company name
    doc.rect(margin, currentY + 5, 50, 50).stroke();
@@ -299,7 +299,7 @@ async function generateCleanCTEnviosLabel(
       order.customer.middle_name,
       order.customer.last_name,
       order.customer.second_last_name,
-      35 // Max length for label display (includes second_last_name)
+      50, // Max length for label display (includes second_last_name)
    );
 
    doc.fontSize(8)
@@ -326,7 +326,7 @@ async function generateCleanCTEnviosLabel(
       order.receiver.middle_name,
       order.receiver.last_name,
       order.receiver.second_last_name,
-      35 // Max length for label display (includes second_last_name)
+      50, // Max length for label display (includes second_last_name)
    );
 
    doc.fontSize(8)
@@ -334,11 +334,11 @@ async function generateCleanCTEnviosLabel(
       .text("Para:", margin + 5, currentY + 5);
 
    // Smart name formatting with width constraints and font sizing
-   const maxNameWidth = labelWidth - margin - 65 - 10;
+   const maxNameWidth = labelWidth - margin - 80 - 10;
    const nameUpperCase = recipientName.toUpperCase();
 
    // Use smaller font for very long names
-   const nameFontSize = nameUpperCase.length > 35 ? 8 : 10;
+   const nameFontSize = nameUpperCase.length > 50 ? 8 : 10;
 
    doc.fontSize(nameFontSize)
       .font(FONTS.BOLD)
@@ -359,7 +359,7 @@ async function generateCleanCTEnviosLabel(
             order.receiver.phone || ""
          }`,
          margin + 35,
-         currentY + 20
+         currentY + 20,
       );
 
    doc.fontSize(8)
@@ -395,7 +395,7 @@ async function generateCleanCTEnviosLabel(
          {
             width: labelWidth - margin * 2,
             align: "center",
-         }
+         },
       );
 
    // Update currentY to account for dynamic address height plus province/city text
@@ -403,7 +403,7 @@ async function generateCleanCTEnviosLabel(
       `${order.receiver.province?.name || ""} / ${order.receiver.city?.name || ""}`,
       {
          width: labelWidth - margin * 2,
-      }
+      },
    );
    currentY += 50 + addressHeight + 5 + provinceCityHeight + 10; // 10 points margin
 
@@ -519,7 +519,7 @@ async function generateProvinceLabel(
    item: OrderItem,
    itemIndex: number,
    labelWidth: number,
-   labelHeight: number
+   labelHeight: number,
 ) {
    const margin = 8;
    let currentY = margin + 50;

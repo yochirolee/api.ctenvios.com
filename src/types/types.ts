@@ -34,6 +34,7 @@ export const agencySchema = z.object({
    created_at: z.date().optional(),
    updated_at: z.date().optional(),
    services: z.array(z.number()).optional(),
+   is_active: z.boolean().optional().default(true),
    website: z.string().optional(),
    agency_type: z.nativeEnum(AgencyType).optional().default(AgencyType.AGENCY),
 });
@@ -110,7 +111,7 @@ export const createReceiverSchema = z
       {
          message: "Either province_id or province name must be provided",
          path: ["province"],
-      }
+      },
    )
    .refine(
       (data) => {
@@ -120,7 +121,7 @@ export const createReceiverSchema = z
       {
          message: "Either city_id or city name must be provided",
          path: ["city"],
-      }
+      },
    )
    .refine((data) => !data.ci || isValidCubanCI(data.ci), {
       message: "CI (Carnet de Identidad) format or check digit is invalid",
@@ -151,7 +152,7 @@ export const createOrderSchema = z
          // Mensaje de error si la condición de arriba falla
          message: 'Either "customer_id" or a "customer" object must be provided, but not both.',
          path: ["customer_id", "customer"], // Indica qué campos están relacionados con el error
-      }
+      },
    )
    .refine(
       (data) => {
@@ -161,7 +162,7 @@ export const createOrderSchema = z
       {
          message: 'Either "receiver_id" or a "receiver" object must be provided, but not both.',
          path: ["receiver_id", "receiver"],
-      }
+      },
    );
 
 //searh schema

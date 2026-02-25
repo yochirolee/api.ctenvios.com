@@ -223,7 +223,7 @@ model Warehouse {
   parcel_events   ParcelEvent[]
   carrier         Carrier         @relation(fields: [carrier_id], references: [id])
   manager         User?           @relation("warehouse_manager", fields: [manager_id], references: [id])
-  province        Province        @relation(fields: [province_id], references: [id])
+  province        Province?       @relation(fields: [province_id], references: [id])
 
   @@unique([carrier_id, province_id, is_main])
   @@index([carrier_id, is_active])

@@ -19,7 +19,7 @@ function calculateOrderTotals(order: OrderPdfDetails) {
             item.customs_fee_in_cents, // Int - already a number
             item.charge_fee_in_cents || 0, // Int? - already a number
             item.insurance_fee_in_cents || 0, // Int? - already a number
-            item.unit as Unit
+            item.unit as Unit,
          )
       );
    }, 0);
@@ -182,7 +182,7 @@ async function generateModernOrder(doc: PDFKit.PDFDocument, order: OrderPdfDetai
       currentY,
       logoBuffer,
       barcodeBuffer,
-      formattedData
+      formattedData,
    );
    const totalPages = result.totalPages;
 
@@ -282,7 +282,7 @@ function formatOrderData(order: OrderPdfDetails) {
       order.customer.middle_name,
       order.customer.last_name,
       order.customer.second_last_name,
-      30
+      50,
    );
 
    const recipientName = formatName(
@@ -290,7 +290,7 @@ function formatOrderData(order: OrderPdfDetails) {
       order.receiver.middle_name,
       order.receiver.last_name,
       order.receiver.second_last_name,
-      30
+      50,
    );
 
    const date = new Date(order.created_at);
@@ -318,7 +318,7 @@ async function generateModernHeader(
    doc: PDFKit.PDFDocument,
    order: OrderPdfDetails,
    logoBuffer: Buffer | null,
-   formattedData: ReturnType<typeof formatOrderData>
+   formattedData: ReturnType<typeof formatOrderData>,
 ): Promise<number> {
    const textStyle = new TextStyler(doc);
    const headerHeight = 90;
@@ -391,7 +391,7 @@ async function generateBarcodeSection(
    order: OrderPdfDetails,
    barcodeBuffer: Buffer | null,
    calculations: ReturnType<typeof calculateOrderTotals>,
-   startY: number
+   startY: number,
 ): Promise<number> {
    const textStyle = new TextStyler(doc);
    const sectionHeight = 35;
@@ -435,7 +435,7 @@ function generateContactGrid(
    doc: PDFKit.PDFDocument,
    order: OrderPdfDetails,
    formattedData: ReturnType<typeof formatOrderData>,
-   startY: number
+   startY: number,
 ): number {
    const textStyle = new TextStyler(doc);
    const sectionHeight = 90;
@@ -513,7 +513,7 @@ async function generateModernTable(
    startY: number,
    logoBuffer: Buffer | null,
    barcodeBuffer: Buffer | null,
-   formattedData: ReturnType<typeof formatOrderData>
+   formattedData: ReturnType<typeof formatOrderData>,
 ): Promise<{ totalPages: number }> {
    let currentY = startY + 35;
    let currentPage = 1;
@@ -531,7 +531,7 @@ async function generateModernTable(
             item.customs_fee_in_cents, // Int - already a number
             item.charge_fee_in_cents || 0, // Int? - already a number
             item.insurance_fee_in_cents || 0, // Int? - already a number
-            item.unit as Unit
+            item.unit as Unit,
          ),
       };
    });
@@ -585,8 +585,7 @@ async function generateModernTable(
 
    for (const item of processedItems) {
       const unit = item.unit || item.rate?.product?.unit || "PER_LB";
-      const productNameLine =
-         unit === "FIXED" && item.rate?.product?.name ? item.rate.product.name : "";
+      const productNameLine = unit === "FIXED" && item.rate?.product?.name ? item.rate.product.name : "";
       let description = item.description;
       let descriptionHeight = doc.heightOfString(description, { width: descriptionWidth });
 
@@ -606,18 +605,12 @@ async function generateModernTable(
       const productNameWidth = productNameLine ? doc.widthOfString(productNameLine + " ") : 0;
       doc.font(FONTS.REGULAR).fontSize(9);
       const descriptionWidthNeeded = doc.widthOfString(description);
-      const fitsOneLine =
-         !!productNameLine &&
-         productNameWidth + descriptionWidthNeeded <= descriptionWidth;
+      const fitsOneLine = !!productNameLine && productNameWidth + descriptionWidthNeeded <= descriptionWidth;
 
-      const productNameHeight = productNameLine
-         ? doc.heightOfString(productNameLine, { width: descriptionWidth })
-         : 0;
+      const productNameHeight = productNameLine ? doc.heightOfString(productNameLine, { width: descriptionWidth }) : 0;
       const descHeight = fitsOneLine
          ? lineHeight
-         : Math.ceil(productNameHeight) +
-           (productNameLine ? lineGap : 0) +
-           Math.ceil(descriptionHeight);
+         : Math.ceil(productNameHeight) + (productNameLine ? lineGap : 0) + Math.ceil(descriptionHeight);
       const isSingleLine = descHeight <= oneLineThreshold;
       const rowHeight = isSingleLine
          ? SINGLE_LINE_ROW_HEIGHT
@@ -628,16 +621,22 @@ async function generateModernTable(
       }
 
       const contentY = currentY + (isSingleLine ? 3 : rowPadding);
-      renderModernTableRow(doc, {
-         ...item,
-         description,
-         productNameLine: productNameLine || undefined,
-         fitsOneLine: !!fitsOneLine,
-         productNameWidth,
-         productNameHeight: productNameLine ? Math.ceil(productNameHeight) : 0,
-         contentY,
+      renderModernTableRow(
+         doc,
+         {
+            ...item,
+            description,
+            productNameLine: productNameLine || undefined,
+            fitsOneLine: !!fitsOneLine,
+            productNameWidth,
+            productNameHeight: productNameLine ? Math.ceil(productNameHeight) : 0,
+            contentY,
+            rowHeight,
+         },
+         currentY,
          rowHeight,
-      }, currentY, rowHeight, textStyle);
+         textStyle,
+      );
       currentY += rowHeight;
    }
 
@@ -711,7 +710,7 @@ function renderModernTableRow(
    item: any,
    currentY: number,
    rowHeight: number,
-   textStyle: TextStyler
+   textStyle: TextStyler,
 ) {
    const contentY = item.contentY ?? currentY + rowHeight / 2.5 - 3;
    const verticalCenter = contentY;
@@ -741,16 +740,28 @@ function renderModernTableRow(
 
    // Description: product name (bold) on top when present, then description (like dispatch PDF)
    if (item.fitsOneLine && item.productNameLine) {
-      textStyle.style(FONTS.BOLD, 8, COLORS.FOREGROUND).text(item.productNameLine, descriptionX, contentY, { width: descriptionWidth });
-      textStyle.style(FONTS.REGULAR, 8, COLORS.FOREGROUND).text(item.description, descriptionX + item.productNameWidth, contentY, {
-         width: descriptionWidth - item.productNameWidth,
-      });
+      textStyle
+         .style(FONTS.BOLD, 8, COLORS.FOREGROUND)
+         .text(item.productNameLine, descriptionX, contentY, { width: descriptionWidth });
+      textStyle
+         .style(FONTS.REGULAR, 8, COLORS.FOREGROUND)
+         .text(item.description, descriptionX + item.productNameWidth, contentY, {
+            width: descriptionWidth - item.productNameWidth,
+         });
    } else if (item.productNameLine) {
       const gap = 3;
-      textStyle.style(FONTS.BOLD, 8, COLORS.FOREGROUND).text(item.productNameLine, descriptionX, contentY, { width: descriptionWidth });
-      textStyle.style(FONTS.REGULAR, 8, COLORS.FOREGROUND).text(item.description, descriptionX, contentY + (item.productNameHeight || 0) + gap, { width: descriptionWidth });
+      textStyle
+         .style(FONTS.BOLD, 8, COLORS.FOREGROUND)
+         .text(item.productNameLine, descriptionX, contentY, { width: descriptionWidth });
+      textStyle
+         .style(FONTS.REGULAR, 8, COLORS.FOREGROUND)
+         .text(item.description, descriptionX, contentY + (item.productNameHeight || 0) + gap, {
+            width: descriptionWidth,
+         });
    } else {
-      textStyle.style(FONTS.REGULAR, 8, COLORS.FOREGROUND).text(item.description, descriptionX, contentY, { width: descriptionWidth });
+      textStyle
+         .style(FONTS.REGULAR, 8, COLORS.FOREGROUND)
+         .text(item.description, descriptionX, contentY, { width: descriptionWidth });
    }
 
    // Seguro
@@ -814,7 +825,7 @@ function renderModernTotals(
    doc: PDFKit.PDFDocument,
    calculations: ReturnType<typeof calculateOrderTotals>,
    startY: number,
-   textStyle: TextStyler
+   textStyle: TextStyler,
 ) {
    let currentY = startY;
 
@@ -937,7 +948,7 @@ function addModernFooterToAllPages(doc: PDFKit.PDFDocument, order: OrderPdfDetai
             "Al realizar este envío, declaro que soy responsable de toda la información proporcionada y que el contenido enviado no infringe las leyes de los Estados Unidos ni las regulaciones aduanales de la República de Cuba. También declaro estar de acuerdo con los términos y condiciones de la empresa.",
             20,
             LAYOUT.FOOTER_Y,
-            { width: LAYOUT.PAGE_WIDTH - 40, align: "center", lineGap: 1 }
+            { width: LAYOUT.PAGE_WIDTH - 40, align: "center", lineGap: 1 },
          );
 
       // Terms and Tracking (centered)
@@ -951,7 +962,7 @@ function addModernFooterToAllPages(doc: PDFKit.PDFDocument, order: OrderPdfDetai
                align: "center",
                width: LAYOUT.PAGE_WIDTH - 40,
                underline: true,
-            }
+            },
          );
 
       // Page number

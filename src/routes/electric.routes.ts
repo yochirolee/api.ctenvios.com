@@ -2,7 +2,7 @@ import { Router } from "express";
 import { Readable } from "node:stream";
 
 const router = Router();
-const electric_url = `https://api.ctenvios.com/v1/shape`;
+const electric_url =  `https://api.ctenvios.com/v1/shape`;
 
 router.get("/shape", async (req, res) => {
    const qs = new URLSearchParams();

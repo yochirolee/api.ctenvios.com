@@ -2,7 +2,7 @@ import { Response } from "express";
 import { AppError } from "../common/app-errors";
 import HttpStatusCodes from "../common/https-status-codes";
 import interAgencyDebtsRepository from "../repositories/inter-agency-debts.repository";
-import { DebtStatus } from "@prisma/client";
+import { DebtStatus, Roles } from "@prisma/client";
 
 
 
@@ -86,17 +86,27 @@ export const interAgencyDebtsController = {
       req: any,
       res: Response
    ): Promise<void> => {
+      const user = req.user;
+      if (!user) {
+         throw new AppError(HttpStatusCodes.UNAUTHORIZED, "User not authenticated");
+      }
       const dispatchId = parseInt(req.params.id);
       if (isNaN(dispatchId)) {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "Invalid dispatch ID");
       }
 
       const debts = await interAgencyDebtsRepository.getByDispatch(dispatchId);
+      const isAdmin = user.role === Roles.ROOT;
+      const visibleDebts = isAdmin
+         ? debts
+         : debts.filter(
+              (d) => d.debtor_agency_id === user.agency_id || d.creditor_agency_id === user.agency_id
+           );
 
       res.status(200).json({
          dispatch_id: dispatchId,
-         total_debts: debts.reduce((sum, d) => sum + d.amount_in_cents, 0),
-         debts,
+         total_debts: visibleDebts.reduce((sum, d) => sum + d.amount_in_cents, 0),
+         debts: visibleDebts,
       });
    },
 

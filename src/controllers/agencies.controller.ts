@@ -19,6 +19,13 @@ interface AuthenticatedRequest extends Request {
    };
 }
 
+interface AgencyAdminCreateInput {
+   email: string;
+   password: string;
+   name: string;
+   role?: Roles;
+}
+
 // Create update schema by making all fields optional
 const agencyUpdateSchema = agencySchema.partial();
 
@@ -27,26 +34,6 @@ const AGENCY_CREATION_ROLES = [Roles.ROOT, Roles.ADMINISTRATOR, Roles.AGENCY_ADM
 
 // Roles allowed to view all agencies
 const AGENCY_VIEW_ALL_ROLES = [Roles.ROOT, Roles.ADMINISTRATOR, Roles.FORWARDER_ADMIN] as const;
-
-const create_agency_schema = z.object({
-   agency: z.object({
-      name: z.string().min(1),
-      address: z.string().min(1),
-      contact: z.string().min(1),
-      phone: z.string().min(10),
-      email: z.string().email(),
-      website: z.preprocess((val) => (val === "" || val === null ? undefined : val), z.string().url().optional()),
-      agency_type: z.enum(["AGENCY", "RESELLER", "FORWARDER"]),
-      parent_agency_id: z.number().int().positive().optional(),
-   }),
-   user: z.object({
-      name: z.string().min(1),
-      email: z.string().email(),
-      phone: z.string().min(10),
-      password: z.string().min(8),
-      role: z.literal("AGENCY_ADMIN"),
-   }),
-});
 
 const agencies = {
    getAll: async (req: Request, res: Response): Promise<void> => {
@@ -109,10 +96,18 @@ const agencies = {
       if (!current_user.agency_id) {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "User must be associated with an agency");
       }
+      // Validate request body
+
+      const { agency, user } = req.body as {
+         agency: z.infer<typeof agencySchema>;
+         user: AgencyAdminCreateInput;
+      };
+
+      const parent_agency_id = agency.parent_agency_id !== null ? agency.parent_agency_id : current_user.agency_id;
 
       // Validate parent agency
       const parent_agency = await prisma.agency.findUnique({
-         where: { id: current_user.agency_id },
+         where: { id: parent_agency_id },
       });
 
       if (!parent_agency) {
@@ -128,18 +123,6 @@ const agencies = {
             "Only FORWARDER and RESELLER agencies can create child agencies",
          );
       }
-      // Validate request body
-      const result = create_agency_schema.safeParse(req.body);
-      if (!result.success) {
-         const errors = result.error.errors.map((e) => `${e.path.join(".")}: ${e.message}`).join(", ");
-         throw new AppError(HttpStatusCodes.BAD_REQUEST, `Invalid agency data: ${errors}`);
-      }
-
-      const { agency: child_agency, user } = result.data;
-
-      if (child_agency.agency_type === AgencyType.FORWARDER) {
-         child_agency.parent_agency_id = undefined;
-      }
 
       // Find all services from parent agency with shipping_rates and pricing_agreements
       const parent_services = await repository.services.getByAgencyId(parent_agency.id);
@@ -151,9 +134,19 @@ const agencies = {
       // Create agency and connect services
       const created_agency = await prisma.agency.create({
          data: {
-            ...child_agency,
-            parent_agency_id: parent_agency.id,
-            forwarder_id: parent_agency.forwarder_id,
+            name: agency.name,
+            address: agency.address,
+            contact: agency.contact,
+            phone: agency.phone,
+            email: agency.email,
+            website: agency.website,
+            agency_type: agency.agency_type,
+            forwarder: {
+               connect: { id: parent_agency.forwarder_id },
+            },
+            parent_agency: {
+               connect: { id: parent_agency.id },
+            },
             services: {
                connect: uniqueParentsServicesId.map((service_id: number) => ({ id: service_id })),
             },
@@ -166,6 +159,7 @@ const agencies = {
             email: user.email,
             password: user.password,
             name: user.name,
+            role: Roles.AGENCY_ADMIN,
          },
       });
 
@@ -203,7 +197,7 @@ const agencies = {
       res.status(201).json({
          agency: created_agency,
          // rates_created_count: rates_created.length,
-         message: "Agency and pricing agreements created successfully",
+         message: "Agency created successfully",
       });
    },
 

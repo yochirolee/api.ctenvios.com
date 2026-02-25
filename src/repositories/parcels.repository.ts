@@ -1,5 +1,5 @@
 import prisma from "../lib/prisma.client";
-import { Parcel, Prisma, ServiceType, Status } from "@prisma/client";
+import { DispatchStatus, Parcel, Prisma, ServiceType, Status } from "@prisma/client";
 import { buildNameSearchFilter } from "../types/types";
 import { buildParcelStatusDetails } from "../utils/parcel-status-details";
 
@@ -174,24 +174,12 @@ const parcels = {
                   },
                },
             },
-            container: {
-               select: {
-                  container_name: true,
-                  status: true,
-                  estimated_arrival: true,
-               },
-            },
-            flight: {
-               select: {
-                  flight_number: true,
-                  status: true,
-                  estimated_arrival: true,
-               },
-            },
+
             events: {
                orderBy: { created_at: "desc" },
                select: {
                   status: true,
+                  status_details: true,
                   notes: true,
                   created_at: true,
                   location: { select: { name: true } },
@@ -200,7 +188,88 @@ const parcels = {
          },
       });
    },
+   getTrackByExternalReference: async (external_reference: string) => {
+      return await prisma.parcel.findUnique({
+         where: { external_reference },
+         select: {
+            tracking_number: true,
+            status: true,
+            status_details: true,
+            external_reference: true,
+            agency_id: true,
+            agency: { select: { id: true, name: true } },
+            service: { select: { id: true, name: true } },
+            description: true,
+            weight: true,
+            created_at: true,
+            order: {
+               select: {
+                  id: true,
+                  receiver: {
+                     select: {
+                        first_name: true,
+                        last_name: true,
+                        province: { select: { name: true } },
+                        city: { select: { name: true } },
+                     },
+                  },
+               },
+            },
 
+            events: {
+               orderBy: { created_at: "desc" },
+               select: {
+                  status: true,
+                  status_details: true,
+                  notes: true,
+                  created_at: true,
+                  location: { select: { name: true } },
+               },
+            },
+         },
+      });
+   },
+   getTrackByCarrierTrackingNumber: async (carrier_tracking_number: string) => {
+      return await prisma.parcel.findUnique({
+         where: { carrier_tracking_number },
+         select: {
+            tracking_number: true,
+            status: true,
+            status_details: true,
+            external_reference: true,
+            agency_id: true,
+            agency: { select: { id: true, name: true } },
+            service: { select: { id: true, name: true } },
+            description: true,
+            weight: true,
+            created_at: true,
+            order: {
+               select: {
+                  id: true,
+                  receiver: {
+                     select: {
+                        first_name: true,
+                        last_name: true,
+                        province: { select: { name: true } },
+                        city: { select: { name: true } },
+                     },
+                  },
+               },
+            },
+
+            events: {
+               orderBy: { created_at: "desc" },
+               select: {
+                  status: true,
+                  status_details: true,
+                  notes: true,
+                  created_at: true,
+                  location: { select: { name: true } },
+               },
+            },
+         },
+      });
+   },
    getInAgency: async (
       agency_id: number,
       page = 1,
@@ -246,6 +315,131 @@ const parcels = {
          prisma.parcel.count({ where }),
       ]);
       return { rows, total };
+   },
+
+   /**
+    * Parcels ready for dispatch from the perspective of current holder agency.
+    * Includes:
+    * - Agency's own parcels not assigned to any dispatch
+    * - Parcels received in completed dispatches where this agency is the receiver
+    */
+   getReadyForDispatchByAgency: async (
+      agency_id: number,
+      page: number,
+      limit: number,
+   ): Promise<{
+      rows: Array<{
+         id: number;
+         tracking_number: string;
+         description: string;
+         weight: Prisma.Decimal;
+         status: Status;
+         status_details: string | null;
+         order_id: number | null;
+         external_reference: string | null;
+         agency_id: number | null;
+         agency: { id: number; name: string } | null;
+         service: { id: number; name: string } | null;
+         order: {
+            id: number;
+            customer: {
+               id: number;
+               first_name: string;
+               last_name: string;
+               mobile: string;
+            } | null;
+            receiver: {
+               id: number;
+               first_name: string;
+               last_name: string;
+               mobile: string | null;
+               phone: string | null;
+               address: string;
+               province: { id: number; name: string } | null;
+               city: { id: number; name: string } | null;
+            } | null;
+         } | null;
+         updated_at: Date;
+      }>;
+      total: number;
+   }> => {
+      const readyStatuses: Status[] = [
+         Status.IN_AGENCY,
+         Status.IN_PALLET,
+         Status.IN_DISPATCH,
+         Status.IN_WAREHOUSE,
+         Status.RECEIVED_IN_DISPATCH,
+      ];
+
+      const where: Prisma.ParcelWhereInput = {
+         deleted_at: null,
+         status: { in: readyStatuses },
+         OR: [
+            {
+               agency_id,
+               dispatch_id: null,
+            },
+            {
+               dispatch: {
+                  receiver_agency_id: agency_id,
+                  status: { in: [DispatchStatus.RECEIVED, DispatchStatus.DISCREPANCY] },
+               },
+            },
+         ],
+      };
+
+      const select = {
+         id: true,
+         tracking_number: true,
+         description: true,
+         weight: true,
+         status: true,
+         status_details: true,
+         order_id: true,
+         order: {
+            select: {
+               id: true,
+               customer: {
+                  select: {
+                     id: true,
+                     first_name: true,
+                     last_name: true,
+                     mobile: true,
+                  },
+               },
+               receiver: {
+                  select: {
+                     id: true,
+                     first_name: true,
+                     last_name: true,
+                     mobile: true,
+                     phone: true,
+                     address: true,
+                     province: { select: { id: true, name: true } },
+                     city: { select: { id: true, name: true } },
+                  },
+               },
+            },
+         },
+         external_reference: true,
+         agency_id: true,
+         agency: { select: { id: true, name: true } },
+         service: { select: { id: true, name: true } },
+         updated_at: true,
+      } as const;
+
+      const [rows, total] = await Promise.all([
+         prisma.parcel.findMany({
+            where,
+            orderBy: { updated_at: "desc" },
+            skip: (page - 1) * limit,
+            take: limit,
+            select,
+         }),
+         prisma.parcel.count({ where }),
+      ]);
+
+      return { rows: rows as any, total };
    },
 
    /**

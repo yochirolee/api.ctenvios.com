@@ -66,7 +66,7 @@ router.use("/legacy", legacyRoutes);
 router.use("/inter-agency-debts", interAgencyDebtsRoutes);
 router.use("/containers", authMiddleware, containersRoutes);
 router.use("/flights", authMiddleware, flightsRoutes);
-router.use("/pallets", authMiddleware, palletsRoutes);
+router.use("/pallets", palletsRoutes);
 router.use("/warehouses", authMiddleware, warehousesRoutes);
 router.use("/manifest-verifications", authMiddleware, manifestVerificationRoutes);
 router.use("/delivery-routes", authMiddleware, deliveryRoutesRoutes);

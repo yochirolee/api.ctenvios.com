@@ -26,7 +26,7 @@ export function formatName(
 	middleName: string | null,
 	lastName: string,
 	secondLastName: string | null,
-	maxLength: number = 30,
+	maxLength: number = 50,
 ): string {
 	// Build full name with available parts
 	const nameParts = [

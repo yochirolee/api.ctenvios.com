@@ -130,7 +130,6 @@ export const parcels = {
 
       const result = await repository.parcels.listFiltered(filters, page, limit);
 
-      console.log(result);
       res.status(200).json({ rows: result.rows, total: result.total, page, limit });
    },
 
@@ -181,6 +180,8 @@ export const parcels = {
    updateStatus: async (req: ParcelRequest, res: Response): Promise<void> => {
       const { hbl } = req.params;
 
+      console.log(req.body, hbl, "req.body");
+
       const { status, notes } = req.body ?? {};
       const userId = req.user?.id;
 
@@ -206,7 +207,13 @@ export const parcels = {
       if (!hbl) {
          throw new AppError(HttpStatusCodes.BAD_REQUEST, "HBL (tracking number) is required");
       }
-      const parcel = await repository.parcels.getTrackByHbl(hbl);
+      let parcel = null;
+      if (hbl.startsWith("CTE") || hbl.startsWith("cte")) {
+         parcel = await repository.parcels.getTrackByHbl(hbl);
+      } else {
+         parcel = await repository.parcels.getTrackByExternalReference(hbl);
+      }
+
       if (!parcel) {
          throw new AppError(HttpStatusCodes.NOT_FOUND, "Parcel not found");
       }

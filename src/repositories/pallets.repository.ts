@@ -619,8 +619,6 @@ const pallets = {
          prisma.parcel.count({ where }),
       ]);
 
-      console.log(parcels, "parcels");
-
       return { parcels, total };
    },
 };
