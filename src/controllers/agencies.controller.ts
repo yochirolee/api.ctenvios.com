@@ -24,7 +24,7 @@ interface AgencyAdminCreateInput {
    password: string;
    name: string;
    role?: Roles;
-   phone?: string;
+   phone: string;
 }
 
 // Create update schema by making all fields optional

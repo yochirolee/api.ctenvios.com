@@ -178,7 +178,7 @@ export const ordersController = {
          const isNumeric = /^\d+$/.test(cleanedSearch);
          const words = searchTerm.split(/\s+/).filter(Boolean);
 
-         const filters: any[] = [{ deleted_at: null }];
+         const filters: any[] = [{  }];
 
          // Filtro de fecha (timezone-aware: EST -> UTC)
          if (hasDateFilter) {
