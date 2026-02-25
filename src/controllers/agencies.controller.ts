@@ -24,6 +24,7 @@ interface AgencyAdminCreateInput {
    password: string;
    name: string;
    role?: Roles;
+   phone?: string;
 }
 
 // Create update schema by making all fields optional
@@ -173,6 +174,7 @@ const agencies = {
          data: {
             agency_id: created_agency.id,
             role: user.role,
+            phone: user.phone,
          },
       });
 

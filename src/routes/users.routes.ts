@@ -312,6 +312,6 @@ router.post("/sign-out", async (req, res) => {
    res.status(200).json(user);
 });
 
-router.post("/update", authMiddleware, validate({ body: updateUserSchema }), controllers.users.update);
+router.put("/:id", authMiddleware, validate({ body: updateUserSchema }), controllers.users.update);
 
 export default router;
