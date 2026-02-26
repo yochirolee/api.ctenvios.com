@@ -321,20 +321,21 @@ async function generateCleanCTEnviosLabel(
       .stroke()
       .undash();
    currentY += 10;
-   const recipientName = formatName(
-      order.receiver.first_name,
-      order.receiver.middle_name,
-      order.receiver.last_name,
-      order.receiver.second_last_name,
-      50, // Max length for label display (includes second_last_name)
-   );
+   const recipientName = [
+      order.receiver.first_name?.trim(),
+      order.receiver.middle_name?.trim(),
+      order.receiver.last_name?.trim(),
+      order.receiver.second_last_name?.trim(),
+   ]
+      .filter(Boolean)
+      .join(" ");
 
    doc.fontSize(8)
       .font(FONTS.REGULAR)
       .text("Para:", margin + 5, currentY + 5);
 
-   // Smart name formatting with width constraints and font sizing
-   const maxNameWidth = labelWidth - margin - 80 - 10;
+   // Use the full available value area width for receiver fields
+   const receiverValueWidth = labelWidth - margin - 35 - 10;
    const nameUpperCase = recipientName.toUpperCase();
 
    // Use smaller font for very long names
@@ -343,14 +344,19 @@ async function generateCleanCTEnviosLabel(
    doc.fontSize(nameFontSize)
       .font(FONTS.BOLD)
       .text(nameUpperCase, margin + 35, currentY + 5, {
-         width: maxNameWidth,
-         height: 20,
-         ellipsis: true,
+         width: receiverValueWidth,
       });
+
+   const recipientNameHeight = doc.heightOfString(nameUpperCase, {
+      width: receiverValueWidth,
+   });
+   const phoneLabelY = currentY + 5 + recipientNameHeight + 2;
+   const ciLabelY = phoneLabelY + 15;
+   const addressLabelY = ciLabelY + 15;
 
    doc.fontSize(8)
       .font(FONTS.REGULAR)
-      .text("Tel:", margin + 5, currentY + 20);
+      .text("Tel:", margin + 5, phoneLabelY);
 
    doc.fontSize(10)
       .font(FONTS.BOLD)
@@ -359,39 +365,40 @@ async function generateCleanCTEnviosLabel(
             order.receiver.phone || ""
          }`,
          margin + 35,
-         currentY + 20,
+         phoneLabelY,
       );
 
    doc.fontSize(8)
       .font(FONTS.REGULAR)
-      .text("CI:", margin + 5, currentY + 35);
+      .text("CI:", margin + 5, ciLabelY);
 
    doc.fontSize(10)
       .font(FONTS.BOLD)
-      .text(order.receiver.ci || "", margin + 35, currentY + 35);
+      .text(order.receiver.ci || "", margin + 35, ciLabelY);
 
    doc.fontSize(8)
       .font(FONTS.REGULAR)
-      .text("Dir:", margin + 5, currentY + 50);
+      .text("Dir:", margin + 5, addressLabelY);
 
    // Address (regular text)
    doc.fontSize(9)
       .font(FONTS.REGULAR)
-      .text(order.receiver.address, margin + 35, currentY + 50, {
-         width: labelWidth - margin - 35 - 10,
+      .text(order.receiver.address, margin + 35, addressLabelY, {
+         width: receiverValueWidth,
       });
 
    // Province and Municipality (bold text) - positioned dynamically after address
    const addressHeight = doc.heightOfString(order.receiver.address, {
-      width: labelWidth - margin - 35 - 10,
+      width: receiverValueWidth,
    });
+   const provinceCityY = addressLabelY + addressHeight + 5;
 
    doc.fontSize(10)
       .font(FONTS.BOLD)
       .text(
          `${order.receiver.province?.name || ""} / ${order.receiver.city?.name || ""}`,
          margin,
-         currentY + 50 + addressHeight + 5,
+         provinceCityY,
          {
             width: labelWidth - margin * 2,
             align: "center",
@@ -405,7 +412,7 @@ async function generateCleanCTEnviosLabel(
          width: labelWidth - margin * 2,
       },
    );
-   currentY += 50 + addressHeight + 5 + provinceCityHeight + 10; // 10 points margin
+   currentY = provinceCityY + provinceCityHeight + 10; // 10 points margin
 
    // SUPER FAST Footer QR Code - Maximum speed optimization
    try {
