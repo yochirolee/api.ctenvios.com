@@ -837,9 +837,7 @@ function renderModernTotals(
    const totals = [
       { label: "Subtotal:", value: calculations.subtotal, size: 9 },
       { label: "Delivery:", value: calculations.deliveryFeeAmount, size: 9 },
-      { label: "Seguro:", value: calculations.insuranceAmount, size: 9 },
-      { label: "Cargo:", value: calculations.items_fee_amount, size: 9 },
-      { label: "Payment Fee:", value: calculations.payments_fee_amount, size: 9 },
+       { label: "Payment Fee:", value: calculations.payments_fee_amount, size: 9 },
       { label: "Descuento:", value: calculations.discount_amount, size: 9, color: COLORS.MUTED_FOREGROUND },
    ];
 
