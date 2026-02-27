@@ -132,6 +132,7 @@ export const ordersController = {
                      id: true,
                      partner_order_id: true,
                      created_at: true,
+                     updated_at: true,
                      total_in_cents: true,
                      paid_in_cents: true,
                      payment_status: true,
@@ -178,7 +179,7 @@ export const ordersController = {
          const isNumeric = /^\d+$/.test(cleanedSearch);
          const words = searchTerm.split(/\s+/).filter(Boolean);
 
-         const filters: any[] = [{  }];
+         const filters: any[] = [{}];
 
          // Filtro de fecha (timezone-aware: EST -> UTC)
          if (hasDateFilter) {
@@ -289,6 +290,7 @@ export const ordersController = {
                   service: { select: { id: true, name: true } },
                   agency: { select: { id: true, name: true } },
                   user: { select: { id: true, name: true } },
+                  updated_by: { select: { id: true, name: true, email: true } },
                   _count: { select: { order_items: true } },
                },
                orderBy: { created_at: "desc" },
@@ -422,7 +424,7 @@ export const ordersController = {
                userRole: user.role,
                userAgencyId: user.agency_id,
             },
-            reason
+            reason,
          );
          res.status(200).json(result);
       } catch (error) {
