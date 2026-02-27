@@ -290,7 +290,6 @@ export const ordersController = {
                   service: { select: { id: true, name: true } },
                   agency: { select: { id: true, name: true } },
                   user: { select: { id: true, name: true } },
-                  updated_by: { select: { id: true, name: true, email: true } },
                   _count: { select: { order_items: true } },
                },
                orderBy: { created_at: "desc" },
