@@ -935,6 +935,16 @@ function addCancelledWatermark(doc: PDFKit.PDFDocument) {
 function addModernFooterToAllPages(doc: PDFKit.PDFDocument, order: OrderPdfDetails, totalPages: number) {
    const range = doc.bufferedPageRange();
    const textStyle = new TextStyler(doc);
+   const agencyWebsite = order.agency.website?.trim();
+   const normalizedAgencyWebsite =
+      agencyWebsite && (agencyWebsite.startsWith("http://") || agencyWebsite.startsWith("https://"))
+         ? agencyWebsite
+         : agencyWebsite
+           ? `https://${agencyWebsite}`
+           : undefined;
+   const footerLinks = normalizedAgencyWebsite
+      ? `Términos: https://ctenvios.com/terms  |  Tracking: ${normalizedAgencyWebsite}`
+      : "Términos: https://ctenvios.com/terms  |  Tracking: https://ctenvios.com/";
 
    for (let i = range.start; i < range.start + range.count; i++) {
       doc.switchToPage(i);
@@ -953,7 +963,7 @@ function addModernFooterToAllPages(doc: PDFKit.PDFDocument, order: OrderPdfDetai
       textStyle
          .style(FONTS.REGULAR, 7, "#0d4fa3")
          .text(
-            "Términos: https://ctenvios.com/terms  |  Tracking: https://ctenvios.com/tracking",
+            footerLinks,
             20,
             LAYOUT.FOOTER_Y + 20,
             {

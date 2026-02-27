@@ -896,6 +896,21 @@ const containers = {
 
       return { parcels, total };
    },
+
+   /**
+    * Search parcels in container by tracking number or order id
+    */
+   searchParcelsInContainer: async (container_id: number, query: string): Promise<{ parcels: Parcel[]; total: number }> => {
+      const where: Prisma.ParcelWhereInput = {
+         container_id,
+         OR: [{ tracking_number: { contains: query, mode: "insensitive" } }, { order_id: { equals: Number(query) } }],
+      };
+      const [parcels, total] = await Promise.all([
+         prisma.parcel.findMany({ where }),
+         prisma.parcel.count({ where }),
+      ]);
+      return { parcels, total };
+   },
 };
 
 export default containers;

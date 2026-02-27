@@ -11,7 +11,7 @@ import { buildParcelStatusDetails } from "../utils/parcel-status-details";
  */
 
 // Allowed statuses for parcels to be added to pallet
-const ALLOWED_PALLET_STATUSES: Status[] = [Status.IN_AGENCY];
+const ALLOWED_PALLET_STATUSES: Status[] = [Status.IN_AGENCY, Status.IN_DISPATCH, Status.IN_WAREHOUSE];
 
 /**
  * Validates if a parcel status allows it to be added to pallet
@@ -594,7 +594,7 @@ const pallets = {
    getParcelsForPallet: async (page: number = 1, limit: number = 20): Promise<{ parcels: Parcel[]; total: number }> => {
       const where: Prisma.ParcelWhereInput = {
          status: {
-            in: [Status.IN_AGENCY, Status.IN_DISPATCH],
+            in: ALLOWED_PALLET_STATUSES,
          },
       };
 

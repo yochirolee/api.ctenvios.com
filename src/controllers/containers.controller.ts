@@ -188,6 +188,20 @@ export const containers = {
    },
 
    /**
+    * Search parcels in container
+    */
+   searchParcels: async (req: ContainerRequest, res: Response): Promise<void> => {
+      const { id } = req.params;
+      const { query } = req.query as { query: string };
+      
+      const result = await containersRepository.searchParcelsInContainer(Number(id), query);
+      res.status(200).json({
+         rows: result.parcels,
+         total: result.total,
+      });
+   },
+
+   /**
     * Add parcel to container
     */
    addParcel: async (req: ContainerRequest, res: Response): Promise<void> => {
@@ -210,7 +224,7 @@ export const containers = {
             `Parcel ${tracking_number} uses ${parcel.service?.service_name || "AIR"} service (${
                parcel.service?.service_type
             }). Only MARITIME parcels can be added to containers. Use flights for AIR parcels.`,
-            400
+            400,
          );
       }
 
@@ -227,7 +241,7 @@ export const containers = {
             `Parcel with status ${
                parcel.status
             } cannot be added to container. Allowed statuses: ${ALLOWED_CONTAINER_STATUSES.join(", ")}`,
-            400
+            400,
          );
       }
 
@@ -240,7 +254,7 @@ export const containers = {
       if (container.status !== ContainerStatus.PENDING && container.status !== ContainerStatus.LOADING) {
          throw new AppError(
             `Cannot add parcels to container with status ${container.status}. Container must be PENDING or LOADING.`,
-            400
+            400,
          );
       }
 
@@ -302,7 +316,16 @@ export const containers = {
       };
       const user = req.user;
 
-      const container = await containersRepository.updateStatus(Number(id), status, user!.id, location, description, seal_number, booking_number, cat_number);
+      const container = await containersRepository.updateStatus(
+         Number(id),
+         status,
+         user!.id,
+         location,
+         description,
+         seal_number,
+         booking_number,
+         cat_number,
+      );
 
       res.status(200).json(container);
    },

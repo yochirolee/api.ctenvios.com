@@ -98,6 +98,10 @@ const paginationQuerySchema = z.object({
    status: z.nativeEnum(ContainerStatus).optional(),
 });
 
+const searchParcelsSchema = z.object({
+   query: z.string().min(1, "Query is required"),
+});
+
 // === Routes ===
 
 // GET /containers - Get all containers
@@ -153,6 +157,14 @@ router.post(
    requireRoles(CONTAINER_ADMIN_ROLES),
    validate({ params: idParamSchema, body: addParcelsByOrderSchema }),
    containers.addParcelsByOrderId
+);
+
+// GET /containers/:id/parcels/search - Search parcels in container
+router.get(
+   "/:id/parcels/search",
+   requireRoles(CONTAINER_VIEW_ROLES),
+   validate({ params: idParamSchema, query: searchParcelsSchema }),
+   containers.searchParcels
 );
 
 // POST /containers/:id/parcels/by-dispatch - Add all parcels from a dispatch to container
