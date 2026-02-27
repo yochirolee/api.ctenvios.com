@@ -157,7 +157,7 @@ export const dispatchController = {
       if (!dispatchForAccess) {
          throw new AppError(HttpStatusCodes.NOT_FOUND, "Dispatch not found");
       }
-  
+
       const dispatch = await repository.dispatch.getByIdWithDetails(dispatchId);
 
       if (!dispatch) {
@@ -185,7 +185,6 @@ export const dispatchController = {
       if (!dispatchForAccess) {
          throw new AppError(HttpStatusCodes.NOT_FOUND, "Dispatch not found");
       }
-      assertDirectDispatchVisibility(user, dispatchForAccess);
 
       const dispatch = await repository.dispatch.getByIdWithDetails(dispatchId);
       if (!dispatch) {
